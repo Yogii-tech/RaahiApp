@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import JeepLayout from '../components/JeepLayout';
 
 const API_BASE = 'http://localhost:8081';
@@ -20,6 +21,7 @@ interface Booking {
 const TripsScreen: React.FC = () => {
     const { colors, isDark } = useTheme();
     const { user, token } = useAuth();
+    const { t } = useLanguage();
     const [bookings, setBookings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [expandedRideId, setExpandedRideId] = useState<string | null>(null);
@@ -59,22 +61,22 @@ const TripsScreen: React.FC = () => {
             <View style={[styles.card, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}>
                 <View style={styles.cardHeader}>
                     <Text style={[styles.requestTitle, { color: colors.textColor }]}>
-                        {isDriver ? `Ride to ${item.dropoff}` : `Booking for ${item.ride?.vehicleModel || 'SUV'}`}
+                        {isDriver ? `${t('trips.rideTo')} ${item.dropoff}` : `${t('trips.bookingFor')} ${item.ride?.vehicleModel || 'SUV'}`}
                     </Text>
                     <Text style={[styles.statusTag, { color: colors.primary }]}>
-                        {(item.status || 'AVAILABLE').toUpperCase()}
+                        {t(`requests.${item.status || 'pending'}`).toUpperCase()}
                     </Text>
                 </View>
 
                 <View style={styles.details}>
                     <Text style={[styles.detailText, { color: colors.subtextColor }]}>
-                        {isDriver ? `From: ${item.pickup}` : `From: ${item.ride?.pickup} to ${item.ride?.dropoff}`}
+                        {isDriver ? `${t('book.pickup')}: ${item.pickup}` : `${t('book.pickup')}: ${item.ride?.pickup} ${t('home.from').toLowerCase()} ${item.ride?.dropoff}`}
                     </Text>
                     <Text style={[styles.detailText, { color: colors.subtextColor }]}>
-                        {isDriver ? `Seats Booked: ${item.seatsBooked || 0} / ${item.seatsTotal}` : `Seats Requested: ${item.seatsRequested}`}
+                        {isDriver ? `${t('trips.seatsBooked')}: ${item.seatsBooked || 0} / ${item.seatsTotal}` : `${t('trips.seatsRequested')}: ${item.seatsRequested}`}
                     </Text>
-                    {item.roofCarrier && <Text style={[styles.detailText, { color: colors.subtextColor }]}>• Needs Roof Carrier</Text>}
-                    {item.motionSickness && <Text style={[styles.detailText, { color: colors.subtextColor }]}>• Motion Sickness (Front Seat)</Text>}
+                    {item.roofCarrier && <Text style={[styles.detailText, { color: colors.subtextColor }]}>• {t('trips.needsRoofCarrier')}</Text>}
+                    {item.motionSickness && <Text style={[styles.detailText, { color: colors.subtextColor }]}>• {t('trips.motionSickness')}</Text>}
                 </View>
 
                 {isDriver && (
@@ -82,7 +84,7 @@ const TripsScreen: React.FC = () => {
                         style={[styles.viewLayoutBtn, { borderColor: colors.primary }]}
                         onPress={() => setExpandedRideId(isExpanded ? null : item.id)}>
                         <Text style={[styles.viewLayoutText, { color: colors.primary }]}>
-                            {isExpanded ? 'Hide Seating' : 'View Seating'}
+                            {isExpanded ? t('trips.hideSeating') : t('trips.viewSeating')}
                         </Text>
                     </TouchableOpacity>
                 )}
@@ -99,13 +101,13 @@ const TripsScreen: React.FC = () => {
                         {item.status === 'accepted' && (
                             <View style={styles.bookingIdCard}>
                                 <View style={styles.bookingIdHeader}>
-                                    <Text style={styles.bookingIdLabel}>OFFLINE BOOKING ID</Text>
+                                    <Text style={styles.bookingIdLabel}>{t('trips.offlineBookingId')}</Text>
                                     <View style={styles.verifiedTag}>
-                                        <Text style={styles.verifiedTagText}>VERIFIED DRIVER</Text>
+                                        <Text style={styles.verifiedTagText}>{t('trips.verifiedDriver')}</Text>
                                     </View>
                                 </View>
                                 <Text style={styles.bookingIdText}>RA-{item.id.slice(-4).toUpperCase()}</Text>
-                                <Text style={styles.bookingIdFooter}>SHOW THIS TO YOUR DRIVER IN NO-NETWORK ZONES</Text>
+                                <Text style={styles.bookingIdFooter}>{t('trips.showDriverOffline')}</Text>
                             </View>
                         )}
                     </View>
@@ -126,7 +128,7 @@ const TripsScreen: React.FC = () => {
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
             <Text style={[styles.title, { color: colors.textColor }]}>
-                {isDriver ? 'My Rides' : 'My Bookings'}
+                {isDriver ? t('trips.myRides') : t('trips.myBookings')}
             </Text>
 
             {loading ? (
@@ -139,7 +141,7 @@ const TripsScreen: React.FC = () => {
                     contentContainerStyle={styles.list}
                     ListEmptyComponent={
                         <Text style={[styles.empty, { color: colors.subtextColor }]}>
-                            {isDriver ? 'No published rides' : 'No trips found'}
+                            {isDriver ? t('trips.noPublished') : t('trips.noTrips')}
                         </Text>
                     }
                 />

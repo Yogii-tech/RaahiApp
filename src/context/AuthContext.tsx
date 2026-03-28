@@ -5,6 +5,7 @@ interface User {
     phone_number: string;
     name: string;
     role: string;
+    language?: string;
 }
 
 interface AuthContextType {

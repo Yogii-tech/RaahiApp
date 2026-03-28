@@ -22,6 +22,7 @@ import {
 } from 'react-native-safe-area-context';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
+import { LanguageProvider, useLanguage } from './src/context/LanguageContext';
 import LoginScreen from './src/screens/LoginScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import TripsScreen from './src/screens/TripsScreen';
@@ -185,6 +186,7 @@ const tabIcons: Record<string, { default: string; focused: string }> = {
 function MainTabs() {
   const { colors, isDark } = useTheme();
   const { user, token } = useAuth();
+  const { t } = useLanguage();
   const [sosVisible, setSosVisible] = useState(false);
   const [notificationsVisible, setNotificationsVisible] = useState(false);
   const [notificationCount, setNotificationCount] = useState(0);
@@ -278,10 +280,10 @@ function MainTabs() {
             );
           },
         })}>
-        <Tab.Screen name="Home">
+        <Tab.Screen name="Home" options={{ title: t('tab.home') }}>
           {() => <HomeScreen onSosPressed={() => setSosVisible(true)} />}
         </Tab.Screen>
-        <Tab.Screen name="Trips" component={TripsScreen} />
+        <Tab.Screen name="Trips" component={TripsScreen} options={{ title: t('tab.trips') }} />
         <Tab.Screen
           name="SOS"
           component={SosScreenTab}
@@ -292,7 +294,7 @@ function MainTabs() {
             },
           }}
         />
-        <Tab.Screen name="Account" component={AccountScreen} />
+        <Tab.Screen name="Account" component={AccountScreen} options={{ title: t('tab.account') }} />
       </Tab.Navigator>
 
       {notificationsVisible && (
@@ -358,9 +360,11 @@ function App() {
       initialMetrics={Platform.OS === 'web' ? undefined : initialWindowMetrics || undefined}>
       <AuthProvider>
         <ThemeProvider>
-          <View style={{ flex: 1, backgroundColor: '#101B2B' }}>
-            <RootApp />
-          </View>
+          <LanguageProvider>
+            <View style={{ flex: 1, backgroundColor: '#101B2B' }}>
+              <RootApp />
+            </View>
+          </LanguageProvider>
         </ThemeProvider>
       </AuthProvider>
     </SafeAreaProvider>

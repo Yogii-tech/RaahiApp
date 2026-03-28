@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 
 const API_BASE = 'http://localhost:8081';
 
@@ -34,6 +35,7 @@ interface AvailableRidesScreenProps {
 const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ onBack, onSelectRide }) => {
     const { colors, isDark } = useTheme();
     const { token } = useAuth();
+    const { t } = useLanguage();
     const [rides, setRides] = useState<Ride[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -63,7 +65,7 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ onBack, onS
             onPress={() => onSelectRide(item)}>
             <View style={styles.rideHeader}>
                 <View style={styles.timeContainer}>
-                    <Text style={[styles.label, { color: colors.subtextColor }]}>DEPARTS</Text>
+                    <Text style={[styles.label, { color: colors.subtextColor }]}>{t('available.departs')}</Text>
                     <Text style={[styles.timeText, { color: colors.textColor }]}>{item.departureTime}</Text>
                 </View>
                 <View style={styles.vehicleContainer}>
@@ -71,7 +73,7 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ onBack, onS
                     <Text style={[styles.vehicleNumber, { color: colors.subtextColor }]}>{item.vehicleNumber}</Text>
                 </View>
                 <View style={styles.priceContainer}>
-                    <Text style={[styles.label, { color: colors.subtextColor }]}>PER SEAT PRICE</Text>
+                    <Text style={[styles.label, { color: colors.subtextColor }]}>{t('available.perSeatPrice')}</Text>
                     <Text style={[styles.priceText, { color: '#00C853' }]}>₹ {item.pricePerSeat}</Text>
                 </View>
             </View>
@@ -87,12 +89,12 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ onBack, onS
                         <Text style={styles.avatarText}>{(item.driverName || 'V')[0].toUpperCase()}</Text>
                     </View>
                     <View>
-                        <Text style={[styles.driverName, { color: colors.textColor }]}>{item.driverName || 'Community Driver'} ✅</Text>
-                        <Text style={[styles.driverRole, { color: colors.subtextColor }]}>COMMUNITY DRIVER</Text>
+                        <Text style={[styles.driverName, { color: colors.textColor }]}>{item.driverName || t('available.communityDriver')} ✅</Text>
+                        <Text style={[styles.driverRole, { color: colors.subtextColor }]}>{t('available.communityDriver').toUpperCase()}</Text>
                     </View>
                 </View>
                 <View style={styles.seatsInfo}>
-                    <Text style={[styles.seatsLeft, { color: '#00C853' }]}>{item.seatsTotal - item.seatsBooked} SEATS LEFT</Text>
+                    <Text style={[styles.seatsLeft, { color: '#00C853' }]}>{item.seatsTotal - item.seatsBooked} {t('available.seatsLeft')}</Text>
                     <View style={[styles.arrowBtn, { backgroundColor: colors.borderColor }]}>
                         <Text style={styles.arrowText}>›</Text>
                     </View>
@@ -105,12 +107,11 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ onBack, onS
         <View style={[styles.container, { backgroundColor: colors.background }]}>
             <View style={styles.header}>
                 <TouchableOpacity onPress={onBack}>
-                    <Text style={[styles.backText, { color: colors.textColor }]}>‹ BACK</Text>
+                    <Text style={[styles.backText, { color: colors.textColor }]}>{t('common.back')}</Text>
                 </TouchableOpacity>
-                <Text style={[styles.routeDetails, { color: colors.subtextColor }]}>ROUTE DETAILS</Text>
+                <Text style={[styles.routeDetails, { color: colors.subtextColor }]}>{t('available.routeDetails')}</Text>
             </View>
-
-            <Text style={[styles.title, { color: colors.textColor }]}>Available Cabs</Text>
+            <Text style={[styles.title, { color: colors.textColor }]}>{t('available.title')}</Text>
 
             {loading ? (
                 <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
@@ -120,7 +121,7 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ onBack, onS
                     keyExtractor={(item) => item.id}
                     renderItem={renderRideItem}
                     contentContainerStyle={styles.listContent}
-                    ListEmptyComponent={<Text style={{ color: colors.textColor, textAlign: 'center', marginTop: 20 }}>No rides available</Text>}
+                    ListEmptyComponent={<Text style={{ color: colors.textColor, textAlign: 'center', marginTop: 20 }}>{t('available.noRides')}</Text>}
                 />
             )}
         </View>

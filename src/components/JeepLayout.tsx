@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
+import { useLanguage } from '../context/LanguageContext';
 
 interface JeepLayoutProps {
     selectedSeats?: number[];
@@ -18,6 +19,7 @@ const JeepLayout: React.FC<JeepLayoutProps> = ({
     numSeatsRequested = 1,
 }) => {
     const { colors, isDark } = useTheme();
+    const { t } = useLanguage();
 
     const getSeatColor = (index: number) => {
         if (takenSeats.includes(index)) return '#FF5252'; // TAKEN
@@ -49,15 +51,15 @@ const JeepLayout: React.FC<JeepLayoutProps> = ({
     return (
         <View style={[styles.layoutCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}>
             <View style={styles.layoutHeader}>
-                <Text style={[styles.layoutTitle, { color: colors.textColor }]}>JEEP LAYOUT</Text>
+                <Text style={[styles.layoutTitle, { color: colors.textColor }]}>{t('jeep.title')}</Text>
                 {interactive && (
                     <Text style={[styles.layoutStatus, { color: colors.primary }]}>
-                        {selectedSeats.length}/{numSeatsRequested} SELECTED
+                        {selectedSeats.length}/{numSeatsRequested} {t('jeep.selected').toUpperCase()}
                     </Text>
                 )}
             </View>
             <Text style={[styles.layoutSubtitle, { color: colors.subtextColor }]}>
-                {interactive ? 'TAP TO RESERVE SEAT' : 'BOOKING STATUS'}
+                {interactive ? t('jeep.tapToReserve') : t('jeep.status')}
             </Text>
 
             <View style={styles.seatContainer}>
@@ -91,17 +93,17 @@ const JeepLayout: React.FC<JeepLayoutProps> = ({
             <View style={styles.legendRow}>
                 <View style={styles.legendItem}>
                     <View style={[styles.dot, { backgroundColor: colors.borderColor }]} />
-                    <Text style={[styles.legendText, { color: colors.subtextColor }]}>FREE</Text>
+                    <Text style={[styles.legendText, { color: colors.subtextColor }]}>{t('jeep.free')}</Text>
                 </View>
                 {interactive && (
                     <View style={styles.legendItem}>
                         <View style={[styles.dot, { backgroundColor: colors.primary }]} />
-                        <Text style={[styles.legendText, { color: colors.subtextColor }]}>PICK</Text>
+                        <Text style={[styles.legendText, { color: colors.subtextColor }]}>{t('jeep.pick')}</Text>
                     </View>
                 )}
                 <View style={styles.legendItem}>
                     <View style={[styles.dot, { backgroundColor: '#FF5252' }]} />
-                    <Text style={[styles.legendText, { color: colors.subtextColor }]}>TAKEN</Text>
+                    <Text style={[styles.legendText, { color: colors.subtextColor }]}>{t('jeep.taken')}</Text>
                 </View>
             </View>
         </View>

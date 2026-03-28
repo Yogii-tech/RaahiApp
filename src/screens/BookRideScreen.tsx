@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import JeepLayout from '../components/JeepLayout';
 
 const API_BASE = 'http://localhost:8081';
@@ -30,6 +31,7 @@ interface BookRideScreenProps {
 const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, onBack, onBookingComplete }) => {
     const { colors, isDark } = useTheme();
     const { token } = useAuth();
+    const { t } = useLanguage();
     const [ride, setRide] = useState(initialRide);
     const [numSeats, setNumSeats] = useState(1);
     const [selectedSeats, setSelectedSeats] = useState<number[]>([]);
@@ -66,14 +68,14 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, onBa
             if (selectedSeats.length < numSeats) {
                 setSelectedSeats([...selectedSeats, index]);
             } else {
-                Alert.alert('Limit reached', `You've selected ${numSeats} seats.`);
+                Alert.alert(t('book.limitReached'), t('book.selectedSeatsMsg').replace('{{num}}', numSeats.toString()));
             }
         }
     };
 
     const handleBook = async () => {
         if (selectedSeats.length === 0) {
-            Alert.alert('Wait', 'Please select at least one seat.');
+            Alert.alert(t('book.wait'), t('book.selectAtLeastOne'));
             return;
         }
 
@@ -98,11 +100,11 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, onBa
                 setBookingId(`RA-${randomId}`);
                 setShowSuccessModal(true);
             } else {
-                Alert.alert('Error', 'Failed to book ride.');
+                Alert.alert(t('common.error'), t('book.failBook'));
             }
         } catch (err) {
             console.error('Booking error:', err);
-            Alert.alert('Error', 'Could not connect to server.');
+            Alert.alert(t('common.error'), t('book.errorConnect'));
         } finally {
             setLoading(false);
         }
@@ -112,14 +114,14 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, onBa
         <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
             <View style={styles.header}>
                 <TouchableOpacity onPress={onBack}>
-                    <Text style={[styles.backText, { color: colors.textColor }]}>‹ BACK</Text>
+                    <Text style={[styles.backText, { color: colors.textColor }]}>{t('common.back')}</Text>
                 </TouchableOpacity>
-                <Text style={[styles.title, { color: colors.textColor }]}>BOOK MY SEAT</Text>
+                <Text style={[styles.title, { color: colors.textColor }]}>{t('book.bookMySeat')}</Text>
                 <View style={{ width: 40 }} />
             </View>
 
             <View style={styles.content}>
-                <Text style={[styles.sectionTitle, { color: colors.subtextColor }]}>NUMBER OF SEATS</Text>
+                <Text style={[styles.sectionTitle, { color: colors.subtextColor }]}>{t('book.numSeats')}</Text>
                 <View style={styles.numSeatsRow}>
                     {[1, 2, 3, 4, 5, 6].map(n => (
                         <TouchableOpacity
@@ -148,10 +150,10 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, onBa
                 />
 
                 <View style={[styles.logisticsCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}>
-                    <Text style={[styles.logisticsTitle, { color: colors.subtextColor }]}>HILL LOGISTICS</Text>
+                    <Text style={[styles.logisticsTitle, { color: colors.subtextColor }]}>{t('book.hillLogistics')}</Text>
                     <View style={styles.toggleRow}>
                         <Text style={styles.toggleIcon}>🧳</Text>
-                        <Text style={[styles.toggleText, { color: colors.textColor }]}>ROOF CARRIER BAGGAGE</Text>
+                        <Text style={[styles.toggleText, { color: colors.textColor }]}>{t('book.roofCarrierBaggage')}</Text>
                         <Switch
                             value={roofCarrier}
                             onValueChange={setRoofCarrier}
@@ -160,7 +162,7 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, onBa
                     </View>
                     <View style={styles.toggleRow}>
                         <Text style={styles.toggleIcon}>🚙</Text>
-                        <Text style={[styles.toggleText, { color: colors.textColor }]}>MOTION SICKNESS (FRONT SEAT)</Text>
+                        <Text style={[styles.toggleText, { color: colors.textColor }]}>{t('book.motionSickness')}</Text>
                         <Switch
                             value={motionSickness}
                             onValueChange={setMotionSickness}
@@ -174,7 +176,7 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, onBa
                     onPress={handleBook}
                     disabled={loading}>
                     <Text style={styles.bookBtnText}>
-                        {loading ? 'Processing...' : `Confirm Booking (₹ ${ride.pricePerSeat * numSeats})`}
+                        {loading ? t('book.processing') : `${t('book.confirmBooking')} (₹ ${ride.pricePerSeat * numSeats})`}
                     </Text>
                 </TouchableOpacity>
             </View>
@@ -190,9 +192,9 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, onBa
                         <View style={styles.successIconContainer}>
                             <Text style={styles.successIcon}>✓</Text>
                         </View>
-                        <Text style={[styles.modalTitle, { color: colors.textColor }]}>REQUEST SENT!</Text>
+                        <Text style={[styles.modalTitle, { color: colors.textColor }]}>{t('book.requestSent')}</Text>
                         <Text style={[styles.modalSubtitle, { color: colors.subtextColor }]}>
-                            Awaiting driver approval. You'll be notified once confirmed.
+                            {t('book.awaitingApproval')}
                         </Text>
 
                         <TouchableOpacity
@@ -201,7 +203,7 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, onBa
                                 setShowSuccessModal(false);
                                 onBookingComplete();
                             }}>
-                            <Text style={styles.returnHomeBtnText}>OK</Text>
+                            <Text style={styles.returnHomeBtnText}>{t('common.ok')}</Text>
                         </TouchableOpacity>
                     </View>
                 </View>

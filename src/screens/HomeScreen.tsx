@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 
 import AvailableRidesScreen from './AvailableRidesScreen';
 import BookRideScreen from './BookRideScreen';
@@ -38,11 +39,13 @@ const API_BASE = 'http://localhost:8081';
 const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
     const { isDark, colors } = useTheme();
     const { token, user } = useAuth();
+    const { t } = useLanguage();
     const [view, setView] = useState<string>('home');
     const [selectedRide, setSelectedRide] = useState<Ride | null>(null);
     const [rideType, setRideType] = useState<0 | 1>(0);
     const [pickup, setPickup] = useState('');
     const [dropoff, setDropoff] = useState('');
+    const [departureTime, setDepartureTime] = useState('');
     const [recentRides, setRecentRides] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(false);
@@ -117,7 +120,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
                     dropoff: dropoff.trim(),
                     vehicleModel: "Mountain SUV", // Mocked for now or add input
                     vehicleNumber: "UK07-AX-4421", // Mocked for now or add input
-                    departureTime: "08:00 AM", // Mocked for now or add input
+                    departureTime: departureTime.trim() || "08:00 AM", // Use input or fallback
                     seatsTotal: 5,
                     pricePerSeat: 350,
                 }),
@@ -126,6 +129,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
             if (response.ok) {
                 setPickup('');
                 setDropoff('');
+                setDepartureTime('');
                 setShowPostSuccess(true);
                 fetchRecentRides(); // Refresh recent list
             }
@@ -169,11 +173,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
             showsVerticalScrollIndicator={false}>
             {/* Greeting */}
             <Text style={[styles.greeting, { color: colors.textColor }]}>
-                {isDriver ? 'Hello, Driver 🚕' : 'Namaste, Traveler 🙏'}
+                {isDriver ? t('home.greetingDriver') : t('home.greetingPassenger')}
             </Text>
             <View style={styles.spacer6} />
             <Text style={[styles.subGreeting, { color: colors.subtextColor }]}>
-                {isDriver ? 'Provide a safe ride today.' : 'Ready for your next adventure?'}
+                {isDriver ? t('home.subGreetingDriver') : t('home.subGreetingPassenger')}
             </Text>
 
             <View style={styles.spacer24} />
@@ -190,7 +194,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
                 ]}>
 
                 <Text style={[styles.fieldLabel, { color: pickupLabelColor }]}>
-                    PICKUP LOCATION
+                    {t('home.pickupLabel')}
                 </Text>
                 <View style={styles.spacer6} />
                 <TextInput
@@ -210,7 +214,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
                 <View style={styles.spacer14} />
 
                 <Text style={[styles.fieldLabel, { color: dropoffLabelColor }]}>
-                    DROPOFF LOCATION
+                    {t('home.dropoffLabel')}
                 </Text>
                 <View style={styles.spacer6} />
                 <TextInput
@@ -227,6 +231,30 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
                     placeholderTextColor={colors.subtextColor}
                 />
 
+                {isDriver && (
+                    <>
+                        <View style={styles.spacer14} />
+                        <Text style={[styles.fieldLabel, { color: colors.primary }]}>
+                            {t('home.departureTimeLabel')}
+                        </Text>
+                        <View style={styles.spacer6} />
+                        <TextInput
+                            style={[
+                                styles.textInput,
+                                {
+                                    color: colors.textColor,
+                                    backgroundColor: colors.inputFillColor,
+                                    borderColor: colors.inputBorderColor,
+                                },
+                            ]}
+                            value={departureTime}
+                            onChangeText={setDepartureTime}
+                            placeholder={t('home.departureTimePlaceholder')}
+                            placeholderTextColor={colors.subtextColor}
+                        />
+                    </>
+                )}
+
                 <View style={styles.spacer18} />
 
                 <TouchableOpacity
@@ -234,7 +262,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
                     onPress={isDriver ? handlePostRide : handleFindRides}
                     activeOpacity={0.85}>
                     <Text style={styles.findButtonText}>
-                        {isDriver ? 'Post This Ride' : 'Find Shared Rides'}
+                        {isDriver ? t('home.postRide') : t('home.findRides')}
                     </Text>
                 </TouchableOpacity>
 
@@ -244,16 +272,16 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
 
             {/* Recent Routes */}
             <Text style={[styles.sectionTitle, { color: colors.textColor }]}>
-                RECENT ROUTES
+                {t('home.recentRoutes')}
             </Text>
             <View style={styles.spacer14} />
 
             {loading ? (
                 <ActivityIndicator color={colors.primary} size="large" />
             ) : error ? (
-                <Text style={styles.errorText}>Error loading recent rides</Text>
+                <Text style={styles.errorText}>{t('home.errorRecent')}</Text>
             ) : (recentRides || []).length === 0 ? (
-                <Text style={{ color: colors.textColor }}>No recent rides found</Text>
+                <Text style={{ color: colors.textColor }}>{t('home.noRecentRides')}</Text>
             ) : (
                 <View style={styles.recentRow}>
                     {(recentRides || []).slice(0, 2).map((ride, index) => (
@@ -277,7 +305,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
                                 />
                                 <Text
                                     style={[styles.recentLabel, { color: recentLabelColor }]}>
-                                    Recent
+                                    {t('home.recent')}
                                 </Text>
                             </View>
                             <View style={styles.spacer6} />
@@ -289,15 +317,15 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
                             <Text
                                 style={[styles.recentSource, { color: colors.subtextColor }]}
                                 numberOfLines={1}>
-                                From {ride.pickup ?? 'Unknown'}
+                                {t('home.from')} {ride.pickup ?? 'Unknown'}
                             </Text>
                             {isDriver && ride.seatsTotal !== undefined && (
                                 <View style={{ marginTop: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <Text style={{ fontSize: 12, color: colors.subtextColor, fontWeight: '500' }}>
-                                        Available: {Math.max(0, ride.seatsTotal - (ride.seatsBooked || 0))}
+                                        {t('home.availableSeats')}: {Math.max(0, ride.seatsTotal - (ride.seatsBooked || 0))}
                                     </Text>
                                     <Text style={{ fontSize: 12, color: isDark ? '#FF4081' : '#D81B60', fontWeight: 'bold' }}>
-                                        Taken: {ride.seatsBooked || 0}
+                                        {t('home.takenSeats')}: {ride.seatsBooked || 0}
                                     </Text>
                                 </View>
                             )}
@@ -310,7 +338,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
 
             {/* Why Choose Raahi */}
             <Text style={[styles.sectionTitle, { color: colors.textColor }]}>
-                WHY CHOOSE RAAHI?
+                {t('home.whyChoose')}
             </Text>
             <View style={styles.spacer14} />
 
@@ -329,10 +357,10 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
                     </Text>
                     <View style={styles.spacer8} />
                     <Text style={[styles.whyTitle, { color: colors.textColor }]}>
-                        Safe Travel
+                        {t('home.safeTravel')}
                     </Text>
                     <Text style={[styles.whyDesc, { color: colors.subtextColor }]}>
-                        Verified experts.
+                        {t('home.verifiedExperts')}
                     </Text>
                 </View>
 
@@ -349,10 +377,10 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
                     </Text>
                     <View style={styles.spacer8} />
                     <Text style={[styles.whyTitle, { color: colors.textColor }]}>
-                        Share & Save
+                        {t('home.shareSave')}
                     </Text>
                     <Text style={[styles.whyDesc, { color: colors.subtextColor }]}>
-                        Split costs.
+                        {t('home.splitCosts')}
                     </Text>
                 </View>
             </View>
@@ -370,15 +398,15 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
                         <View style={styles.successIconContainer}>
                             <Text style={styles.successIcon}>✓</Text>
                         </View>
-                        <Text style={[styles.modalTitle, { color: colors.textColor }]}>RIDE POSTED!</Text>
+                        <Text style={[styles.modalTitle, { color: colors.textColor }]}>{t('home.ridePostedTitle')}</Text>
                         <Text style={[styles.modalSubtitle, { color: colors.subtextColor }]}>
-                            Your ride is now live! Passengers can now see and book your cab.
+                            {t('home.ridePostedSub')}
                         </Text>
 
                         <TouchableOpacity
                             style={styles.returnHomeBtn}
                             onPress={() => setShowPostSuccess(false)}>
-                            <Text style={styles.returnHomeBtnText}>OK</Text>
+                            <Text style={styles.returnHomeBtnText}>{t('common.ok')}</Text>
                         </TouchableOpacity>
                     </View>
                 </View>

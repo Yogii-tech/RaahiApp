@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { useLanguage } from '../context/LanguageContext';
 
 
 const API_BASE = 'http://localhost:8081';
@@ -28,13 +29,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
     const [loading, setLoading] = useState(false);
     const { token, user, setToken, setUser } = useAuth();
     const { colors, isDark } = useTheme();
+    const { t } = useLanguage();
 
     const [tempToken, setTempToken] = useState<string | null>(null);
     const [tempUser, setTempUser] = useState<any | null>(null);
 
     const handleSendOtp = async () => {
         if (phoneNumber.trim().length !== 10) {
-            Alert.alert('Error', 'Please enter a valid 10-digit phone number');
+            Alert.alert(t('common.error'), t('login.invalidPhone'));
             return;
         }
 
@@ -49,14 +51,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
             const data = await response.json();
 
             if (!response.ok) {
-                Alert.alert('Error', data.error || 'Something went wrong');
+                Alert.alert(t('common.error'), data.error || t('common.error'));
                 return;
             }
 
             setStep('otp');
-            Alert.alert('OTP Sent', `For testing, use code: ${data.otp}`);
+            Alert.alert(t('login.otpSent'), `${t('login.testOtp')}${data.otp}`);
         } catch {
-            Alert.alert('Error', 'Could not connect to server. Check your network.');
+            Alert.alert(t('common.error'), t('login.connectionError'));
         } finally {
             setLoading(false);
         }
@@ -64,7 +66,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
 
     const handleVerifyOtp = async () => {
         if (!otp.trim()) {
-            Alert.alert('Error', 'Please enter the OTP');
+            Alert.alert(t('common.error'), t('login.enterOtpError'));
             return;
         }
 
@@ -79,7 +81,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
             const data = await response.json();
 
             if (!response.ok) {
-                Alert.alert('Error', data.error || 'Invalid OTP');
+                Alert.alert(t('common.error'), data.error || t('login.invalidOtp'));
                 return;
             }
 
@@ -93,7 +95,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 onAuthenticated();
             }
         } catch {
-            Alert.alert('Error', 'Could not connect to server. Check your network.');
+            Alert.alert(t('common.error'), t('login.connectionError'));
         } finally {
             setLoading(false);
         }
@@ -101,7 +103,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
 
     const handleSaveName = () => {
         if (!name.trim()) {
-            Alert.alert('Error', 'Please enter your name');
+            Alert.alert(t('common.error'), t('login.enterNameError'));
             return;
         }
         setStep('role');
@@ -134,10 +136,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 setUser(updatedUser);
                 onAuthenticated();
             } else {
-                Alert.alert('Error', 'Failed to complete profile');
+                Alert.alert(t('common.error'), t('login.failProfile'));
             }
         } catch {
-            Alert.alert('Error', 'Connection error');
+            Alert.alert(t('common.error'), t('login.connectionError'));
         } finally {
             setLoading(false);
         }
@@ -149,19 +151,19 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
             <View style={styles.inner}>
                 <Text style={[styles.title, { color: colors.textColor }]}>
-                    {step === 'name' ? "What's your\nname?" :
-                        step === 'role' ? "Choose your\nrole" :
-                            "Move freely\nin the hills."}
+                    {step === 'name' ? t('login.enterName') :
+                        step === 'role' ? t('login.chooseRole') :
+                        t('login.moveFreely')}
                 </Text>
 
                 <View style={styles.spacer16} />
 
                 <Text style={[styles.subtitle, { color: colors.subtextColor }]}>
                     {step === 'name'
-                        ? 'Help drivers recognize you when they arrive.'
+                        ? t('login.helpDrivers')
                         : step === 'role'
-                            ? 'How would you like to use Raahi?'
-                            : 'Local, trusted rides.\nLogin to start your journey.'}
+                            ? t('login.howUseRaahi')
+                            : t('login.localTrusted')}
                 </Text>
 
                 <View style={styles.spacer40} />
@@ -174,7 +176,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                                 color: colors.textColor,
                                 borderColor: colors.inputBorderColor
                             }]}
-                            placeholder="Phone number"
+                            placeholder={t('login.phonePlaceholder')}
                             placeholderTextColor={isDark ? 'rgba(255,255,255,0.24)' : 'rgba(34,34,96,0.3)'}
                             keyboardType="phone-pad"
                             autoCapitalize="none"
@@ -193,7 +195,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                             {loading ? (
                                 <ActivityIndicator color="#FFFFFF" />
                             ) : (
-                                <Text style={styles.buttonText}>Send OTP</Text>
+                                <Text style={styles.buttonText}>{t('login.sendOtp')}</Text>
                             )}
                         </TouchableOpacity>
                     </>
@@ -207,7 +209,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                                 color: colors.textColor,
                                 borderColor: colors.inputBorderColor
                             }]}
-                            placeholder="Enter 6-digit OTP"
+                            placeholder={t('login.enterOtp')}
                             placeholderTextColor={isDark ? 'rgba(255,255,255,0.24)' : 'rgba(34,34,96,0.3)'}
                             keyboardType="number-pad"
                             autoCapitalize="none"
@@ -219,7 +221,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                         <View style={styles.spacer12} />
 
                         <TouchableOpacity onPress={() => setStep('phone')}>
-                            <Text style={[styles.switchText, { color: colors.primary }]}>Change phone number?</Text>
+                            <Text style={[styles.switchText, { color: colors.primary }]}>{t('login.changePhone')}</Text>
                         </TouchableOpacity>
 
                         <View style={styles.spacer24} />
@@ -232,7 +234,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                             {loading ? (
                                 <ActivityIndicator color="#FFFFFF" />
                             ) : (
-                                <Text style={styles.buttonText}>Verify OTP</Text>
+                                <Text style={styles.buttonText}>{t('login.verifyOtp')}</Text>
                             )}
                         </TouchableOpacity>
                     </>
@@ -246,7 +248,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                                 color: colors.textColor,
                                 borderColor: colors.inputBorderColor
                             }]}
-                            placeholder="Full Name"
+                            placeholder={t('login.fullName')}
                             placeholderTextColor={isDark ? 'rgba(255,255,255,0.24)' : 'rgba(34,34,96,0.3)'}
                             autoCapitalize="words"
                             value={name}
@@ -263,7 +265,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                             {loading ? (
                                 <ActivityIndicator color="#FFFFFF" />
                             ) : (
-                                <Text style={styles.buttonText}>Continue</Text>
+                                <Text style={styles.buttonText}>{t('login.continue')}</Text>
                             )}
                         </TouchableOpacity>
                     </>
@@ -276,8 +278,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                             onPress={() => handleCompleteRegistration('passenger')}>
                             <Text style={styles.roleEmoji}>🏠</Text>
                             <View style={styles.roleInfo}>
-                                <Text style={[styles.roleLabel, { color: colors.textColor }]}>I am a Passenger</Text>
-                                <Text style={[styles.roleDesc, { color: colors.subtextColor }]}>I want to book local rides</Text>
+                                <Text style={[styles.roleLabel, { color: colors.textColor }]}>{t('login.iAmPassenger')}</Text>
+                                <Text style={[styles.roleDesc, { color: colors.subtextColor }]}>{t('login.bookLocal')}</Text>
                             </View>
                         </TouchableOpacity>
 
@@ -288,8 +290,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                             onPress={() => handleCompleteRegistration('driver')}>
                             <Text style={styles.roleEmoji}>🚕</Text>
                             <View style={styles.roleInfo}>
-                                <Text style={[styles.roleLabel, { color: colors.textColor }]}>I am a Driver</Text>
-                                <Text style={[styles.roleDesc, { color: colors.subtextColor }]}>I want to provide local rides</Text>
+                                <Text style={[styles.roleLabel, { color: colors.textColor }]}>{t('login.iAmDriver')}</Text>
+                                <Text style={[styles.roleDesc, { color: colors.subtextColor }]}>{t('login.provideLocal')}</Text>
                             </View>
                         </TouchableOpacity>
                     </View>
@@ -298,7 +300,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 <View style={styles.spacer24} />
 
                 <Text style={[styles.disclaimer, { color: colors.subtextColor, opacity: 0.6 }]}>
-                    By continuing, you agree to our Terms & Privacy Policy
+                    {t('login.disclaimer')}
                 </Text>
             </View>
         </KeyboardAvoidingView>

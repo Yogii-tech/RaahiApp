@@ -15,10 +15,12 @@ interface SosScreenProps {
 }
 
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 
 const SosScreen: React.FC<SosScreenProps> = ({ visible, onClose }) => {
     const { token } = useAuth();
-    const [location, setLocation] = useState<string>('Detecting location...');
+    const { t } = useLanguage();
+    const [location, setLocation] = useState<string>(t('sos.locationDetecting'));
     const [trustedContacts, setTrustedContacts] = useState<any[]>([]);
 
     useEffect(() => {
@@ -55,7 +57,7 @@ const SosScreen: React.FC<SosScreenProps> = ({ visible, onClose }) => {
 
                         (error: any) => {
                             console.error('Location error:', error);
-                            setLocation('Location unavailable');
+                            setLocation(t('sos.locationUnavailable'));
                         },
                         {
                             enableHighAccuracy: false, // Use battery-efficient detection
@@ -64,14 +66,14 @@ const SosScreen: React.FC<SosScreenProps> = ({ visible, onClose }) => {
                         }
                     );
                 } else {
-                    setLocation('Geolocation not supported');
+                    setLocation(t('sos.geoNotSupported'));
                 }
             };
 
             getLocation();
         } else {
             // Reset when hidden
-            setLocation('Detecting location...');
+            setLocation(t('sos.locationDetecting'));
         }
     }, [visible]);
 
@@ -93,7 +95,7 @@ const SosScreen: React.FC<SosScreenProps> = ({ visible, onClose }) => {
 
     const handleAlertContacts = () => {
         if (trustedContacts.length === 0) {
-            Alert.alert('No Contacts', 'Please add trusted contacts in the Account section first.');
+            Alert.alert(t('sos.noContactsTitle'), t('sos.noContactsMsg'));
             return;
         }
 
@@ -103,7 +105,7 @@ const SosScreen: React.FC<SosScreenProps> = ({ visible, onClose }) => {
         setTimeout(() => {
             setSending(false);
             const contactList = trustedContacts.map(c => c.phone).join(', ');
-            const fullMessage = `EMERGENCY SOS: I need help! My current location is: ${location}. Please check on me immediately. - Raahi App`;
+            const fullMessage = `${t('sos.messagePrefix')}${location}${t('sos.messageSuffix')}`;
 
             console.log('--- SOS MESSAGE SENT ---');
             console.log(`To: ${contactList}`);
@@ -111,8 +113,8 @@ const SosScreen: React.FC<SosScreenProps> = ({ visible, onClose }) => {
             console.log('------------------------');
 
             Alert.alert(
-                'SOS Alert Sent',
-                `The following message has been sent to ${contactList}:\n\n"${fullMessage}"`
+                t('sos.alertSentTitle'),
+                `${t('sos.sentToPrefix')}${contactList}:\n\n"${fullMessage}"`
             );
         }, 1500);
     };
@@ -128,7 +130,7 @@ const SosScreen: React.FC<SosScreenProps> = ({ visible, onClose }) => {
                     {/* Red Header */}
                     <View style={styles.header}>
                         <Text style={styles.headerIcon}>⚠️</Text>
-                        <Text style={styles.headerTitle}>EMERGENCY SOS</Text>
+                        <Text style={styles.headerTitle}>{t('sos.emergencyTitle')}</Text>
                         <TouchableOpacity onPress={onClose} activeOpacity={0.7}>
                             <Text style={styles.closeIcon}>✕</Text>
                         </TouchableOpacity>
@@ -137,7 +139,7 @@ const SosScreen: React.FC<SosScreenProps> = ({ visible, onClose }) => {
                     {/* Body */}
                     <View style={styles.body}>
                         <Text style={styles.bodyText}>
-                            Immediate assistance available. Alert authorities and contacts.
+                            {t('sos.bodyText')}
                         </Text>
 
                         <View style={styles.spacer20} />
@@ -147,7 +149,7 @@ const SosScreen: React.FC<SosScreenProps> = ({ visible, onClose }) => {
                             style={[styles.actionButton, styles.policeButton]}
                             activeOpacity={0.85}>
                             <Text style={styles.actionIcon}>📞</Text>
-                            <Text style={styles.actionText}>CALL POLICE (100)</Text>
+                            <Text style={styles.actionText}>{t('sos.callPolice')}</Text>
                         </TouchableOpacity>
 
                         <View style={styles.spacer14} />
@@ -159,7 +161,7 @@ const SosScreen: React.FC<SosScreenProps> = ({ visible, onClose }) => {
                             activeOpacity={0.85}
                             disabled={sending}>
                             <Text style={styles.actionIcon}>{sending ? '⏳' : '📡'}</Text>
-                            <Text style={styles.actionText}>{sending ? 'Sending Alert...' : 'Alert Contacts'}</Text>
+                            <Text style={styles.actionText}>{sending ? t('sos.sendingAlert') : t('sos.alertContacts')}</Text>
                         </TouchableOpacity>
 
                         <View style={styles.spacer18} />
