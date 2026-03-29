@@ -6,6 +6,17 @@ interface User {
     name: string;
     role: string;
     language?: string;
+    vehicle?: {
+        vehicle_name: string;
+        vehicle_type: string;
+        seats: number;
+        vehicle_number: string;
+        dl_url: string;
+        rc_url: string;
+        pollution_url: string;
+        vehicle_image_url: string;
+        ownership_url: string;
+    };
 }
 
 interface AuthContextType {

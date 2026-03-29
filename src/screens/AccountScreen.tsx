@@ -15,13 +15,14 @@ import { useLanguage, LanguageType } from '../context/LanguageContext';
 
 const API_BASE = 'http://localhost:8081';
 import TrustedContactsScreen from './TrustedContactsScreen';
+import VehicleDetailsScreen from './VehicleDetailsScreen';
 
 
 const AccountScreen: React.FC = () => {
     const { isDark, colors } = useTheme();
     const { user, setUser, token, logout } = useAuth();
     const { t, language, setLanguage } = useLanguage();
-    const [view, setView] = useState<'main' | 'trusted'>('main');
+    const [view, setView] = useState<'main' | 'trusted' | 'vehicle'>('main');
     const [logoutVisible, setLogoutVisible] = useState(false);
     const [languageVisible, setLanguageVisible] = useState(false);
     const ratingColor = isDark ? '#FFC107' : '#FFB300';
@@ -70,12 +71,17 @@ const AccountScreen: React.FC = () => {
         { icon: '💳', title: t('account.paymentMethods') },
         { icon: '📇', title: t('account.trustedContacts'), action: () => setView('trusted') },
         { icon: '🌐', title: t('account.language'), action: handleLanguagePress },
+        ...(user?.role === 'driver' ? [{ icon: '🚕', title: t('account.vehicleDetails'), action: () => setView('vehicle') }] : []),
         { icon: '🆘', title: t('account.support'), color: '#C62828' },
         { icon: '🚪', title: t('account.logout'), action: handleLogoutPress, color: '#C62828' },
     ];
 
     if (view === 'trusted') {
         return <TrustedContactsScreen onBack={() => setView('main')} />;
+    }
+
+    if (view === 'vehicle') {
+        return <VehicleDetailsScreen onBack={() => setView('main')} />;
     }
 
     return (

@@ -17,7 +17,7 @@ export const translations = {
     'common.error': 'Error occurred',
     'common.yes': 'Yes',
     'common.no': 'No',
-    
+
     // Login Screen
     'login.welcome': 'Welcome. Log in to continue.',
     'login.title': 'Raahi',
@@ -57,6 +57,24 @@ export const translations = {
     'login.enterNameError': 'Please enter your name',
     'login.failProfile': 'Failed to complete profile',
     'login.connectionError': 'Connection error',
+
+    // Vehicle Registration (Driver)
+    'login.vehicleRegistration': 'Vehicle Registration',
+    'login.vehicleName': 'Vehicle Name (e.g. Maruti Alto)',
+    'login.vehicleType': 'Vehicle Type',
+    'login.vehicleTypePlaceholder': 'Enter Type (e.g. Van, SUV)',
+    'login.vehicleSeats': 'Number of Seats',
+    'login.vehicleNumber': 'Vehicle Number (e.g. UK07 AB 1234)',
+    'login.uploadDL': 'Upload Driving License',
+    'login.uploadRC': 'Upload RC (Registration)',
+    'login.uploadPollution': 'Upload Pollution Certificate',
+    'login.uploadVehicleImg': 'Upload Vehicle Image',
+    'login.vehicleImgHint': 'Make sure the number plate is clearly visible',
+    'login.uploadOwnership': 'Upload Ownership Proof',
+    'login.ownershipHint': 'Any document that establishes relation between vehicle and owner',
+    'login.submitDocs': 'Submit & Complete',
+    'login.uploadSuccess': 'File selected: ',
+    'login.uploadError': 'Please upload all required documents',
 
     // Home Screen
     'home.greetingPassenger': 'Namaste, Traveler 🙏',
@@ -154,6 +172,11 @@ export const translations = {
     'account.paymentMethods': 'Payment Methods',
     'account.trustedContacts': 'Trusted Contacts',
     'account.language': 'Language',
+    'account.vehicleDetails': 'Vehicle Details',
+    'vehicle.nameLabel': 'Vehicle Name',
+    'vehicle.typeLabel': 'Vehicle Type',
+    'vehicle.seatsLabel': 'Number of Seats',
+    'vehicle.numberLabel': 'Vehicle Number',
     'account.support': 'Support',
     'account.logout': 'Logout',
     'account.languageModalTitle': 'Select Language',
@@ -259,7 +282,7 @@ export const translations = {
     'common.error': 'त्रुटि हुई',
     'common.yes': 'हाँ',
     'common.no': 'नहीं',
-    
+
     // Login Screen
     'login.welcome': 'नमस्ते। जारी रखने के लिए लॉग इन करें।',
     'login.title': 'Raahi',
@@ -299,6 +322,24 @@ export const translations = {
     'login.enterNameError': 'कृपया अपना नाम दर्ज करें',
     'login.failProfile': 'प्रोफ़ाइल पूरा करने में विफल',
     'login.connectionError': 'कनेक्शन त्रुटि',
+
+    // Vehicle Registration (Driver)
+    'login.vehicleRegistration': 'वाहन पंजीकरण',
+    'login.vehicleName': 'वाहन का नाम (उदा. मारुति ऑल्टो)',
+    'login.vehicleType': 'वाहन का प्रकार',
+    'login.vehicleTypePlaceholder': 'प्रकार दर्ज करें (उदा. वैन, एसयूवी)',
+    'login.vehicleSeats': 'सीटों की संख्या',
+    'login.vehicleNumber': 'वाहन नंबर (उदा. UK07 AB 1234)',
+    'login.uploadDL': 'ड्राइविंग लाइसेंस अपलोड करें',
+    'login.uploadRC': 'RC (पंजीकरण) अपलोड करें',
+    'login.uploadPollution': 'प्रदूषण प्रमाण पत्र अपलोड करें',
+    'login.uploadVehicleImg': 'वाहन की छवि अपलोड करें',
+    'login.vehicleImgHint': 'सुनिश्चित करें कि नंबर प्लेट स्पष्ट रूप से दिखाई दे रही है',
+    'login.uploadOwnership': 'स्वामित्व प्रमाण अपलोड करें',
+    'login.ownershipHint': 'कोई भी दस्तावेज़ जो वाहन और मालिक के बीच संबंध स्थापित करता हो',
+    'login.submitDocs': 'जमा करें और पूरा करें',
+    'login.uploadSuccess': 'फ़ाइल चुनी गई: ',
+    'login.uploadError': 'कृपया सभी आवश्यक दस्तावेज़ अपलोड करें',
 
     // Home Screen
     'home.greetingPassenger': 'नमस्ते, यात्री 🙏',
@@ -396,6 +437,11 @@ export const translations = {
     'account.paymentMethods': 'भुगतान के तरीके',
     'account.trustedContacts': 'विश्वसनीय संपर्क',
     'account.language': 'भाषा (Language)',
+    'account.vehicleDetails': 'वाहन का विवरण',
+    'vehicle.nameLabel': 'वाहन का नाम',
+    'vehicle.typeLabel': 'वाहन का प्रकार',
+    'vehicle.seatsLabel': 'सीटों की संख्या',
+    'vehicle.numberLabel': 'वाहन नंबर',
     'account.support': 'सहायता',
     'account.logout': 'लॉग आउट',
     'account.languageModalTitle': 'भाषा चुनें',

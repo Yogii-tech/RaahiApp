@@ -118,10 +118,10 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
                 body: JSON.stringify({
                     pickup: pickup.trim(),
                     dropoff: dropoff.trim(),
-                    vehicleModel: "Mountain SUV", // Mocked for now or add input
-                    vehicleNumber: "UK07-AX-4421", // Mocked for now or add input
-                    departureTime: departureTime.trim() || "08:00 AM", // Use input or fallback
-                    seatsTotal: 5,
+                    vehicleModel: user?.vehicle?.vehicle_name || "Mountain SUV",
+                    vehicleNumber: user?.vehicle?.vehicle_number || "UK07-AX-4421",
+                    departureTime: departureTime.trim() || "08:00 AM",
+                    seatsTotal: user?.vehicle?.seats || 5,
                     pricePerSeat: 350,
                 }),
             });

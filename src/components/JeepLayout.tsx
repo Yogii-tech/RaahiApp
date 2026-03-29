@@ -65,11 +65,11 @@ const JeepLayout: React.FC<JeepLayoutProps> = ({
             <View style={styles.seatContainer}>
                 {/* Front Row (Driver + 1 or 2) */}
                 <View style={styles.seatRow}>
+                    {renderSeat(2)}
+                    {renderSeat(1)}
                     <View style={[styles.seatBox, { backgroundColor: '#37474F' }]}>
                         <Text style={styles.seatIcon}>🛞</Text>
                     </View>
-                    {renderSeat(1)}
-                    {renderSeat(2)}
                 </View>
 
                 {/* Middle Row */}

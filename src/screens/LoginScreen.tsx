@@ -25,7 +25,18 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
     const [phoneNumber, setPhoneNumber] = useState('');
     const [otp, setOtp] = useState('');
     const [name, setName] = useState('');
-    const [step, setStep] = useState<'phone' | 'otp' | 'name' | 'role'>('phone');
+    const [step, setStep] = useState<'phone' | 'otp' | 'name' | 'role' | 'vehicle'>('phone');
+    const [vehicleDocs, setVehicleDocs] = useState({
+        name: '',
+        type: '',
+        seats: '',
+        number: '',
+        dl: '',
+        rc: '',
+        pollution: '',
+        image: '',
+        ownership: ''
+    });
     const [loading, setLoading] = useState(false);
     const { token, user, setToken, setUser } = useAuth();
     const { colors, isDark } = useTheme();
@@ -109,28 +120,80 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
         setStep('role');
     };
 
+    const handleRoleSelect = (role: 'passenger' | 'driver') => {
+        if (role === 'passenger') {
+            handleCompleteRegistration('passenger');
+        } else {
+            setStep('vehicle');
+        }
+    };
+
+    const handleFileUpload = (type: keyof typeof vehicleDocs) => {
+        if (Platform.OS === 'web') {
+            // @ts-ignore
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*,application/pdf';
+            input.onchange = (e: any) => {
+                const file = e.target.files[0];
+                if (file) {
+                    // For demo, we just store the filename
+                    setVehicleDocs(prev => ({ ...prev, [type]: file.name }));
+                }
+            };
+            input.click();
+        } else {
+            Alert.alert('Mobile Upload', 'Image picker would be triggered here.');
+        }
+    };
+
     const handleCompleteRegistration = async (role: 'passenger' | 'driver') => {
         const activeToken = tempToken || token;
 
+        if (role === 'driver' && (
+            !vehicleDocs.name || !vehicleDocs.type || !vehicleDocs.seats || !vehicleDocs.number ||
+            !vehicleDocs.dl || !vehicleDocs.rc || !vehicleDocs.pollution || !vehicleDocs.image
+        )) {
+            Alert.alert(t('common.error'), t('login.uploadError'));
+            return;
+        }
+
         setLoading(true);
         try {
+            const body: any = {
+                name: name.trim(),
+                role: role
+            };
+
+            if (role === 'driver') {
+                body.vehicle = {
+                    vehicle_name: vehicleDocs.name,
+                    vehicle_type: vehicleDocs.type,
+                    seats: parseInt(vehicleDocs.seats) || 0,
+                    vehicle_number: vehicleDocs.number,
+                    dl_url: vehicleDocs.dl,
+                    rc_url: vehicleDocs.rc,
+                    pollution_url: vehicleDocs.pollution,
+                    vehicle_image_url: vehicleDocs.image,
+                    ownership_url: vehicleDocs.ownership
+                };
+            }
+
             const response = await fetch(`${API_BASE}/api/user/profile`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${activeToken}`
                 },
-                body: JSON.stringify({
-                    name: name.trim(),
-                    role: role
-                }),
+                body: JSON.stringify(body),
             });
 
             if (response.ok) {
                 const updatedUser = {
                     ...(tempUser || user),
                     name: name.trim(),
-                    role: role
+                    role: role,
+                    vehicle: body.vehicle
                 };
                 setToken(activeToken);
                 setUser(updatedUser);
@@ -153,7 +216,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 <Text style={[styles.title, { color: colors.textColor }]}>
                     {step === 'name' ? t('login.enterName') :
                         step === 'role' ? t('login.chooseRole') :
-                        t('login.moveFreely')}
+                            step === 'vehicle' ? t('login.vehicleRegistration') :
+                                t('login.moveFreely')}
                 </Text>
 
                 <View style={styles.spacer16} />
@@ -163,7 +227,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                         ? t('login.helpDrivers')
                         : step === 'role'
                             ? t('login.howUseRaahi')
-                            : t('login.localTrusted')}
+                            : step === 'vehicle'
+                                ? ''
+                                : t('login.localTrusted')}
                 </Text>
 
                 <View style={styles.spacer40} />
@@ -275,7 +341,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                     <View style={styles.roleContainer}>
                         <TouchableOpacity
                             style={[styles.roleCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}
-                            onPress={() => handleCompleteRegistration('passenger')}>
+                            onPress={() => handleRoleSelect('passenger')}>
                             <Text style={styles.roleEmoji}>🏠</Text>
                             <View style={styles.roleInfo}>
                                 <Text style={[styles.roleLabel, { color: colors.textColor }]}>{t('login.iAmPassenger')}</Text>
@@ -287,12 +353,111 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
 
                         <TouchableOpacity
                             style={[styles.roleCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}
-                            onPress={() => handleCompleteRegistration('driver')}>
+                            onPress={() => handleRoleSelect('driver')}>
                             <Text style={styles.roleEmoji}>🚕</Text>
                             <View style={styles.roleInfo}>
                                 <Text style={[styles.roleLabel, { color: colors.textColor }]}>{t('login.iAmDriver')}</Text>
                                 <Text style={[styles.roleDesc, { color: colors.subtextColor }]}>{t('login.provideLocal')}</Text>
                             </View>
+                        </TouchableOpacity>
+                    </View>
+                )}
+
+                {step === 'vehicle' && (
+                    <View style={styles.vehicleDocContainer}>
+                        <TextInput
+                            style={[styles.input, styles.docInput, {
+                                backgroundColor: colors.inputFillColor,
+                                color: colors.textColor,
+                                borderColor: colors.inputBorderColor
+                            }]}
+                            placeholder={t('login.vehicleName')}
+                            placeholderTextColor={isDark ? 'rgba(255,255,255,0.24)' : 'rgba(34,34,96,0.3)'}
+                            value={vehicleDocs.name}
+                            onChangeText={(text) => setVehicleDocs(prev => ({ ...prev, name: text }))}
+                        />
+
+                        <TextInput
+                            style={[styles.input, styles.docInput, {
+                                backgroundColor: colors.inputFillColor,
+                                color: colors.textColor,
+                                borderColor: colors.inputBorderColor
+                            }]}
+                            placeholder={t('login.vehicleTypePlaceholder')}
+                            placeholderTextColor={isDark ? 'rgba(255,255,255,0.24)' : 'rgba(34,34,96,0.3)'}
+                            autoCapitalize="words"
+                            value={vehicleDocs.type}
+                            onChangeText={(text) => setVehicleDocs(prev => ({ ...prev, type: text }))}
+                        />
+
+                        <View style={styles.row}>
+                            <TextInput
+                                style={[styles.input, styles.docInput, {
+                                    flex: 1,
+                                    backgroundColor: colors.inputFillColor,
+                                    color: colors.textColor,
+                                    borderColor: colors.inputBorderColor
+                                }]}
+                                placeholder={t('login.vehicleSeats')}
+                                placeholderTextColor={isDark ? 'rgba(255,255,255,0.24)' : 'rgba(34,34,96,0.3)'}
+                                keyboardType="number-pad"
+                                value={vehicleDocs.seats}
+                                onChangeText={(text) => setVehicleDocs(prev => ({ ...prev, seats: text.replace(/[^0-9]/g, '') }))}
+                            />
+                            <View style={{ width: 12 }} />
+                            <TextInput
+                                style={[styles.input, styles.docInput, {
+                                    flex: 2,
+                                    backgroundColor: colors.inputFillColor,
+                                    color: colors.textColor,
+                                    borderColor: colors.inputBorderColor
+                                }]}
+                                placeholder={t('login.vehicleNumber')}
+                                placeholderTextColor={isDark ? 'rgba(255,255,255,0.24)' : 'rgba(34,34,96,0.3)'}
+                                autoCapitalize="characters"
+                                value={vehicleDocs.number}
+                                onChangeText={(text) => setVehicleDocs(prev => ({ ...prev, number: text }))}
+                            />
+                        </View>
+
+                        <View style={styles.spacer12} />
+                        {[
+                            { key: 'dl', label: 'login.uploadDL' },
+                            { key: 'rc', label: 'login.uploadRC' },
+                            { key: 'pollution', label: 'login.uploadPollution' },
+                            { key: 'image', label: 'login.uploadVehicleImg', hint: 'login.vehicleImgHint' },
+                            { key: 'ownership', label: 'login.uploadOwnership', hint: 'login.ownershipHint' },
+                        ].map((doc) => (
+                            <View key={doc.key} style={styles.docItem}>
+                                <TouchableOpacity
+                                    style={[styles.uploadButton, { borderColor: colors.borderColor, backgroundColor: colors.inputFillColor }]}
+                                    onPress={() => handleFileUpload(doc.key as any)}>
+                                    <Text style={[styles.uploadButtonText, { color: colors.textColor }]}>
+                                        {(vehicleDocs as any)[doc.key] ? `✅ ${t('login.uploadSuccess')}${(vehicleDocs as any)[doc.key].substring(0, 15)}...` : t(doc.label as any)}
+                                    </Text>
+                                </TouchableOpacity>
+                                {doc.hint && !(vehicleDocs as any)[doc.key] && (
+                                    <Text style={[styles.docHint, { color: colors.subtextColor }]}>{t(doc.hint as any)}</Text>
+                                )}
+                            </View>
+                        ))}
+
+                        <View style={styles.spacer24} />
+
+                        <TouchableOpacity
+                            style={[styles.button, { backgroundColor: colors.primary }, loading && styles.buttonDisabled]}
+                            onPress={() => handleCompleteRegistration('driver')}
+                            activeOpacity={0.85}
+                            disabled={loading}>
+                            {loading ? (
+                                <ActivityIndicator color="#FFFFFF" />
+                            ) : (
+                                <Text style={styles.buttonText}>{t('login.submitDocs')}</Text>
+                            )}
+                        </TouchableOpacity>
+
+                        <TouchableOpacity onPress={() => setStep('role')} style={styles.backButton}>
+                            <Text style={[styles.switchText, { color: colors.primary }]}>{t('common.back')}</Text>
                         </TouchableOpacity>
                     </View>
                 )}
@@ -379,6 +544,48 @@ const styles = StyleSheet.create({
     roleDesc: {
         fontSize: 14,
         opacity: 0.8,
+    },
+    vehicleDocContainer: {
+        width: '100%',
+    },
+    docItem: {
+        marginBottom: 12,
+    },
+    docInput: {
+        marginBottom: 12,
+    },
+    row: {
+        flexDirection: 'row',
+    },
+    uploadButton: {
+        borderWidth: 1,
+        borderRadius: 12,
+        padding: 14,
+        alignItems: 'center',
+        borderStyle: 'dashed',
+    },
+    uploadButtonText: {
+        fontSize: 14,
+        fontWeight: '500',
+    },
+    docHint: {
+        fontSize: 10,
+        marginTop: 4,
+        marginLeft: 4,
+        opacity: 0.7,
+    },
+    backButton: {
+        marginTop: 16,
+    },
+    typeButton: {
+        borderWidth: 1,
+        borderRadius: 12,
+        paddingVertical: 12,
+        alignItems: 'center',
+    },
+    typeButtonText: {
+        fontSize: 14,
+        fontWeight: '600',
     },
     spacer12: { height: 12 },
     spacer16: { height: 16 },
