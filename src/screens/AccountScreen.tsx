@@ -8,12 +8,13 @@ import {
     Alert,
     Platform,
     Modal,
+    Linking,
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage, LanguageType } from '../context/LanguageContext';
 
-const API_BASE = 'http://localhost:8081';
+import { API_BASE } from '../apiConfig';
 import TrustedContactsScreen from './TrustedContactsScreen';
 import VehicleDetailsScreen from './VehicleDetailsScreen';
 
@@ -25,6 +26,8 @@ const AccountScreen: React.FC = () => {
     const [view, setView] = useState<'main' | 'trusted' | 'vehicle'>('main');
     const [logoutVisible, setLogoutVisible] = useState(false);
     const [languageVisible, setLanguageVisible] = useState(false);
+    const [supportVisible, setSupportVisible] = useState(false);
+    const supportNumber = '8809228888';
     const ratingColor = isDark ? '#FFC107' : '#FFB300';
 
     // New functions for logout modal
@@ -67,12 +70,25 @@ const AccountScreen: React.FC = () => {
         }
     };
 
+    const handleSupportCall = () => {
+        setSupportVisible(false);
+        Linking.openURL(`tel:+91${supportNumber}`);
+    };
+
+    const handleSupportWhatsApp = () => {
+        setSupportVisible(false);
+        const message = encodeURIComponent("Hello Raahi Support, I need help with...");
+        Linking.openURL(`https://wa.me/91${supportNumber}?text=${message}`);
+    };
+
+    const handleSupportPress = () => setSupportVisible(true);
+
     const optionItems = [
         { icon: '💳', title: t('account.paymentMethods') },
         { icon: '📇', title: t('account.trustedContacts'), action: () => setView('trusted') },
         { icon: '🌐', title: t('account.language'), action: handleLanguagePress },
         ...(user?.role === 'driver' ? [{ icon: '🚕', title: t('account.vehicleDetails'), action: () => setView('vehicle') }] : []),
-        { icon: '🆘', title: t('account.support'), color: '#C62828' },
+        { icon: '🎧', title: t('account.support'), action: handleSupportPress },
         { icon: '🚪', title: t('account.logout'), action: handleLogoutPress, color: '#C62828' },
     ];
 
@@ -241,6 +257,41 @@ const AccountScreen: React.FC = () => {
                     </View>
                 </View>
             </Modal>
+            {/* Support Selection Modal */}
+            <Modal
+                transparent={true}
+                visible={supportVisible}
+                animationType="fade"
+                onRequestClose={() => setSupportVisible(false)}>
+                <View style={styles.modalOverlay}>
+                    <View style={[styles.modalContent, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}>
+                        <Text style={[styles.modalTitle, { color: colors.textColor }]}>{t('account.support')}</Text>
+                        <Text style={[styles.modalText, { color: colors.subtextColor }]}>{t('common.chooseAction') || 'Choose how you want to reach us'}</Text>
+
+                        <TouchableOpacity
+                            style={[styles.supportOption, { borderColor: colors.borderColor }]}
+                            onPress={handleSupportCall}>
+                            <Text style={styles.supportOptionIcon}>📞</Text>
+                            <Text style={[styles.supportOptionText, { color: colors.textColor }]}>{t('account.callSupport') || 'Call Support'}</Text>
+                        </TouchableOpacity>
+
+                        <View style={styles.spacer14} />
+
+                        <TouchableOpacity
+                            style={[styles.supportOption, { borderColor: colors.borderColor }]}
+                            onPress={handleSupportWhatsApp}>
+                            <Text style={styles.supportOptionIcon}>💬</Text>
+                            <Text style={[styles.supportOptionText, { color: colors.textColor }]}>{t('account.whatsappSupport') || 'WhatsApp Support'}</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={{ padding: 16, marginTop: 10 }}
+                            onPress={() => setSupportVisible(false)}>
+                            <Text style={{ color: colors.subtextColor, fontWeight: 'bold' }}>{t('common.cancel')}</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
         </ScrollView>
     );
 };
@@ -400,6 +451,23 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     languageOptionText: {
+        fontSize: 16,
+        fontWeight: 'bold',
+    },
+    supportOption: {
+        width: '100%',
+        paddingVertical: 16,
+        paddingHorizontal: 20,
+        borderRadius: 16,
+        borderWidth: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    supportOptionIcon: {
+        fontSize: 22,
+        marginRight: 16,
+    },
+    supportOptionText: {
         fontSize: 16,
         fontWeight: 'bold',
     },

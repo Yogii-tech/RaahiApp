@@ -9,13 +9,14 @@ import {
     Platform,
     Alert,
     ActivityIndicator,
+    ScrollView,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
 
 
-const API_BASE = 'http://localhost:8081';
+import { API_BASE } from '../apiConfig';
 
 interface LoginScreenProps {
     onAuthenticated: () => void;
@@ -35,7 +36,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
         rc: '',
         pollution: '',
         image: '',
-        ownership: ''
+        ownership: '',
+        layout: 'suv'
     });
     const [loading, setLoading] = useState(false);
     const { token, user, setToken, setUser } = useAuth();
@@ -129,16 +131,39 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
     };
 
     const handleFileUpload = (type: keyof typeof vehicleDocs) => {
+        const activeToken = tempToken || token;
         if (Platform.OS === 'web') {
             // @ts-ignore
             const input = document.createElement('input');
             input.type = 'file';
             input.accept = 'image/*,application/pdf';
-            input.onchange = (e: any) => {
+            input.onchange = async (e: any) => {
                 const file = e.target.files[0];
                 if (file) {
-                    // For demo, we just store the filename
-                    setVehicleDocs(prev => ({ ...prev, [type]: file.name }));
+                    setLoading(true);
+                    try {
+                        const formData = new FormData();
+                        formData.append('file', file);
+
+                        const response = await fetch(`${API_BASE}/api/upload`, {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${activeToken}`
+                            },
+                            body: formData
+                        });
+
+                        const data = await response.json();
+                        if (response.ok) {
+                            setVehicleDocs(prev => ({ ...prev, [type]: data.url }));
+                        } else {
+                            Alert.alert(t('common.error'), data.error || 'Upload failed');
+                        }
+                    } catch (err) {
+                        Alert.alert(t('common.error'), 'Upload failed');
+                    } finally {
+                        setLoading(false);
+                    }
                 }
             };
             input.click();
@@ -175,7 +200,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                     rc_url: vehicleDocs.rc,
                     pollution_url: vehicleDocs.pollution,
                     vehicle_image_url: vehicleDocs.image,
-                    ownership_url: vehicleDocs.ownership
+                    ownership_url: vehicleDocs.ownership,
+                    seating_layout: vehicleDocs.layout
                 };
             }
 
@@ -420,6 +446,37 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                             />
                         </View>
 
+                        <Text style={[styles.sectionTitle, { color: colors.subtextColor, marginTop: 12, marginBottom: 8 }]}>
+                            {t('login.seatingArrangement').toUpperCase()}
+                        </Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.layoutSelector}>
+                            {[
+                                { id: 'sedan', icon: '🚗' },
+                                { id: 'suv', icon: '🚙' },
+                                { id: 'bus_2x2', icon: '🚌' },
+                            ].map((layout) => (
+                                <TouchableOpacity
+                                    key={layout.id}
+                                    style={[
+                                        styles.layoutCard,
+                                        {
+                                            backgroundColor: vehicleDocs.layout === layout.id ? colors.primary : colors.cardColor,
+                                            borderColor: colors.borderColor,
+                                        }
+                                    ]}
+                                    onPress={() => setVehicleDocs(prev => ({ ...prev, layout: layout.id as any }))}
+                                >
+                                    <Text style={styles.layoutIcon}>{layout.icon}</Text>
+                                    <Text style={[
+                                        styles.layoutLabel,
+                                        { color: vehicleDocs.layout === layout.id ? '#FFFFFF' : colors.textColor }
+                                    ]}>
+                                        {t(`layout.${layout.id}` as any)}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+
                         <View style={styles.spacer12} />
                         {[
                             { key: 'dl', label: 'login.uploadDL' },
@@ -591,6 +648,32 @@ const styles = StyleSheet.create({
     spacer16: { height: 16 },
     spacer24: { height: 24 },
     spacer40: { height: 40 },
+    sectionTitle: {
+        fontSize: 10,
+        fontWeight: 'bold',
+        letterSpacing: 1,
+    },
+    layoutSelector: {
+        marginBottom: 20,
+    },
+    layoutCard: {
+        width: 120,
+        padding: 12,
+        borderRadius: 12,
+        borderWidth: 1,
+        marginRight: 10,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    layoutIcon: {
+        fontSize: 24,
+        marginBottom: 4,
+    },
+    layoutLabel: {
+        fontSize: 10,
+        fontWeight: 'bold',
+        textAlign: 'center',
+    },
 });
 
 export default LoginScreen;

@@ -23,6 +23,7 @@ import {
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { LanguageProvider, useLanguage } from './src/context/LanguageContext';
+import { API_BASE } from './src/apiConfig';
 import LoginScreen from './src/screens/LoginScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import TripsScreen from './src/screens/TripsScreen';
@@ -204,7 +205,7 @@ function MainTabs() {
     try {
       if (!token) return;
       const endpoint = isDriver ? '/api/rides/requests' : '/api/rides/bookings';
-      const response = await fetch(`http://localhost:8081${endpoint}`, {
+      const response = await fetch(`${API_BASE}${endpoint}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (response.ok) {
@@ -225,7 +226,7 @@ function MainTabs() {
   const handleMarkViewed = async () => {
     try {
       if (!token) return;
-      await fetch(`http://localhost:8081/api/rides/viewed?role=${isDriver ? 'driver' : 'passenger'}`, {
+      await fetch(`${API_BASE}/api/rides/viewed?role=${isDriver ? 'driver' : 'passenger'}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -258,9 +259,9 @@ function MainTabs() {
             backgroundColor: isDark ? '#101828' : '#FFFFFF',
             borderTopColor: colors.borderColor,
             borderTopWidth: 1,
-            paddingBottom: 6,
+            height: Platform.OS === 'web' ? 74 : 62,
+            paddingBottom: Platform.OS === 'web' ? 18 : 6,
             paddingTop: 6,
-            height: 62,
           },
           tabBarActiveTintColor: colors.primary,
           tabBarInactiveTintColor: colors.subtextColor,
@@ -356,12 +357,12 @@ function RootApp() {
 function App() {
   return (
     <SafeAreaProvider
-      style={{ flex: 1 }}
-      initialMetrics={Platform.OS === 'web' ? undefined : initialWindowMetrics || undefined}>
+      style={{ flex: 1, ...(Platform.OS === 'web' ? ({ height: '100dvh' } as any) : {}) }}
+      initialMetrics={Platform.OS === 'web' ? { frame: { x: 0, y: 0, width: 0, height: 0 }, insets: { top: 0, left: 0, right: 0, bottom: 0 } } : initialWindowMetrics || undefined}>
       <AuthProvider>
         <ThemeProvider>
           <LanguageProvider>
-            <View style={{ flex: 1, backgroundColor: '#101B2B' }}>
+            <View style={{ flex: 1, backgroundColor: '#181F2A', ...(Platform.OS === 'web' ? ({ height: '100dvh' } as any) : {}) }}>
               <RootApp />
             </View>
           </LanguageProvider>

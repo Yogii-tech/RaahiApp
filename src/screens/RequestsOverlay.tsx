@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import JeepLayout from '../components/JeepLayout';
 
-const API_BASE = 'http://localhost:8081';
+import { API_BASE } from '../apiConfig';
 
 interface Booking {
     id: string;
@@ -16,7 +16,6 @@ interface Booking {
     status: string;
     createdAt: string;
     roofCarrier: boolean;
-    motionSickness: boolean;
 }
 
 interface RequestsOverlayProps {
@@ -88,9 +87,16 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose }) => {
                         </View>
 
                         <View style={styles.details}>
+                            <View style={styles.dateTimeRow}>
+                                <Text style={styles.dateTimeIcon}>📅</Text>
+                                <Text style={[styles.dateTimeText, { color: colors.textColor }]}>{item.ride?.date}</Text>
+                                <View style={{ width: 12 }} />
+                                <Text style={styles.dateTimeIcon}>🕒</Text>
+                                <Text style={[styles.dateTimeText, { color: colors.textColor }]}>{item.ride?.departureTime}</Text>
+                            </View>
+                            <View style={{ height: 4 }} />
                             <Text style={[styles.detailText, { color: colors.subtextColor }]}>{t('requests.seatsTitle')}{item.seatsRequested}</Text>
                             {item.roofCarrier && <Text style={[styles.detailText, { color: colors.subtextColor }]}>• {t('trips.needsRoofCarrier')}</Text>}
-                            {item.motionSickness && <Text style={[styles.detailText, { color: colors.subtextColor }]}>• {t('trips.motionSickness')}</Text>}
                         </View>
 
                         {/* Layout for Driver to see requested seats */}
@@ -99,6 +105,8 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose }) => {
                                 interactive={false}
                                 takenSeats={item.seatLayout || []}
                                 numSeatsRequested={item.seatsRequested}
+                                totalSeats={item.ride?.seatsTotal}
+                                layoutType={item.ride?.seatingLayout || 'suv'}
                             />
                         </View>
 
@@ -130,6 +138,13 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose }) => {
                                 <Text style={styles.successIconInner}>✓</Text>
                             </View>
                             <Text style={[styles.successText, { color: colors.textColor }]}>{t('requests.seatReserved')}</Text>
+                            <View style={[styles.dateTimeRow, { marginTop: 4 }]}>
+                                <Text style={styles.dateTimeIcon}>📅</Text>
+                                <Text style={[styles.dateTimeText, { color: colors.textColor }]}>{item.ride?.date}</Text>
+                                <View style={{ width: 12 }} />
+                                <Text style={styles.dateTimeIcon}>🕒</Text>
+                                <Text style={[styles.dateTimeText, { color: colors.textColor }]}>{item.ride?.departureTime}</Text>
+                            </View>
                             <Text style={[styles.successSubtitle, { color: colors.subtextColor }]}>
                                 {t('requests.verifiedSubtitle')}
                             </Text>
@@ -243,6 +258,19 @@ const styles = StyleSheet.create({
     detailText: {
         fontSize: 14,
         marginBottom: 4,
+    },
+    dateTimeRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    dateTimeIcon: {
+        fontSize: 14,
+        marginRight: 6,
+    },
+    dateTimeText: {
+        fontSize: 14,
+        fontWeight: 'bold',
     },
     actions: {
         flexDirection: 'row',

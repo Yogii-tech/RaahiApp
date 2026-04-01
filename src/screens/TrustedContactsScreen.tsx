@@ -17,7 +17,7 @@ interface Contact {
     phone: string;
 }
 
-const API_BASE = 'http://localhost:8081';
+import { API_BASE } from '../apiConfig';
 
 const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const { colors, isDark } = useTheme();

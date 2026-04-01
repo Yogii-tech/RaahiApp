@@ -16,6 +16,7 @@ interface User {
         pollution_url: string;
         vehicle_image_url: string;
         ownership_url: string;
+        seating_layout: string;
     };
 }
 

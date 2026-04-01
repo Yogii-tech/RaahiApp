@@ -34,7 +34,7 @@ interface Ride {
     pricePerSeat: number;
 }
 
-const API_BASE = 'http://localhost:8081';
+import { API_BASE } from '../apiConfig';
 
 const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
     const { isDark, colors } = useTheme();
@@ -45,7 +45,17 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
     const [rideType, setRideType] = useState<0 | 1>(0);
     const [pickup, setPickup] = useState('');
     const [dropoff, setDropoff] = useState('');
+    const [date, setDate] = useState(() => {
+        const today = new Date();
+        const dd = String(today.getDate()).padStart(2, '0');
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const yyyy = today.getFullYear();
+        return `${dd}/${mm}/${yyyy}`;
+    });
     const [departureTime, setDepartureTime] = useState('');
+    const [showCalendar, setShowCalendar] = useState(false);
+    const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
+    const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
     const [recentRides, setRecentRides] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(false);
@@ -118,10 +128,12 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
                 body: JSON.stringify({
                     pickup: pickup.trim(),
                     dropoff: dropoff.trim(),
+                    date: date.trim(),
+                    departureTime: departureTime.trim(),
                     vehicleModel: user?.vehicle?.vehicle_name || "Mountain SUV",
                     vehicleNumber: user?.vehicle?.vehicle_number || "UK07-AX-4421",
-                    departureTime: departureTime.trim() || "08:00 AM",
                     seatsTotal: user?.vehicle?.seats || 5,
+                    seatingLayout: user?.vehicle?.seating_layout || "suv",
                     pricePerSeat: 350,
                 }),
             });
@@ -129,6 +141,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
             if (response.ok) {
                 setPickup('');
                 setDropoff('');
+                const today = new Date();
+                const dd = String(today.getDate()).padStart(2, '0');
+                const mm = String(today.getMonth() + 1).padStart(2, '0');
+                const yyyy = today.getFullYear();
+                setDate(`${dd}/${mm}/${yyyy}`);
                 setDepartureTime('');
                 setShowPostSuccess(true);
                 fetchRecentRides(); // Refresh recent list
@@ -143,6 +160,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
     if (view === 'available') {
         return (
             <AvailableRidesScreen
+                searchPickup={pickup.trim()}
+                searchDropoff={dropoff.trim()}
                 onBack={() => setView('home')}
                 onSelectRide={(ride) => {
                     setSelectedRide(ride);
@@ -234,24 +253,37 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
                 {isDriver && (
                     <>
                         <View style={styles.spacer14} />
-                        <Text style={[styles.fieldLabel, { color: colors.primary }]}>
-                            {t('home.departureTimeLabel')}
-                        </Text>
-                        <View style={styles.spacer6} />
-                        <TextInput
-                            style={[
-                                styles.textInput,
-                                {
-                                    color: colors.textColor,
-                                    backgroundColor: colors.inputFillColor,
-                                    borderColor: colors.inputBorderColor,
-                                },
-                            ]}
-                            value={departureTime}
-                            onChangeText={setDepartureTime}
-                            placeholder={t('home.departureTimePlaceholder')}
-                            placeholderTextColor={colors.subtextColor}
-                        />
+                        <View style={styles.row}>
+                            <View style={{ flex: 1 }}>
+                                <Text style={[styles.fieldLabel, { color: colors.primary }]}>
+                                    {t('home.rideDate').toUpperCase()}
+                                </Text>
+                                <View style={styles.spacer6} />
+                                <TouchableOpacity
+                                    onPress={() => setShowCalendar(true)}
+                                    activeOpacity={0.8}
+                                    style={[styles.textInput, styles.datePickerButton, { backgroundColor: colors.inputFillColor, borderColor: date ? colors.primary : colors.inputBorderColor }]}>
+                                    <Text style={[styles.datePickerText, { color: date ? colors.textColor : (isDark ? 'rgba(255,255,255,0.3)' : 'rgba(34,34,96,0.35)') }]}>
+                                        {date || t('home.datePlaceholder')}
+                                    </Text>
+                                    <Text style={{ fontSize: 18 }}>📅</Text>
+                                </TouchableOpacity>
+                            </View>
+                            <View style={{ width: 12 }} />
+                            <View style={{ flex: 1 }}>
+                                <Text style={[styles.fieldLabel, { color: colors.primary }]}>
+                                    {t('home.departureTime').toUpperCase()}
+                                </Text>
+                                <View style={styles.spacer6} />
+                                <TextInput
+                                    style={[styles.textInput, { backgroundColor: colors.inputFillColor, color: colors.textColor, borderColor: colors.inputBorderColor }]}
+                                    placeholder={t('home.departureTimePlaceholder')}
+                                    placeholderTextColor={isDark ? 'rgba(255,255,255,0.24)' : 'rgba(34,34,96,0.3)'}
+                                    value={departureTime}
+                                    onChangeText={setDepartureTime}
+                                />
+                            </View>
+                        </View>
                     </>
                 )}
 
@@ -319,6 +351,13 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
                                 numberOfLines={1}>
                                 {t('home.from')} {ride.pickup ?? 'Unknown'}
                             </Text>
+                            <View style={styles.detailRow}>
+                                <Text style={styles.detailIcon}>📅</Text>
+                                <Text style={[styles.detailText, { color: colors.subtextColor }]}>{ride.date || '—'}</Text>
+                                <View style={{ width: 12 }} />
+                                <Text style={styles.detailIcon}>🕒</Text>
+                                <Text style={[styles.detailText, { color: colors.subtextColor }]}>{ride.departureTime || '—'}</Text>
+                            </View>
                             {isDriver && ride.seatsTotal !== undefined && (
                                 <View style={{ marginTop: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <Text style={{ fontSize: 12, color: colors.subtextColor, fontWeight: '500' }}>
@@ -386,6 +425,92 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
             </View>
 
             <View style={styles.spacer24} />
+
+            {/* Calendar Modal */}
+            <Modal
+                visible={showCalendar}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setShowCalendar(false)}>
+                <View style={styles.modalOverlay}>
+                    <View style={[styles.calendarContent, { backgroundColor: colors.background, borderColor: colors.borderColor }]}>
+                        {/* Calendar Header */}
+                        <View style={styles.calendarHeader}>
+                            <TouchableOpacity onPress={() => {
+                                if (calendarMonth === 0) {
+                                    setCalendarMonth(11);
+                                    setCalendarYear(calendarYear - 1);
+                                } else {
+                                    setCalendarMonth(calendarMonth - 1);
+                                }
+                            }}>
+                                <Text style={[styles.calendarNav, { color: colors.primary }]}>‹</Text>
+                            </TouchableOpacity>
+                            <Text style={[styles.calendarTitle, { color: colors.textColor }]}>
+                                {t(`calendar.${['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'][calendarMonth]}`)} {calendarYear}
+                            </Text>
+                            <TouchableOpacity onPress={() => {
+                                if (calendarMonth === 11) {
+                                    setCalendarMonth(0);
+                                    setCalendarYear(calendarYear + 1);
+                                } else {
+                                    setCalendarMonth(calendarMonth + 1);
+                                }
+                            }}>
+                                <Text style={[styles.calendarNav, { color: colors.primary }]}>›</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Days Header */}
+                        <View style={styles.daysHeader}>
+                            {['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'].map(d => (
+                                <Text key={d} style={[styles.dayLabel, { color: colors.subtextColor }]}>{t(`calendar.${d}`).charAt(0)}</Text>
+                            ))}
+                        </View>
+
+                        {/* Calendar Grid */}
+                        <View style={styles.calendarGrid}>
+                            {Array.from({ length: new Date(calendarYear, calendarMonth, 1).getDay() }).map((_, i) => (
+                                <View key={`empty-${i}`} style={styles.calendarDay} />
+                            ))}
+                            {Array.from({ length: new Date(calendarYear, calendarMonth + 1, 0).getDate() }).map((_, i) => {
+                                const day = i + 1;
+                                const isToday = day === new Date().getDate() && calendarMonth === new Date().getMonth() && calendarYear === new Date().getFullYear();
+                                const isSelected = date === `${day < 10 ? '0' : ''}${day}/${calendarMonth + 1 < 10 ? '0' : ''}${calendarMonth + 1}/${calendarYear}`;
+                                
+                                return (
+                                    <TouchableOpacity
+                                        key={`day-${day}`}
+                                        style={[
+                                            styles.calendarDay,
+                                            isToday && { backgroundColor: 'rgba(31, 175, 99, 0.15)' },
+                                            isSelected && { backgroundColor: colors.primary, borderRadius: 8 }
+                                        ]}
+                                        onPress={() => {
+                                            const formattedDate = `${day < 10 ? '0' : ''}${day}/${calendarMonth + 1 < 10 ? '0' : ''}${calendarMonth + 1}/${calendarYear}`;
+                                            setDate(formattedDate);
+                                            setShowCalendar(false);
+                                        }}>
+                                        <Text style={[
+                                            styles.dayText, 
+                                            { color: isSelected ? '#FFFFFF' : colors.textColor },
+                                            isToday && !isSelected && { color: '#1FAF63', fontWeight: 'bold' }
+                                        ]}>
+                                            {day}
+                                        </Text>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </View>
+
+                        <TouchableOpacity
+                            style={{ marginTop: 20, padding: 10 }}
+                            onPress={() => setShowCalendar(false)}>
+                            <Text style={{ color: colors.subtextColor, fontWeight: 'bold' }}>{t('common.cancel')}</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
 
             {/* Post Ride Success Modal */}
             <Modal
@@ -514,6 +639,32 @@ const styles = StyleSheet.create({
     recentSource: {
         fontSize: 13,
     },
+    detailRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 8,
+    },
+    detailIcon: {
+        fontSize: 14,
+        marginRight: 6,
+    },
+    detailText: {
+        fontSize: 14,
+        fontWeight: '500',
+    },
+    row: {
+        flexDirection: 'row',
+    },
+    datePickerButton: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        borderWidth: 1,
+    },
+    datePickerText: {
+        fontSize: 15,
+        flex: 1,
+    },
     whyRow: {
         flexDirection: 'row',
         gap: 12,
@@ -601,6 +752,55 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         fontSize: 14,
         letterSpacing: 1,
+    },
+    calendarContent: {
+        width: '90%',
+        maxWidth: 340,
+        borderRadius: 24,
+        padding: 24,
+        borderWidth: 1,
+        alignItems: 'center',
+    },
+    calendarHeader: {
+        flexDirection: 'row',
+        width: '100%',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    calendarNav: {
+        fontSize: 32,
+        paddingHorizontal: 10,
+    },
+    calendarTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+    },
+    daysHeader: {
+        flexDirection: 'row',
+        width: '100%',
+        marginBottom: 10,
+    },
+    dayLabel: {
+        flex: 1,
+        textAlign: 'center',
+        fontSize: 12,
+        fontWeight: 'bold',
+    },
+    calendarGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        width: '100%',
+    },
+    calendarDay: {
+        width: '14.28%',
+        aspectRatio: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    dayText: {
+        fontSize: 15,
+        fontWeight: '500',
     },
 });
 

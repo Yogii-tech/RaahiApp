@@ -14,6 +14,7 @@ interface SosScreenProps {
     onClose: () => void;
 }
 
+import { API_BASE } from '../apiConfig';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -79,7 +80,7 @@ const SosScreen: React.FC<SosScreenProps> = ({ visible, onClose }) => {
 
     const fetchTrustedContacts = async () => {
         try {
-            const response = await fetch('http://localhost:8081/api/user/trusted-contacts', {
+            const response = await fetch(`${API_BASE}/api/user/trusted-contacts`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             if (response.ok) {

@@ -11,7 +11,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 
-const API_BASE = 'http://localhost:8081';
+import { API_BASE } from '../apiConfig';
 
 interface Ride {
     id: string;
@@ -20,6 +20,7 @@ interface Ride {
     pickup: string;
     dropoff: string;
     departureTime: string;
+    date?: string;
     seatsTotal: number;
     seatsBooked: number;
     takenSeats?: number[];
@@ -28,11 +29,13 @@ interface Ride {
 }
 
 interface AvailableRidesScreenProps {
+    searchPickup?: string;
+    searchDropoff?: string;
     onBack: () => void;
     onSelectRide: (ride: Ride) => void;
 }
 
-const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ onBack, onSelectRide }) => {
+const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ searchPickup, searchDropoff, onBack, onSelectRide }) => {
     const { colors, isDark } = useTheme();
     const { token } = useAuth();
     const { t } = useLanguage();
@@ -45,11 +48,20 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ onBack, onS
 
     const fetchRides = async () => {
         try {
-            const response = await fetch(`${API_BASE}/api/rides/available`, {
+            let url = `${API_BASE}/api/rides/available`;
+            const queryParams = [];
+            if (searchPickup) queryParams.push(`pickup=${encodeURIComponent(searchPickup)}`);
+            if (searchDropoff) queryParams.push(`dropoff=${encodeURIComponent(searchDropoff)}`);
+            if (queryParams.length > 0) {
+                url += `?${queryParams.join('&')}`;
+            }
+
+            const response = await fetch(url, {
                 headers: { Authorization: `Bearer ${token}` },
             });
             if (response.ok) {
                 const data = await response.json();
+                console.log('Fetched rides:', data); // Debug log
                 setRides(data);
             }
         } catch (err) {
@@ -77,10 +89,22 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ onBack, onS
                     <Text style={[styles.priceText, { color: '#00C853' }]}>₹ {item.pricePerSeat}</Text>
                 </View>
             </View>
-            <View style={{ marginBottom: 15, flexDirection: 'row', alignItems: 'center' }}>
-                <Text style={{ color: colors.textColor, fontWeight: 'bold', fontSize: 13 }}>{item.pickup.toUpperCase()}</Text>
-                <Text style={{ color: colors.subtextColor, marginHorizontal: 8 }}>•</Text>
-                <Text style={{ color: colors.textColor, fontWeight: 'bold', fontSize: 13 }}>{item.dropoff.toUpperCase()}</Text>
+            <View style={styles.routeRow}>
+                <Text style={[styles.routePoint, { color: colors.textColor }]}>{item.pickup.toUpperCase()}</Text>
+                <Text style={[styles.routeArrow, { color: colors.subtextColor }]}>→</Text>
+                <Text style={[styles.routePoint, { color: colors.textColor }]}>{item.dropoff.toUpperCase()}</Text>
+            </View>
+
+            {/* Date & Time Row */}
+            <View style={styles.dateTimeRow}>
+                <View style={styles.dateTimeChip}>
+                    <Text style={styles.dateTimeChipIcon}>📅</Text>
+                    <Text style={[styles.dateTimeChipText, { color: colors.textColor }]}>{item.date || t('available.noDate')}</Text>
+                </View>
+                <View style={[styles.dateTimeChip, { marginLeft: 10 }]}>
+                    <Text style={styles.dateTimeChipIcon}>🕒</Text>
+                    <Text style={[styles.dateTimeChipText, { color: colors.textColor }]}>{item.departureTime || '—'}</Text>
+                </View>
             </View>
 
             <View style={styles.rideFooter}>
@@ -242,6 +266,40 @@ const styles = StyleSheet.create({
     timeContainer: { flex: 1 },
     vehicleContainer: { flex: 2 },
     priceContainer: { flex: 1, alignItems: 'flex-end' },
+    routeRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 14,
+    },
+    routePoint: {
+        fontWeight: 'bold',
+        fontSize: 13,
+        flex: 1,
+    },
+    routeArrow: {
+        marginHorizontal: 8,
+        fontSize: 16,
+    },
+    dateTimeRow: {
+        flexDirection: 'row',
+        marginBottom: 16,
+    },
+    dateTimeChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(91, 79, 255, 0.1)',
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 20,
+    },
+    dateTimeChipIcon: {
+        fontSize: 12,
+        marginRight: 5,
+    },
+    dateTimeChipText: {
+        fontSize: 12,
+        fontWeight: 'bold',
+    },
 });
 
 export default AvailableRidesScreen;

@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import JeepLayout from '../components/JeepLayout';
 
-const API_BASE = 'http://localhost:8081';
+import { API_BASE } from '../apiConfig';
 
 interface Booking {
     id: string;
@@ -15,7 +15,8 @@ interface Booking {
     status: string;
     createdAt: string;
     roofCarrier: boolean;
-    motionSickness: boolean;
+    date?: string;
+    departureTime?: string;
 }
 
 const TripsScreen: React.FC = () => {
@@ -72,11 +73,22 @@ const TripsScreen: React.FC = () => {
                     <Text style={[styles.detailText, { color: colors.subtextColor }]}>
                         {isDriver ? `${t('book.pickup')}: ${item.pickup}` : `${t('book.pickup')}: ${item.ride?.pickup} ${t('home.from').toLowerCase()} ${item.ride?.dropoff}`}
                     </Text>
+                    <View style={styles.dateTimeRow}>
+                        <Text style={styles.dateTimeIcon}>📅</Text>
+                        <Text style={[styles.dateTimeText, { color: colors.textColor }]}>
+                            {isDriver ? item.date : item.ride?.date}
+                        </Text>
+                        <View style={{ width: 12 }} />
+                        <Text style={styles.dateTimeIcon}>🕒</Text>
+                        <Text style={[styles.dateTimeText, { color: colors.textColor }]}>
+                            {isDriver ? item.departureTime : item.ride?.departureTime}
+                        </Text>
+                    </View>
+                    <View style={{ height: 8 }} />
                     <Text style={[styles.detailText, { color: colors.subtextColor }]}>
                         {isDriver ? `${t('trips.seatsBooked')}: ${item.seatsBooked || 0} / ${item.seatsTotal}` : `${t('trips.seatsRequested')}: ${item.seatsRequested}`}
                     </Text>
                     {item.roofCarrier && <Text style={[styles.detailText, { color: colors.subtextColor }]}>• {t('trips.needsRoofCarrier')}</Text>}
-                    {item.motionSickness && <Text style={[styles.detailText, { color: colors.subtextColor }]}>• {t('trips.motionSickness')}</Text>}
                 </View>
 
                 {isDriver && (
@@ -96,6 +108,8 @@ const TripsScreen: React.FC = () => {
                             interactive={false}
                             selectedSeats={item.seatLayout || []}
                             takenSeats={(item.ride?.takenSeats || []).filter((s: number) => !(item.seatLayout || []).includes(s))}
+                            totalSeats={item.ride?.seatsTotal}
+                            layoutType={item.ride?.seatingLayout || 'suv'}
                         />
 
                         {item.status === 'accepted' && (
@@ -118,6 +132,8 @@ const TripsScreen: React.FC = () => {
                         <JeepLayout
                             interactive={false}
                             takenSeats={item.takenSeats || []}
+                            totalSeats={item.seatsTotal}
+                            layoutType={item.seatingLayout || 'suv'}
                         />
                     </View>
                 )}
@@ -193,7 +209,21 @@ const styles = StyleSheet.create({
     },
     detailText: {
         fontSize: 14,
+        marginBottom: 2,
+    },
+    dateTimeRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 6,
         marginBottom: 4,
+    },
+    dateTimeIcon: {
+        fontSize: 14,
+        marginRight: 6,
+    },
+    dateTimeText: {
+        fontSize: 14,
+        fontWeight: 'bold',
     },
     actions: {
         flexDirection: 'row',
