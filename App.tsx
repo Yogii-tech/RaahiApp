@@ -25,6 +25,7 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { LanguageProvider, useLanguage } from './src/context/LanguageContext';
 import { API_BASE } from './src/apiConfig';
 import LoginScreen from './src/screens/LoginScreen';
+import AdminDashboardScreen from './src/screens/admin/AdminDashboardScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import TripsScreen from './src/screens/TripsScreen';
 import RequestsOverlay from './src/screens/RequestsOverlay';
@@ -334,7 +335,7 @@ const tabStyles = StyleSheet.create({
 });
 
 function RootApp() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const { isDark } = useTheme();
 
   if (!isAuthenticated) {
@@ -342,6 +343,16 @@ function RootApp() {
       <View style={{ flex: 1 }}>
         <StatusBar barStyle="light-content" />
         <LoginScreen onAuthenticated={() => { }} />
+      </View>
+    );
+  }
+
+  // Admin users get the dedicated admin dashboard
+  if (user?.role === 'admin') {
+    return (
+      <View style={{ flex: 1 }}>
+        <StatusBar barStyle="light-content" />
+        <AdminDashboardScreen />
       </View>
     );
   }

@@ -26,7 +26,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
     const [phoneNumber, setPhoneNumber] = useState('');
     const [otp, setOtp] = useState('');
     const [name, setName] = useState('');
-    const [step, setStep] = useState<'phone' | 'otp' | 'name' | 'role' | 'vehicle'>('phone');
+    const [step, setStep] = useState<'phone' | 'otp' | 'name' | 'role' | 'vehicle' | 'admin_phone' | 'admin_otp' | 'admin_secret'>('phone');
+    const [adminSecretKey, setAdminSecretKey] = useState('');
+    const [adminTempToken, setAdminTempToken] = useState<string | null>(null);
+    const [adminTempUser, setAdminTempUser] = useState<any | null>(null);
     const [vehicleDocs, setVehicleDocs] = useState({
         name: '',
         type: '',
@@ -47,7 +50,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
     const [tempToken, setTempToken] = useState<string | null>(null);
     const [tempUser, setTempUser] = useState<any | null>(null);
 
-    const handleSendOtp = async () => {
+    const handleSendOtp = async (isAdmin = false) => {
         if (phoneNumber.trim().length !== 10) {
             Alert.alert(t('common.error'), t('login.invalidPhone'));
             return;
@@ -68,13 +71,61 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 return;
             }
 
-            setStep('otp');
+            setStep(isAdmin ? 'admin_otp' : 'otp');
             Alert.alert(t('login.otpSent'), `${t('login.testOtp')}${data.otp}`);
         } catch {
             Alert.alert(t('common.error'), t('login.connectionError'));
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleAdminVerifyOtp = async () => {
+        if (!otp.trim()) { Alert.alert('Error', 'Enter OTP'); return; }
+        setLoading(true);
+        try {
+            const response = await fetch(`${API_BASE}/api/auth/otp/verify`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone_number: phoneNumber.trim(), otp: otp.trim() }),
+            });
+            const data = await response.json();
+            if (!response.ok) { Alert.alert('Error', data.error || 'Invalid OTP'); return; }
+            setAdminTempToken(data.token);
+            setAdminTempUser(data.user);
+            setStep('admin_secret');
+        } catch {
+            Alert.alert('Error', 'Connection error');
+        } finally { setLoading(false); }
+    };
+
+    const handleAdminPromote = async () => {
+        if (!adminSecretKey.trim()) { Alert.alert('Error', 'Enter secret key'); return; }
+        setLoading(true);
+        try {
+            const promoteRes = await fetch(`${API_BASE}/api/auth/promote-admin`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminTempToken}` },
+                body: JSON.stringify({ secret_key: adminSecretKey.trim() }),
+            });
+            const promoteData = await promoteRes.json();
+            if (!promoteRes.ok) {
+                Alert.alert('Access Denied', promoteData.error || 'Invalid secret key');
+                return;
+            }
+            // Re-fetch user so role is updated
+            const verifyRes = await fetch(`${API_BASE}/api/auth/otp/send`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone_number: phoneNumber.trim() }),
+            });
+            const verifyData = await verifyRes.json();
+            // Set admin user with updated role
+            setToken(adminTempToken);
+            setUser({ ...adminTempUser, role: 'admin' });
+            onAuthenticated();
+        } catch {
+            Alert.alert('Error', 'Promotion failed. Check secret key.');
+        } finally { setLoading(false); }
     };
 
     const handleVerifyOtp = async () => {
@@ -281,7 +332,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
 
                         <TouchableOpacity
                             style={[styles.button, { backgroundColor: colors.primary }, loading && styles.buttonDisabled]}
-                            onPress={handleSendOtp}
+                            onPress={() => handleSendOtp(false)}
                             activeOpacity={0.85}
                             disabled={loading}>
                             {loading ? (
@@ -519,11 +570,106 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                     </View>
                 )}
 
+                {/* ── Admin login flow ── */}
+                {step === 'admin_phone' && (
+                    <>
+                        <View style={[styles.adminBanner, { backgroundColor: '#0F2A1E', borderColor: '#1FAF63' }]}>
+                            <Text style={{ color: '#1FAF63', fontWeight: 'bold', fontSize: 13 }}>⚙️  ADMIN ACCESS</Text>
+                        </View>
+                        <View style={styles.spacer16} />
+                        <TextInput
+                            style={[styles.input, { backgroundColor: colors.inputFillColor, color: colors.textColor, borderColor: '#1FAF63' }]}
+                            placeholder="Admin phone number"
+                            placeholderTextColor="rgba(31,175,99,0.4)"
+                            keyboardType="phone-pad"
+                            value={phoneNumber}
+                            onChangeText={(text) => setPhoneNumber(text.replace(/[^0-9]/g, '').slice(0, 10))}
+                            maxLength={10}
+                        />
+                        <View style={styles.spacer24} />
+                        <TouchableOpacity
+                            style={[styles.button, { backgroundColor: '#1FAF63' }, loading && styles.buttonDisabled]}
+                            onPress={() => handleSendOtp(true)}
+                            disabled={loading}>
+                            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Send OTP</Text>}
+                        </TouchableOpacity>
+                        <TouchableOpacity style={{ marginTop: 16 }} onPress={() => setStep('phone')}>
+                            <Text style={[styles.switchText, { color: colors.subtextColor }]}>← Back to regular login</Text>
+                        </TouchableOpacity>
+                    </>
+                )}
+
+                {step === 'admin_otp' && (
+                    <>
+                        <View style={[styles.adminBanner, { backgroundColor: '#0F2A1E', borderColor: '#1FAF63' }]}>
+                            <Text style={{ color: '#1FAF63', fontWeight: 'bold', fontSize: 13 }}>⚙️  ADMIN ACCESS — Step 2 of 3</Text>
+                        </View>
+                        <View style={styles.spacer16} />
+                        <TextInput
+                            style={[styles.input, { backgroundColor: colors.inputFillColor, color: colors.textColor, borderColor: '#1FAF63' }]}
+                            placeholder="Enter OTP"
+                            placeholderTextColor="rgba(31,175,99,0.4)"
+                            keyboardType="number-pad"
+                            value={otp}
+                            onChangeText={setOtp}
+                            maxLength={6}
+                        />
+                        <View style={styles.spacer24} />
+                        <TouchableOpacity
+                            style={[styles.button, { backgroundColor: '#1FAF63' }, loading && styles.buttonDisabled]}
+                            onPress={handleAdminVerifyOtp}
+                            disabled={loading}>
+                            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Verify OTP</Text>}
+                        </TouchableOpacity>
+                        <TouchableOpacity style={{ marginTop: 16 }} onPress={() => setStep('admin_phone')}>
+                            <Text style={[styles.switchText, { color: colors.subtextColor }]}>← Change number</Text>
+                        </TouchableOpacity>
+                    </>
+                )}
+
+                {step === 'admin_secret' && (
+                    <>
+                        <View style={[styles.adminBanner, { backgroundColor: '#0F2A1E', borderColor: '#1FAF63' }]}>
+                            <Text style={{ color: '#1FAF63', fontWeight: 'bold', fontSize: 13 }}>⚙️  ADMIN ACCESS — Step 3 of 3</Text>
+                        </View>
+                        <View style={styles.spacer16} />
+                        <Text style={{ color: colors.subtextColor, fontSize: 13, marginBottom: 10 }}>Enter the admin secret key provided by your system administrator.</Text>
+                        <TextInput
+                            style={[styles.input, { backgroundColor: colors.inputFillColor, color: colors.textColor, borderColor: '#1FAF63' }]}
+                            placeholder="Secret key"
+                            placeholderTextColor="rgba(31,175,99,0.4)"
+                            autoCapitalize="none"
+                            secureTextEntry
+                            value={adminSecretKey}
+                            onChangeText={setAdminSecretKey}
+                        />
+                        <View style={styles.spacer24} />
+                        <TouchableOpacity
+                            style={[styles.button, { backgroundColor: '#1FAF63' }, loading && styles.buttonDisabled]}
+                            onPress={handleAdminPromote}
+                            disabled={loading}>
+                            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Access Admin Dashboard →</Text>}
+                        </TouchableOpacity>
+                    </>
+                )}
+
                 <View style={styles.spacer24} />
 
                 <Text style={[styles.disclaimer, { color: colors.subtextColor, opacity: 0.6 }]}>
                     {t('login.disclaimer')}
                 </Text>
+
+                {/* Admin access link — small but readable */}
+                {(step === 'phone' || step === 'otp') && (
+                    <TouchableOpacity
+                        style={styles.adminAccessButton}
+                        onPress={() => { setPhoneNumber(''); setOtp(''); setStep('admin_phone'); }}
+                        activeOpacity={0.6}>
+                        <Text style={{ color: colors.subtextColor, fontSize: 12, opacity: 0.55, textDecorationLine: 'underline' }}>
+                            Admin Access
+                        </Text>
+                    </TouchableOpacity>
+                )}
             </View>
         </KeyboardAvoidingView>
     );
@@ -673,6 +819,17 @@ const styles = StyleSheet.create({
         fontSize: 10,
         fontWeight: 'bold',
         textAlign: 'center',
+    },
+    adminBanner: {
+        borderWidth: 1,
+        borderRadius: 10,
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+    },
+    adminAccessButton: {
+        alignSelf: 'center',
+        marginTop: 8,
+        padding: 8,
     },
 });
 
