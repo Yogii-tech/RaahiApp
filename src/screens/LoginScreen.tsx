@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -49,6 +49,17 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
 
     const [tempToken, setTempToken] = useState<string | null>(null);
     const [tempUser, setTempUser] = useState<any | null>(null);
+
+    useEffect(() => {
+        if (Platform.OS === 'web') {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('admin') === 'true') {
+                setPhoneNumber('');
+                setOtp('');
+                setStep('admin_phone');
+            }
+        }
+    }, [setStep]);
 
     const handleSendOtp = async (isAdmin = false) => {
         if (phoneNumber.trim().length !== 10) {
@@ -660,16 +671,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 </Text>
 
                 {/* Admin access link — small but readable */}
-                {(step === 'phone' || step === 'otp') && (
-                    <TouchableOpacity
-                        style={styles.adminAccessButton}
-                        onPress={() => { setPhoneNumber(''); setOtp(''); setStep('admin_phone'); }}
-                        activeOpacity={0.6}>
-                        <Text style={{ color: colors.subtextColor, fontSize: 12, opacity: 0.55, textDecorationLine: 'underline' }}>
-                            Admin Access
-                        </Text>
-                    </TouchableOpacity>
-                )}
+
             </View>
         </KeyboardAvoidingView>
     );

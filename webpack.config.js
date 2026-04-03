@@ -82,6 +82,8 @@ module.exports = {
     devServer: {
         static: path.resolve(appDirectory, 'public'),
         port: 3000,
+        host: '0.0.0.0',
+        allowedHosts: 'all',
         hot: true,
         historyApiFallback: true,
     },
