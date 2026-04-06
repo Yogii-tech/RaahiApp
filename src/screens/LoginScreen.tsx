@@ -43,7 +43,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
         layout: 'suv'
     });
     const [loading, setLoading] = useState(false);
-    const { token, user, setToken, setUser } = useAuth();
+    const { token, user, setAuth } = useAuth();
     const { colors, isDark } = useTheme();
     const { t } = useLanguage();
 
@@ -131,8 +131,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
             });
             const verifyData = await verifyRes.json();
             // Set admin user with updated role
-            setToken(adminTempToken);
-            setUser({ ...adminTempUser, role: 'admin' });
+            await setAuth(adminTempToken, null, { ...adminTempUser, role: 'admin' });
             onAuthenticated();
         } catch {
             Alert.alert('Error', 'Promotion failed. Check secret key.');
@@ -165,8 +164,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 setTempUser(data.user);
                 setStep('name');
             } else {
-                setToken(data.token);
-                setUser(data.user);
+                await setAuth(data.token, data.refresh_token, data.user);
                 onAuthenticated();
             }
         } catch {
@@ -283,8 +281,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                     role: role,
                     vehicle: body.vehicle
                 };
-                setToken(activeToken);
-                setUser(updatedUser);
+                await setAuth(activeToken, null, updatedUser); // For initial reg we might not have refresh here
                 onAuthenticated();
             } else {
                 Alert.alert(t('common.error'), t('login.failProfile'));

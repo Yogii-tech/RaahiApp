@@ -15,13 +15,14 @@ import { useAuth } from '../context/AuthContext';
 import { useLanguage, LanguageType } from '../context/LanguageContext';
 
 import { API_BASE } from '../apiConfig';
+import { apiRequest } from '../utils/api';
 import TrustedContactsScreen from './TrustedContactsScreen';
 import VehicleDetailsScreen from './VehicleDetailsScreen';
 
 
 const AccountScreen: React.FC = () => {
     const { isDark, colors } = useTheme();
-    const { user, setUser, token, logout } = useAuth();
+    const { user, token, logout, setAuth } = useAuth();
     const { t, language, setLanguage } = useLanguage();
     const [view, setView] = useState<'main' | 'trusted' | 'vehicle'>('main');
     const [logoutVisible, setLogoutVisible] = useState(false);
@@ -47,22 +48,18 @@ const AccountScreen: React.FC = () => {
         // Sync with backend if logged in
         if (token && user) {
             try {
-                const response = await fetch(`${API_BASE}/api/user/profile`, {
+                const response = await apiRequest('/api/user/profile', {
                     method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    },
                     body: JSON.stringify({
                         name: user.name,
                         role: user.role,
                         language: lang
                     }),
-                });
+                }, logout);
 
                 if (response.ok) {
                     // Update local user state to keep in sync
-                    setUser({ ...user, language: lang });
+                    await setAuth(token, null, { ...user, language: lang });
                 }
             } catch (err) {
                 console.error('Failed to sync language to backend:', err);

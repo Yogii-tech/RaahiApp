@@ -24,6 +24,7 @@ import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { LanguageProvider, useLanguage } from './src/context/LanguageContext';
 import { API_BASE } from './src/apiConfig';
+import { apiRequest } from './src/utils/api';
 import LoginScreen from './src/screens/LoginScreen';
 import AdminDashboardScreen from './src/screens/admin/AdminDashboardScreen';
 import HomeScreen from './src/screens/HomeScreen';
@@ -31,6 +32,7 @@ import TripsScreen from './src/screens/TripsScreen';
 import RequestsOverlay from './src/screens/RequestsOverlay';
 import AccountScreen from './src/screens/AccountScreen';
 import SosScreen from './src/screens/SosScreen';
+import ChatScreen from './src/screens/ChatScreen';
 
 const Tab = createBottomTabNavigator();
 
@@ -187,11 +189,12 @@ const tabIcons: Record<string, { default: string; focused: string }> = {
 // ─── Main Tab Navigator ──────────────────────────────────────────────
 function MainTabs() {
   const { colors, isDark } = useTheme();
-  const { user, token } = useAuth();
+  const { user, token, logout } = useAuth();
   const { t } = useLanguage();
   const [sosVisible, setSosVisible] = useState(false);
   const [notificationsVisible, setNotificationsVisible] = useState(false);
   const [notificationCount, setNotificationCount] = useState(0);
+  const [activeChat, setActiveChat] = useState<any>(null);
   const insets = useSafeAreaInsets();
 
   const isDriver = user?.role === 'driver';
@@ -206,9 +209,7 @@ function MainTabs() {
     try {
       if (!token) return;
       const endpoint = isDriver ? '/api/rides/requests' : '/api/rides/bookings';
-      const response = await fetch(`${API_BASE}${endpoint}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await apiRequest(endpoint, {}, logout);
       if (response.ok) {
         const data = await response.json();
         // Filter: Driver sees UNVIEWED 'pending' reqs, Passenger sees UNVIEWED 'accepted' or 'rejected'
@@ -227,10 +228,9 @@ function MainTabs() {
   const handleMarkViewed = async () => {
     try {
       if (!token) return;
-      await fetch(`${API_BASE}/api/rides/viewed?role=${isDriver ? 'driver' : 'passenger'}`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await apiRequest(`/api/rides/viewed?role=${isDriver ? 'driver' : 'passenger'}`, {
+        method: 'POST'
+      }, logout);
       setNotificationCount(0);
     } catch (err) {
       console.error('Mark viewed fail:', err);
@@ -239,56 +239,50 @@ function MainTabs() {
 
   return (
     <View style={{ flex: 1 }}>
+      <AppHeader
+        notificationCount={notificationCount}
+        onToggleNotifications={() => {
+          const newState = !notificationsVisible;
+          setNotificationsVisible(newState);
+          if (newState) handleMarkViewed();
+        }}
+      />
+
       <SosScreen visible={sosVisible} onClose={() => setSosVisible(false)} />
 
       <Tab.Navigator
         screenOptions={({ route }) => ({
-          header: () => {
-            if (route.name === 'SOS') return null;
+          headerShown: false,
+          tabBarIcon: ({ focused }) => {
+            const icon = tabIcons[route.name];
             return (
-              <AppHeader
-                notificationCount={notificationCount}
-                onToggleNotifications={() => {
-                  const newState = !notificationsVisible;
-                  setNotificationsVisible(newState);
-                  if (newState) handleMarkViewed();
-                }}
-              />
+              <View style={route.name === 'SOS' ? tabStyles.sosIconContainer : null}>
+                <Text style={[
+                  route.name === 'SOS' ? tabStyles.sosIcon : tabStyles.tabIcon,
+                  focused && route.name !== 'SOS' ? tabStyles.tabIconFocused : null
+                ]}>
+                  {focused ? icon.focused : icon.default}
+                </Text>
+              </View>
             );
-          },
-          tabBarStyle: {
-            backgroundColor: isDark ? '#101828' : '#FFFFFF',
-            borderTopColor: colors.borderColor,
-            borderTopWidth: 1,
-            height: Platform.OS === 'web' ? 74 : 62,
-            paddingBottom: Platform.OS === 'web' ? 18 : 6,
-            paddingTop: 6,
           },
           tabBarActiveTintColor: colors.primary,
           tabBarInactiveTintColor: colors.subtextColor,
-          tabBarIcon: ({ focused }) => {
-            const icons = tabIcons[route.name];
-            if (route.name === 'SOS') {
-              return (
-                <View style={tabStyles.sosIconContainer}>
-                  <Text style={tabStyles.sosIcon}>⚠️</Text>
-                </View>
-              );
-            }
-            return (
-              <Text style={[tabStyles.tabIcon, focused && tabStyles.tabIconFocused]}>
-                {focused ? icons.focused : icons.default}
-              </Text>
-            );
+          tabBarStyle: {
+            height: 60,
+            paddingBottom: 8,
+            backgroundColor: colors.background,
+            borderTopColor: colors.borderColor,
+            display: sosVisible || notificationsVisible || activeChat ? 'none' : 'flex'
           },
-        })}>
-        <Tab.Screen name="Home" options={{ title: t('tab.home') }}>
-          {() => <HomeScreen onSosPressed={() => setSosVisible(true)} />}
-        </Tab.Screen>
+        })}
+      >
+        <Tab.Screen name="Home" component={HomeScreen} options={{ title: t('tab.home') }} />
         <Tab.Screen name="Trips" component={TripsScreen} options={{ title: t('tab.trips') }} />
         <Tab.Screen
           name="SOS"
           component={SosScreenTab}
+          options={{ title: t('tab.sos') }}
           listeners={{
             tabPress: (e) => {
               e.preventDefault();
@@ -299,9 +293,32 @@ function MainTabs() {
         <Tab.Screen name="Account" component={AccountScreen} options={{ title: t('tab.account') }} />
       </Tab.Navigator>
 
+      {sosVisible && (
+        <SosScreen visible={sosVisible} onClose={() => setSosVisible(false)} />
+      )}
+
       {notificationsVisible && (
-        <View style={[StyleSheet.absoluteFill, { top: insets.top + 64, bottom: 62, backgroundColor: colors.background, zIndex: 100, elevation: 10 }]}>
-          <RequestsOverlay onClose={() => setNotificationsVisible(false)} />
+        <View style={[StyleSheet.absoluteFill, { top: insets.top + 64, bottom: 0, backgroundColor: colors.background, zIndex: 100, elevation: 10 }]}>
+          <RequestsOverlay
+            onClose={() => setNotificationsVisible(false)}
+            onOpenChat={(booking) => {
+              setActiveChat(booking);
+              setNotificationsVisible(false);
+            }}
+          />
+        </View>
+      )}
+
+      {activeChat && (
+        <View style={StyleSheet.absoluteFill}>
+          <ChatScreen
+            bookingId={activeChat.id}
+            recipientName={isDriver ? activeChat.passengerName || "Passenger" : activeChat.ride?.driverName || "Driver"}
+            pickup={activeChat.ride?.pickup}
+            dropoff={activeChat.ride?.dropoff}
+            departureTime={activeChat.ride?.departureTime}
+            onBack={() => setActiveChat(null)}
+          />
         </View>
       )}
     </View>
@@ -335,8 +352,16 @@ const tabStyles = StyleSheet.create({
 });
 
 function RootApp() {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, isInitialLoading } = useAuth();
   const { isDark } = useTheme();
+
+  if (isInitialLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ color: '#fff' }}>Loading Raahi...</Text>
+      </View>
+    );
+  }
 
   if (!isAuthenticated) {
     return (

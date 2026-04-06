@@ -12,6 +12,7 @@ import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 
 import { API_BASE } from '../apiConfig';
+import { apiRequest } from '../utils/api';
 
 interface Ride {
     id: string;
@@ -37,7 +38,7 @@ interface AvailableRidesScreenProps {
 
 const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ searchPickup, searchDropoff, onBack, onSelectRide }) => {
     const { colors, isDark } = useTheme();
-    const { token } = useAuth();
+    const { token, logout } = useAuth();
     const { t } = useLanguage();
     const [rides, setRides] = useState<Ride[]>([]);
     const [loading, setLoading] = useState(true);
@@ -56,9 +57,7 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ searchPicku
                 url += `?${queryParams.join('&')}`;
             }
 
-            const response = await fetch(url, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
+            const response = await apiRequest(url.replace(API_BASE, ''), {}, logout);
             if (response.ok) {
                 const data = await response.json();
                 console.log('Fetched rides:', data); // Debug log

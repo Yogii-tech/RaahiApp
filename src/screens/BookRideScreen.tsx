@@ -15,6 +15,7 @@ import { useLanguage } from '../context/LanguageContext';
 import JeepLayout from '../components/JeepLayout';
 
 import { API_BASE } from '../apiConfig';
+import { apiRequest } from '../utils/api';
 
 interface BookRideScreenProps {
     ride: {
@@ -34,7 +35,7 @@ interface BookRideScreenProps {
 
 const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, onBack, onBookingComplete }) => {
     const { colors, isDark } = useTheme();
-    const { token } = useAuth();
+    const { token, logout } = useAuth();
     const { t } = useLanguage();
     const [ride, setRide] = useState(initialRide);
     const [selectedSeats, setSelectedSeats] = useState<number[]>([]);
@@ -51,9 +52,7 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, onBa
 
     const fetchRideDetails = async () => {
         try {
-            const response = await fetch(`${API_BASE}/api/rides/${initialRide.id}`, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
+            const response = await apiRequest(`/api/rides/${initialRide.id}`, {}, logout);
             if (response.ok) {
                 const data = await response.json();
                 setRide(data);
@@ -82,12 +81,8 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, onBa
 
         setLoading(true);
         try {
-            const response = await fetch(`${API_BASE}/api/rides/${ride.id}/book`, {
+            const response = await apiRequest(`/api/rides/${ride.id}/book`, {
                 method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
                 body: JSON.stringify({
                     seatsRequested: selectedSeats.length,
                     seatLayout: selectedSeats,
@@ -100,7 +95,11 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, onBa
                 setBookingId(`RA-${randomId}`);
                 setShowSuccessModal(true);
             } else {
-                Alert.alert(t('common.error'), t('book.failBook'));
+                const errorData = await response.json().catch(() => ({}));
+                Alert.alert(
+                    t('common.error'),
+                    `${t('book.failBook')}\n\nStatus: ${response.status}\n${errorData.error || ''}`
+                );
             }
         } catch (err) {
             console.error('Booking error:', err);

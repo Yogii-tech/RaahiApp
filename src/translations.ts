@@ -288,6 +288,17 @@ export const translations = {
     'jeep.free': 'FREE',
     'jeep.pick': 'PICK',
     'jeep.taken': 'TAKEN',
+
+    // Chat
+    'chat.withPassenger': 'Chat with Passenger',
+    'chat.withDriver': 'Chat with Driver',
+    'chat.typePlaceholder': 'Type a message...',
+    'chat.onMyWay': 'I am on my way 🚗',
+    'chat.fiveMinAway': 'I will be there in 5 minutes.',
+    'chat.reachedPickup': 'I have reached the pickup location.',
+    'chat.slightDelay': 'I am sorry, there is a slight delay.',
+    'chat.passenger': 'Passenger',
+    'chat.driver': 'Driver',
   },
   hi: {
     // App Header & Tabs
@@ -415,7 +426,6 @@ export const translations = {
     'home.splitCosts': 'लागत विभाजित करें।',
     'home.ridePostedTitle': 'सवारी पोस्ट कर दी गई!',
     'home.ridePostedSub': 'आपकी सवारी अब लाइव है! यात्री अब आपकी कैब देख और बुक कर सकते हैं।',
-
     // Available Rides
     'available.routeDetails': 'मार्ग विवरण',
     'available.title': 'उपलब्ध कैब',
@@ -577,6 +587,17 @@ export const translations = {
     'jeep.free': 'खाली',
     'jeep.pick': 'चुनें',
     'jeep.taken': 'बुक',
+
+    // Chat
+    'chat.withPassenger': 'यात्री के साथ चैट करें',
+    'chat.withDriver': 'ड्राइवर के साथ चैट करें',
+    'chat.typePlaceholder': 'अपना संदेश लिखें...',
+    'chat.onMyWay': 'मैं रास्ते में हूँ 🚗',
+    'chat.fiveMinAway': 'मैं 5 मिनट में पहुँच जाऊँगा।',
+    'chat.reachedPickup': 'मैं पिकअप स्थान पर पहुँच गया हूँ।',
+    'chat.slightDelay': 'क्षमा करें, थोड़ा विलंब है।',
+    'chat.passenger': 'यात्री',
+    'chat.driver': 'ड्राइवर',
   }
 };
 

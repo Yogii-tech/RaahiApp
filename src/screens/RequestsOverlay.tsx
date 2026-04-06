@@ -6,6 +6,7 @@ import { useLanguage } from '../context/LanguageContext';
 import JeepLayout from '../components/JeepLayout';
 
 import { API_BASE } from '../apiConfig';
+import { apiRequest } from '../utils/api';
 
 interface Booking {
     id: string;
@@ -20,11 +21,12 @@ interface Booking {
 
 interface RequestsOverlayProps {
     onClose?: () => void;
+    onOpenChat: (booking: any) => void;
 }
 
-const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose }) => {
+const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }) => {
     const { colors, isDark } = useTheme();
-    const { token, user } = useAuth();
+    const { token, user, logout } = useAuth();
     const { t } = useLanguage();
     const [bookings, setBookings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -38,9 +40,7 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose }) => {
     const fetchData = async () => {
         try {
             const endpoint = isDriver ? '/api/rides/requests' : '/api/rides/bookings';
-            const response = await fetch(`${API_BASE}${endpoint}`, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
+            const response = await apiRequest(endpoint, {}, logout);
             if (response.ok) {
                 const data = await response.json();
                 setBookings(data || []);
@@ -54,14 +54,10 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose }) => {
 
     const handleUpdateStatus = async (bookingId: string, status: string) => {
         try {
-            const response = await fetch(`${API_BASE}/api/rides/bookings/${bookingId}`, {
+            const response = await apiRequest(`/api/rides/bookings/${bookingId}`, {
                 method: 'PUT',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
                 body: JSON.stringify({ status }),
-            });
+            }, logout);
             if (response.ok) {
                 Alert.alert(t('requests.success'), t('requests.bookingStatus').replace('{{status}}', t(`requests.${status}`)));
                 fetchData();
@@ -111,24 +107,31 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose }) => {
                         </View>
 
                         {item.status === 'pending' ? (
-                             <View style={styles.actions}>
-                                 <TouchableOpacity
-                                     style={[styles.actionBtn, { backgroundColor: '#4CAF50' }]}
-                                     onPress={() => handleUpdateStatus(item.id, 'accepted')}>
-                                     <Text style={styles.btnText}>{t('requests.accept')}</Text>
-                                 </TouchableOpacity>
-                                 <TouchableOpacity
-                                     style={[styles.actionBtn, { backgroundColor: '#F44336' }]}
-                                     onPress={() => handleUpdateStatus(item.id, 'rejected')}>
-                                     <Text style={styles.btnText}>{t('requests.reject')}</Text>
-                                 </TouchableOpacity>
-                             </View>
+                            <View style={styles.actions}>
+                                <TouchableOpacity
+                                    style={[styles.actionBtn, { backgroundColor: '#4CAF50' }]}
+                                    onPress={() => handleUpdateStatus(item.id, 'accepted')}>
+                                    <Text style={styles.btnText}>{t('requests.accept')}</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[styles.actionBtn, { backgroundColor: '#F44336' }]}
+                                    onPress={() => handleUpdateStatus(item.id, 'rejected')}>
+                                    <Text style={styles.btnText}>{t('requests.reject')}</Text>
+                                </TouchableOpacity>
+                            </View>
                         ) : (
-                             <View style={{ alignItems: 'center' }}>
-                                 <Text style={{ color: item.status === 'accepted' ? '#4CAF50' : '#F44336', fontWeight: 'bold' }}>
-                                     {item.status === 'accepted' ? `✓ ${t('requests.accepted').toUpperCase()}` : `✗ ${t('requests.rejected').toUpperCase()}`}
-                                 </Text>
-                             </View>
+                            <View style={{ alignItems: 'center' }}>
+                                <Text style={{ color: item.status === 'accepted' ? '#4CAF50' : '#F44336', fontWeight: 'bold' }}>
+                                    {item.status === 'accepted' ? `✓ ${t('requests.accepted').toUpperCase()}` : `✗ ${t('requests.rejected').toUpperCase()}`}
+                                </Text>
+                                {item.status === 'accepted' && (
+                                    <TouchableOpacity
+                                        style={styles.chatBtn}
+                                        onPress={() => onOpenChat(item)}>
+                                        <Text style={styles.chatBtnText}>💬 {t('chat.withPassenger')}</Text>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
                         )}
                     </>
                 ) : item.status === 'accepted' ? (
@@ -150,27 +153,33 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose }) => {
                             </Text>
                         </View>
 
-                         <View style={styles.bookingIdCard}>
-                             <View style={styles.bookingIdHeader}>
-                                 <Text style={styles.bookingIdLabel}>{t('trips.offlineBookingId')}</Text>
-                                 <View style={styles.verifiedTag}>
-                                     <Text style={styles.verifiedTagText}>{t('trips.verifiedDriver')}</Text>
-                                 </View>
-                             </View>
-                             <Text style={styles.bookingIdText}>RA-{item.id.slice(-4).toUpperCase()}</Text>
-                             <Text style={styles.bookingIdFooter}>{t('trips.showDriverOffline')}</Text>
-                         </View>
+                        <View style={styles.bookingIdCard}>
+                            <View style={styles.bookingIdHeader}>
+                                <Text style={styles.bookingIdLabel}>{t('trips.offlineBookingId')}</Text>
+                                <View style={styles.verifiedTag}>
+                                    <Text style={styles.verifiedTagText}>{t('trips.verifiedDriver')}</Text>
+                                </View>
+                            </View>
+                            <Text style={styles.bookingIdText}>RA-{item.id.slice(-4).toUpperCase()}</Text>
+                            <Text style={styles.bookingIdFooter}>{t('trips.showDriverOffline')}</Text>
+
+                            <TouchableOpacity
+                                style={[styles.chatBtn, { marginTop: 12, width: '100%' }]}
+                                onPress={() => onOpenChat(item)}>
+                                <Text style={styles.chatBtnText}>💬 {t('chat.withDriver')}</Text>
+                            </TouchableOpacity>
+                        </View>
                     </>
                 ) : (
-                     <View style={styles.rejectionContainer}>
-                         <View style={styles.rejectionIconOuter}>
-                             <Text style={styles.rejectionIconInner}>✗</Text>
-                         </View>
-                         <Text style={[styles.rejectionText, { color: colors.textColor }]}>{t('requests.seatsNotBooked')}</Text>
-                         <Text style={[styles.rejectionSubtitle, { color: colors.subtextColor }]}>
-                             {t('requests.declinedSubtitle')}
-                         </Text>
-                     </View>
+                    <View style={styles.rejectionContainer}>
+                        <View style={styles.rejectionIconOuter}>
+                            <Text style={styles.rejectionIconInner}>✗</Text>
+                        </View>
+                        <Text style={[styles.rejectionText, { color: colors.textColor }]}>{t('requests.seatsNotBooked')}</Text>
+                        <Text style={[styles.rejectionSubtitle, { color: colors.subtextColor }]}>
+                            {t('requests.declinedSubtitle')}
+                        </Text>
+                    </View>
                 )}
             </View>
         );
@@ -178,14 +187,14 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose }) => {
 
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
-             <View style={styles.header}>
-                 <Text style={[styles.title, { color: colors.textColor }]}>
-                     {isDriver ? t('requests.title') : t('requests.notifications')}
-                 </Text>
-                 <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-                     <Text style={{ color: colors.primary, fontWeight: 'bold' }}>{t('requests.closeBtn')}</Text>
-                 </TouchableOpacity>
-             </View>
+            <View style={styles.header}>
+                <Text style={[styles.title, { color: colors.textColor }]}>
+                    {isDriver ? t('requests.title') : t('requests.notifications')}
+                </Text>
+                <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+                    <Text style={{ color: colors.primary, fontWeight: 'bold' }}>{t('requests.closeBtn')}</Text>
+                </TouchableOpacity>
+            </View>
 
             {loading ? (
                 <ActivityIndicator color={colors.primary} size="large" style={{ marginTop: 20 }} />
@@ -195,11 +204,11 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose }) => {
                     keyExtractor={(item) => item.id}
                     renderItem={renderItem}
                     contentContainerStyle={styles.list}
-                     ListEmptyComponent={
-                         <Text style={[styles.empty, { color: colors.subtextColor }]}>
-                             {isDriver ? t('requests.emptyDriver') : t('requests.noNotifications')}
-                         </Text>
-                     }
+                    ListEmptyComponent={
+                        <Text style={[styles.empty, { color: colors.subtextColor }]}>
+                            {isDriver ? t('requests.emptyDriver') : t('requests.noNotifications')}
+                        </Text>
+                    }
                 />
             )}
         </View>
@@ -289,8 +298,21 @@ const styles = StyleSheet.create({
     },
     empty: {
         textAlign: 'center',
-        marginTop: 40,
+        padding: 40,
         fontSize: 16,
+    },
+    chatBtn: {
+        backgroundColor: '#4285F4',
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+        borderRadius: 20,
+        marginTop: 10,
+        alignItems: 'center',
+    },
+    chatBtnText: {
+        color: '#FFFFFF',
+        fontWeight: 'bold',
+        fontSize: 14,
     },
     successHeader: {
         alignItems: 'center',

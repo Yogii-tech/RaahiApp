@@ -13,6 +13,7 @@ import {
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
+import { apiRequest } from '../utils/api';
 
 import AvailableRidesScreen from './AvailableRidesScreen';
 import BookRideScreen from './BookRideScreen';
@@ -38,7 +39,7 @@ import { API_BASE } from '../apiConfig';
 
 const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
     const { isDark, colors } = useTheme();
-    const { token, user } = useAuth();
+    const { token, user, logout } = useAuth();
     const { t } = useLanguage();
     const [view, setView] = useState<string>('home');
     const [selectedRide, setSelectedRide] = useState<Ride | null>(null);
@@ -69,12 +70,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
         try {
             setLoading(true);
             setError(false);
-            const response = await fetch(`${API_BASE}/api/rides/recent`, {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
-            });
+            const response = await apiRequest('/api/rides/recent', {}, logout);
             if (response.ok) {
                 const data = await response.json();
                 setRecentRides(data);
@@ -94,12 +90,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
         }
 
         try {
-            await fetch(`${API_BASE}/api/rides/recent`, {
+            await apiRequest('/api/rides/recent', {
                 method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
                 body: JSON.stringify({
                     pickup: pickup.trim(),
                     dropoff: dropoff.trim(),
@@ -119,12 +111,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
         if (!pickup.trim() || !dropoff.trim()) return;
 
         try {
-            const response = await fetch(`${API_BASE}/api/rides/create`, {
+            const response = await apiRequest('/api/rides/create', {
                 method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
                 body: JSON.stringify({
                     pickup: pickup.trim(),
                     dropoff: dropoff.trim(),
@@ -477,7 +465,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
                                 const day = i + 1;
                                 const isToday = day === new Date().getDate() && calendarMonth === new Date().getMonth() && calendarYear === new Date().getFullYear();
                                 const isSelected = date === `${day < 10 ? '0' : ''}${day}/${calendarMonth + 1 < 10 ? '0' : ''}${calendarMonth + 1}/${calendarYear}`;
-                                
+
                                 return (
                                     <TouchableOpacity
                                         key={`day-${day}`}
@@ -492,7 +480,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
                                             setShowCalendar(false);
                                         }}>
                                         <Text style={[
-                                            styles.dayText, 
+                                            styles.dayText,
                                             { color: isSelected ? '#FFFFFF' : colors.textColor },
                                             isToday && !isSelected && { color: '#1FAF63', fontWeight: 'bold' }
                                         ]}>

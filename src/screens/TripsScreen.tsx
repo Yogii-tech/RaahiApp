@@ -6,6 +6,7 @@ import { useLanguage } from '../context/LanguageContext';
 import JeepLayout from '../components/JeepLayout';
 
 import { API_BASE } from '../apiConfig';
+import { apiRequest } from '../utils/api';
 
 interface Booking {
     id: string;
@@ -21,7 +22,7 @@ interface Booking {
 
 const TripsScreen: React.FC = () => {
     const { colors, isDark } = useTheme();
-    const { user, token } = useAuth();
+    const { user, token, logout } = useAuth();
     const { t } = useLanguage();
     const [bookings, setBookings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -38,9 +39,7 @@ const TripsScreen: React.FC = () => {
     const fetchData = async () => {
         try {
             const endpoint = isDriver ? '/api/rides/recent' : '/api/rides/bookings';
-            const response = await fetch(`${API_BASE}${endpoint}`, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
+            const response = await apiRequest(endpoint, {}, logout);
             if (response.ok) {
                 const data = await response.json();
                 setBookings(data || []);
