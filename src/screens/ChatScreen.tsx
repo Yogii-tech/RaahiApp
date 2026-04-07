@@ -59,6 +59,10 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
             if (response.ok) {
                 const data = await response.json();
                 setMessages(data);
+                // Mark as read
+                if (data.length > 0) {
+                    apiRequest(`/api/chat/${bookingId}/read`, { method: 'POST' }, logout);
+                }
             }
         } catch (err) {
             console.error('Fetch messages error:', err);

@@ -211,14 +211,17 @@ function MainTabs() {
       const endpoint = isDriver ? '/api/rides/requests' : '/api/rides/bookings';
       const response = await apiRequest(endpoint, {}, logout);
       if (response.ok) {
-        const data = await response.json();
+        const data = await response.json() || [];
         // Filter: Driver sees UNVIEWED 'pending' reqs, Passenger sees UNVIEWED 'accepted' or 'rejected'
-        const count = (data || []).filter((b: any) =>
+        const reqCount = data.filter((b: any) =>
           isDriver
             ? (b.status === 'pending' && !b.viewedByDriver)
             : ((b.status === 'accepted' || b.status === 'rejected') && !b.viewedByPassenger)
         ).length;
-        setNotificationCount(count);
+
+        // Add unread chat counts
+        const unreadChatTotal = data.reduce((sum: number, b: any) => sum + (b.unreadChatCount || 0), 0);
+        setNotificationCount(reqCount + unreadChatTotal);
       }
     } catch (err) {
       console.error('Badge poll fail:', err);

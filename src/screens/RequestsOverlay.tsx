@@ -5,19 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import JeepLayout from '../components/JeepLayout';
 
-import { API_BASE } from '../apiConfig';
 import { apiRequest } from '../utils/api';
-
-interface Booking {
-    id: string;
-    rideId: string;
-    passengerId: string;
-    seatsRequested: number;
-    seatLayout?: number[];
-    status: string;
-    createdAt: string;
-    roofCarrier: boolean;
-}
 
 interface RequestsOverlayProps {
     onClose?: () => void;
@@ -26,7 +14,7 @@ interface RequestsOverlayProps {
 
 const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }) => {
     const { colors, isDark } = useTheme();
-    const { token, user, logout } = useAuth();
+    const { user, logout } = useAuth();
     const { t } = useLanguage();
     const [bookings, setBookings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -35,6 +23,8 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
 
     useEffect(() => {
         fetchData();
+        const interval = setInterval(fetchData, 5000); // Poll every 5s for updates
+        return () => clearInterval(interval);
     }, []);
 
     const fetchData = async () => {
@@ -128,7 +118,14 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
                                     <TouchableOpacity
                                         style={styles.chatBtn}
                                         onPress={() => onOpenChat(item)}>
-                                        <Text style={styles.chatBtnText}>💬 {t('chat.withPassenger')}</Text>
+                                        <View style={styles.chatBtnContent}>
+                                            <Text style={styles.chatBtnText}>💬 {t('chat.withPassenger')}</Text>
+                                            {item.unreadChatCount > 0 && (
+                                                <View style={styles.unreadBadge}>
+                                                    <Text style={styles.unreadCount}>{item.unreadChatCount}</Text>
+                                                </View>
+                                            )}
+                                        </View>
                                     </TouchableOpacity>
                                 )}
                             </View>
@@ -166,7 +163,14 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
                             <TouchableOpacity
                                 style={[styles.chatBtn, { marginTop: 12, width: '100%' }]}
                                 onPress={() => onOpenChat(item)}>
-                                <Text style={styles.chatBtnText}>💬 {t('chat.withDriver')}</Text>
+                                <View style={styles.chatBtnContent}>
+                                    <Text style={styles.chatBtnText}>💬 {t('chat.withDriver')}</Text>
+                                    {item.unreadChatCount > 0 && (
+                                        <View style={styles.unreadBadge}>
+                                            <Text style={styles.unreadCount}>{item.unreadChatCount}</Text>
+                                        </View>
+                                    )}
+                                </View>
                             </TouchableOpacity>
                         </View>
                     </>
@@ -313,6 +317,28 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
         fontWeight: 'bold',
         fontSize: 14,
+    },
+    chatBtnContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    unreadBadge: {
+        backgroundColor: '#FF4444',
+        borderRadius: 10,
+        minWidth: 20,
+        height: 20,
+        paddingHorizontal: 6,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginLeft: 8,
+        borderWidth: 1.5,
+        borderColor: '#FFFFFF',
+    },
+    unreadCount: {
+        color: '#FFFFFF',
+        fontSize: 10,
+        fontWeight: 'bold',
     },
     successHeader: {
         alignItems: 'center',
