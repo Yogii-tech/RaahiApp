@@ -6,6 +6,7 @@ import { useLanguage } from '../context/LanguageContext';
 interface JeepLayoutProps {
     selectedSeats?: number[];
     takenSeats?: number[];
+    pendingSeats?: number[];
     onSeatPress?: (index: number) => void;
     interactive?: boolean;
     numSeatsRequested?: number;
@@ -18,6 +19,7 @@ interface JeepLayoutProps {
 const JeepLayout: React.FC<JeepLayoutProps> = ({
     selectedSeats = [],
     takenSeats = [],
+    pendingSeats = [],
     onSeatPress,
     interactive = true,
     numSeatsRequested = 1,
@@ -38,8 +40,9 @@ const JeepLayout: React.FC<JeepLayoutProps> = ({
     }, [propLayoutType, totalSeats]);
 
     const getSeatColor = (index: number) => {
-        if (takenSeats.includes(index)) return '#FF5252'; // TAKEN
-        if (selectedSeats.includes(index)) return colors.primary; // PICK
+        if (takenSeats.includes(index)) return '#FF5252';   // TAKEN — red
+        if (pendingSeats.includes(index)) return '#F59E0B'; // PENDING — yellow
+        if (selectedSeats.includes(index)) return colors.primary; // SELECTED — primary
         return colors.background; // FREE
     };
 
@@ -94,7 +97,7 @@ const JeepLayout: React.FC<JeepLayoutProps> = ({
                 row1.push(renderSeat(currentSeat++));
             }
             if (row1.length > 0) rows.push(<View key="row1" style={styles.seatRow}>{row1}</View>);
-        } 
+        }
         else if (layoutType === 'bus_2x2') {
             const leftCount = 2;
             const rightCount = 2;
@@ -118,20 +121,20 @@ const JeepLayout: React.FC<JeepLayoutProps> = ({
                         rowItems.push(renderSeat(currentSeat++));
                     }
                     rows.push(<View key={`row${rowIdx}`} style={styles.seatRow}>{rowItems}</View>);
-                    break; 
+                    break;
                 }
 
                 // Normal 2+2 row with Aisle
                 // Left side
                 for (let i = 0; i < leftCount && currentSeat <= totalSeats; i++) rowItems.push(renderSeat(currentSeat++));
                 while (rowItems.length < leftCount) rowItems.push(renderAisle(`l-pad-${rowItems.length}`));
-                
+
                 // Aisle
                 rowItems.push(renderAisle(`aisle-${rowIdx}`, true));
 
                 // Right side
                 for (let i = 0; i < rightCount && currentSeat <= totalSeats; i++) rowItems.push(renderSeat(currentSeat++));
-                
+
                 rows.push(<View key={`row${rowIdx}`} style={styles.seatRow}>{rowItems}</View>);
                 rowIdx++;
             }
@@ -213,6 +216,12 @@ const JeepLayout: React.FC<JeepLayoutProps> = ({
                     <View style={styles.legendItem}>
                         <View style={[styles.dot, { backgroundColor: colors.primary }]} />
                         <Text style={[styles.legendText, { color: colors.subtextColor }]}>{t('jeep.pick')}</Text>
+                    </View>
+                )}
+                {pendingSeats.length > 0 && (
+                    <View style={styles.legendItem}>
+                        <View style={[styles.dot, { backgroundColor: '#F59E0B' }]} />
+                        <Text style={[styles.legendText, { color: colors.subtextColor }]}>PENDING</Text>
                     </View>
                 )}
                 <View style={styles.legendItem}>

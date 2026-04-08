@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, useWindowDimensions } from 'react-native';
 import { API_BASE } from '../../apiConfig';
+import { useAuth } from '../../context/AuthContext';
 
 interface Stats {
     totalRides: number;
@@ -8,7 +9,7 @@ interface Stats {
     confirmed: number;
     drivers: number;
     canceled: number;
-    activities: { name: string; amount: number }[];
+    activities: { name: string; detail: string }[];
 }
 
 const BAR_HEIGHTS = [40, 70, 55, 85, 110, 95, 75]; // mock chart bar heights
@@ -16,11 +17,12 @@ const BAR_HEIGHTS = [40, 70, 55, 85, 110, 95, 75]; // mock chart bar heights
 export default function AdminDashboardView({ token }: { token: string }) {
     const [stats, setStats] = useState<Stats | null>(null);
     const [loading, setLoading] = useState(true);
+    const { fetchWithAuth } = useAuth();
+    const { width } = useWindowDimensions();
+    const isMobile = width < 768;
 
     useEffect(() => {
-        fetch(`${API_BASE}/api/admin/stats`, {
-            headers: { Authorization: `Bearer ${token}` },
-        })
+        fetchWithAuth(`${API_BASE}/api/admin/stats`)
             .then(r => r.json())
             .then(d => setStats(d))
             .catch(() => {})
@@ -60,9 +62,9 @@ export default function AdminDashboardView({ token }: { token: string }) {
             </View>
 
             {/* Chart + Activity Row */}
-            <View style={styles.chartActivityRow}>
+            <View style={[styles.chartActivityRow, isMobile && styles.chartActivityColumn]}>
                 {/* Bar Chart */}
-                <View style={styles.chartCard}>
+                <View style={[styles.chartCard, isMobile && { minHeight: 140 }]}>
                     <View style={styles.barsContainer}>
                         {BAR_HEIGHTS.map((h, i) => (
                             <View key={i} style={styles.barWrapper}>
@@ -77,8 +79,8 @@ export default function AdminDashboardView({ token }: { token: string }) {
                     <Text style={styles.activityTitle}>LATEST ACTIVITY</Text>
                     {(stats?.activities ?? []).map((a, i) => (
                         <View key={i} style={styles.activityRow}>
-                            <Text style={styles.activityName}>{a.name}</Text>
-                            <Text style={styles.activityAmount}>₹{a.amount}</Text>
+                            <Text style={styles.activityName} numberOfLines={1}>{a.name}</Text>
+                            <Text style={styles.activityAmount} numberOfLines={1}>{a.detail}</Text>
                         </View>
                     ))}
                 </View>
@@ -97,9 +99,10 @@ const styles = StyleSheet.create({
     },
     statLabel: { fontSize: 11, fontWeight: 'bold', letterSpacing: 1.5, marginBottom: 12 },
     statValue: { fontSize: 42, fontWeight: 'bold' },
-    chartActivityRow: { flexDirection: 'row', gap: 16 },
+    chartActivityRow: { flexDirection: 'row', gap: 16, flexWrap: 'wrap' },
+    chartActivityColumn: { flexDirection: 'column' },
     chartCard: {
-        flex: 2, backgroundColor: '#0F1A14', borderRadius: 16,
+        flex: 2, minWidth: 200, backgroundColor: '#0F1A14', borderRadius: 16,
         padding: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
         minHeight: 180, justifyContent: 'flex-end',
     },
@@ -107,7 +110,7 @@ const styles = StyleSheet.create({
     barWrapper: { flex: 1, alignItems: 'center', justifyContent: 'flex-end' },
     bar: { width: '80%', backgroundColor: '#1FAF63', borderRadius: 6, opacity: 0.7 },
     activityCard: {
-        flex: 1, backgroundColor: '#111827', borderRadius: 16,
+        flex: 1, minWidth: 200, backgroundColor: '#111827', borderRadius: 16,
         padding: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
     },
     activityTitle: { color: '#6B7280', fontSize: 11, letterSpacing: 2, fontWeight: 'bold', marginBottom: 16 },
@@ -115,6 +118,6 @@ const styles = StyleSheet.create({
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
         paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)',
     },
-    activityName: { color: '#E5E7EB', fontSize: 14 },
-    activityAmount: { color: '#1FAF63', fontSize: 14, fontWeight: 'bold' },
+    activityName: { color: '#E5E7EB', fontSize: 14, flex: 1, marginRight: 8 },
+    activityAmount: { color: '#1FAF63', fontSize: 13, fontWeight: 'bold', flexShrink: 1 },
 });

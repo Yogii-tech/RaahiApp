@@ -1,22 +1,20 @@
 import React, { useState } from 'react';
 import {
     View, Text, StyleSheet, TouchableOpacity,
-    Platform, ScrollView,
+    Platform, ScrollView, useWindowDimensions
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import AdminDashboardView from './AdminDashboardView';
 import AdminBookingsView from './AdminBookingsView';
 import AdminDriversView from './AdminDriversView';
-import AdminCommsView from './AdminCommsView';
 import AdminReportsView from './AdminReportsView';
 
-type AdminView = 'dashboard' | 'bookings' | 'drivers' | 'comms' | 'reports';
+type AdminView = 'dashboard' | 'bookings' | 'drivers' | 'reports';
 
 const NAV_ITEMS: { id: AdminView; label: string; icon: string }[] = [
     { id: 'dashboard', label: 'DASHBOARD', icon: '▦' },
     { id: 'bookings', label: 'BOOKINGS', icon: '👤' },
     { id: 'drivers', label: 'DRIVERS', icon: '🚗' },
-    { id: 'comms', label: 'COMMS', icon: '↑' },
     { id: 'reports', label: 'REPORTS', icon: '🗑' },
 ];
 
@@ -45,6 +43,9 @@ export default function AdminDashboardScreen() {
     const [activeView, setActiveView] = useState<AdminView>('dashboard');
     const [isDark, setIsDark] = useState(true);
     const [pendingCount] = useState(5);
+    const { width } = useWindowDimensions();
+    const isMobile = width < 768;
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
     const T = isDark ? DARK_THEME : LIGHT_THEME;
 
@@ -57,7 +58,6 @@ export default function AdminDashboardScreen() {
             case 'dashboard': return <AdminDashboardView token={token!} />;
             case 'bookings': return <AdminBookingsView token={token!} />;
             case 'drivers': return <AdminDriversView token={token!} />;
-            case 'comms': return <AdminCommsView />;
             case 'reports': return <AdminReportsView token={token!} />;
         }
     };
@@ -66,14 +66,22 @@ export default function AdminDashboardScreen() {
         dashboard: 'Dashboard',
         bookings: 'Bookings',
         drivers: 'Drivers',
-        comms: 'Comms',
         reports: 'Reports',
     };
 
     return (
         <View style={[styles.wrapper, { backgroundColor: T.bg }]}>
+            {isMobile && isSidebarOpen && (
+                <TouchableOpacity 
+                    style={styles.overlay} 
+                    activeOpacity={1} 
+                    onPress={() => setIsSidebarOpen(false)} 
+                />
+            )}
+
             {/* Sidebar */}
-            <View style={[styles.sidebar, { backgroundColor: T.sidebar, borderRightColor: T.border }]}>
+            {(!isMobile || isSidebarOpen) && (
+            <View style={[styles.sidebar, isMobile && styles.sidebarMobile, { backgroundColor: T.sidebar, borderRightColor: T.border }]}>
                 {/* Logo */}
                 <View style={styles.logoArea}>
                     <View style={styles.logoIcon}>
@@ -101,7 +109,10 @@ export default function AdminDashboardScreen() {
                                     isActive && { backgroundColor: T.accent },
                                     !isActive && { backgroundColor: isDark ? '#1F2937' : '#F3F4F6' },
                                 ]}
-                                onPress={() => setActiveView(item.id)}
+                                onPress={() => {
+                                    setActiveView(item.id);
+                                    if (isMobile) setIsSidebarOpen(false);
+                                }}
                                 activeOpacity={0.8}>
                                 <Text style={[styles.navIcon, { color: isActive ? '#FFFFFF' : T.subtext }]}>
                                     {item.icon}
@@ -142,16 +153,24 @@ export default function AdminDashboardScreen() {
                     </Text>
                 </TouchableOpacity>
             </View>
+            )}
 
             {/* Main Content */}
             <View style={[styles.content, { backgroundColor: T.contentBg }]}>
                 {/* Top header bar */}
                 <View style={[styles.topBar, { borderBottomColor: T.border, backgroundColor: T.sidebar }]}>
-                    <View>
-                        <Text style={[styles.pageTitle, { color: T.text }]}>
-                            {headerTitles[activeView]}
-                        </Text>
-                        <Text style={[styles.pageSubtitle, { color: T.subtext }]}>MANAGEMENT HUB</Text>
+                    <View style={styles.topBarLeft}>
+                        {isMobile && (
+                            <TouchableOpacity onPress={() => setIsSidebarOpen(true)} style={styles.hamburger}>
+                                <Text style={{ fontSize: 24, color: T.text, marginTop: -4 }}>☰</Text>
+                            </TouchableOpacity>
+                        )}
+                        <View>
+                            <Text style={[styles.pageTitle, { color: T.text }]}>
+                                {headerTitles[activeView]}
+                            </Text>
+                            <Text style={[styles.pageSubtitle, { color: T.subtext }]}>MANAGEMENT HUB</Text>
+                        </View>
                     </View>
                     <Text style={[styles.adminName, { color: T.subtext }]}>
                         👤 {user?.name ?? 'Admin'}
@@ -179,6 +198,27 @@ const styles = StyleSheet.create({
         paddingBottom: 16,
         borderRightWidth: 1,
         flexShrink: 0,
+        height: '100%',
+    },
+    sidebarMobile: {
+        position: 'absolute',
+        top: 0, left: 0, bottom: 0,
+        zIndex: 50,
+        width: 260,
+    },
+    overlay: {
+        position: 'absolute',
+        top: 0, bottom: 0, left: 0, right: 0,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        zIndex: 40,
+    },
+    topBarLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    hamburger: {
+        marginRight: 16,
+        padding: 4,
     },
     logoArea: {
         flexDirection: 'row',

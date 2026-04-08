@@ -130,7 +130,11 @@ const TripsScreen: React.FC = () => {
                     <View style={{ marginTop: 20 }}>
                         <JeepLayout
                             interactive={false}
-                            takenSeats={item.takenSeats || []}
+                            takenSeats={item.takenSeats?.filter((s: number) =>
+                                // accepted bookings' seats only
+                                (item.acceptedSeats || item.takenSeats || []).includes(s)
+                            ) || []}
+                            pendingSeats={item.pendingSeats || []}
                             totalSeats={item.seatsTotal}
                             layoutType={item.seatingLayout || 'suv'}
                         />

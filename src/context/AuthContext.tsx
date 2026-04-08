@@ -30,6 +30,8 @@ interface AuthContextType {
     isAuthenticated: boolean;
     logout: () => Promise<void>;
     isInitialLoading: boolean;
+    tryRefreshToken: () => Promise<string | null>;
+    fetchWithAuth: (url: string, options?: RequestInit) => Promise<Response>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -40,6 +42,8 @@ const AuthContext = createContext<AuthContextType>({
     isAuthenticated: false,
     logout: async () => { },
     isInitialLoading: true,
+    tryRefreshToken: async () => null,
+    fetchWithAuth: async (url, options) => fetch(url, options),
 });
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -56,9 +60,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 const storedRefresh = await AsyncStorage.getItem('auth_refresh_token');
                 const storedUser = await AsyncStorage.getItem('auth_user');
 
-                if (storedToken && storedRefresh && storedUser) {
+                // Only require token + user to restore session; refreshToken is optional
+                if (storedToken && storedUser) {
                     setToken(storedToken);
-                    setRefreshToken(storedRefresh);
+                    if (storedRefresh) setRefreshToken(storedRefresh);
                     setUser(JSON.parse(storedUser));
                 }
             } catch (e) {
@@ -76,11 +81,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setRefreshToken(newRefresh);
         setUser(newUser);
 
-        if (newToken && newRefresh && newUser) {
+        if (newToken && newUser) {
             await AsyncStorage.setItem('auth_token', newToken);
-            await AsyncStorage.setItem('auth_refresh_token', newRefresh);
+            if (newRefresh) {
+                await AsyncStorage.setItem('auth_refresh_token', newRefresh);
+            }
             await AsyncStorage.setItem('auth_user', JSON.stringify(newUser));
-        } else {
+        } else if (!newToken && !newRefresh && !newUser) {
+            // Explicit full logout — clear everything
             await AsyncStorage.removeItem('auth_token');
             await AsyncStorage.removeItem('auth_refresh_token');
             await AsyncStorage.removeItem('auth_user');
@@ -99,6 +107,54 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await setAuth(null, null, null);
     };
 
+    // Try to get a new access token using the stored refresh token
+    const tryRefreshToken = async (): Promise<string | null> => {
+        const storedRefresh = await AsyncStorage.getItem('auth_refresh_token');
+        if (!storedRefresh) return null;
+        try {
+            const res = await fetch(`${API_BASE}/api/auth/refresh`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ refresh_token: storedRefresh }),
+            });
+            if (!res.ok) {
+                // Refresh token itself is invalid/expired - force logout
+                await setAuth(null, null, null);
+                return null;
+            }
+            const data = await res.json();
+            const newToken = data.token;
+            setToken(newToken);
+            await AsyncStorage.setItem('auth_token', newToken);
+            return newToken;
+        } catch (e) {
+            console.error('Token refresh failed:', e);
+            return null;
+        }
+    };
+
+    // A fetch wrapper that auto-refreshes token on 401
+    const fetchWithAuth = async (url: string, options: RequestInit = {}): Promise<Response> => {
+        const currentToken = await AsyncStorage.getItem('auth_token');
+        const headers = {
+            ...options.headers,
+            Authorization: `Bearer ${currentToken}`,
+            'Content-Type': 'application/json',
+        };
+        let res = await fetch(url, { ...options, headers });
+        if (res.status === 401) {
+            // Access token expired — try to refresh silently
+            const newToken = await tryRefreshToken();
+            if (newToken) {
+                res = await fetch(url, {
+                    ...options,
+                    headers: { ...headers, Authorization: `Bearer ${newToken}` },
+                });
+            }
+        }
+        return res;
+    };
+
     return (
         <AuthContext.Provider
             value={{
@@ -109,6 +165,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 isAuthenticated: !!token,
                 logout,
                 isInitialLoading,
+                tryRefreshToken,
+                fetchWithAuth,
             }}>
             {children}
         </AuthContext.Provider>

@@ -48,6 +48,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
     const { t } = useLanguage();
 
     const [tempToken, setTempToken] = useState<string | null>(null);
+    const [tempRefreshToken, setTempRefreshToken] = useState<string | null>(null);
     const [tempUser, setTempUser] = useState<any | null>(null);
 
     useEffect(() => {
@@ -161,6 +162,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
 
             if (!data.user.name) {
                 setTempToken(data.token);
+                setTempRefreshToken(data.refresh_token);
                 setTempUser(data.user);
                 setStep('name');
             } else {
@@ -281,7 +283,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                     role: role,
                     vehicle: body.vehicle
                 };
-                await setAuth(activeToken, null, updatedUser); // For initial reg we might not have refresh here
+                await setAuth(activeToken, tempRefreshToken, updatedUser);
                 onAuthenticated();
             } else {
                 Alert.alert(t('common.error'), t('login.failProfile'));

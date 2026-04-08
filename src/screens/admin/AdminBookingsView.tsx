@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, ScrollView } from 'react-native';
 import { API_BASE } from '../../apiConfig';
+import { useAuth } from '../../context/AuthContext';
 
 interface Booking {
     id: string;
@@ -21,11 +22,10 @@ const STATUS_COLORS: Record<string, string> = {
 export default function AdminBookingsView({ token }: { token: string }) {
     const [bookings, setBookings] = useState<Booking[]>([]);
     const [loading, setLoading] = useState(true);
+    const { fetchWithAuth } = useAuth();
 
     useEffect(() => {
-        fetch(`${API_BASE}/api/admin/bookings`, {
-            headers: { Authorization: `Bearer ${token}` },
-        })
+        fetchWithAuth(`${API_BASE}/api/admin/bookings`)
             .then(r => r.json())
             .then(d => setBookings(Array.isArray(d) ? d : []))
             .catch(() => setBookings([]))
@@ -40,7 +40,6 @@ export default function AdminBookingsView({ token }: { token: string }) {
             <Text style={[styles.headerCell, { flex: 2 }]}>PASSENGER</Text>
             <Text style={[styles.headerCell, { flex: 2 }]}>STATUS</Text>
             <Text style={[styles.headerCell, { flex: 2 }]}>DRIVER</Text>
-            <Text style={[styles.headerCell, { flex: 1, textAlign: 'right' }]}>ACTIONS</Text>
         </View>
     );
 
@@ -60,14 +59,6 @@ export default function AdminBookingsView({ token }: { token: string }) {
                     <Text style={styles.driverText}>{item.driverName || 'Assign...'}</Text>
                     <Text style={styles.dropdownArrow}> ▾</Text>
                 </View>
-                <View style={[styles.actions, { flex: 1 }]}>
-                    <TouchableOpacity style={styles.actionBtn}>
-                        <Text style={styles.actionIcon}>↑</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[styles.actionBtn, styles.deleteBtn]}>
-                        <Text style={styles.actionIcon}>🗑</Text>
-                    </TouchableOpacity>
-                </View>
             </View>
         );
     };
@@ -76,15 +67,19 @@ export default function AdminBookingsView({ token }: { token: string }) {
         <View style={styles.container}>
             <Text style={styles.sectionLabel}>MANAGEMENT HUB</Text>
             <View style={styles.tableCard}>
-                {renderHeader()}
-                <FlatList
-                    data={bookings}
-                    keyExtractor={item => item.id}
-                    renderItem={renderRow}
-                    ListEmptyComponent={
-                        <Text style={{ color: '#6B7280', textAlign: 'center', padding: 30 }}>No bookings found</Text>
-                    }
-                />
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ minWidth: '100%' }}>
+                    <View style={{ minWidth: 600, flex: 1 }}>
+                        {renderHeader()}
+                        <FlatList
+                            data={bookings}
+                            keyExtractor={item => item.id}
+                            renderItem={renderRow}
+                            ListEmptyComponent={
+                                <Text style={{ color: '#6B7280', textAlign: 'center', padding: 30 }}>No bookings found</Text>
+                            }
+                        />
+                    </View>
+                </ScrollView>
             </View>
         </View>
     );
@@ -94,6 +89,7 @@ const styles = StyleSheet.create({
     container: { flex: 1, padding: 24 },
     sectionLabel: { color: '#6B7280', fontSize: 12, letterSpacing: 2, marginBottom: 20 },
     tableCard: {
+        flex: 1,
         backgroundColor: '#111827', borderRadius: 16,
         borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', overflow: 'hidden',
     },

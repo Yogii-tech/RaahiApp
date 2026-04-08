@@ -89,7 +89,8 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
                         <View style={{ marginBottom: 20 }}>
                             <JeepLayout
                                 interactive={false}
-                                takenSeats={item.seatLayout || []}
+                                takenSeats={item.status === 'accepted' ? (item.seatLayout || []) : []}
+                                pendingSeats={item.status === 'pending' ? (item.seatLayout || []) : []}
                                 numSeatsRequested={item.seatsRequested}
                                 totalSeats={item.ride?.seatsTotal}
                                 layoutType={item.ride?.seatingLayout || 'suv'}
