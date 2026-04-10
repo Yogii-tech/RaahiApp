@@ -34,9 +34,9 @@ const babelLoaderConfiguration = {
     },
 };
 
-// Image loader configuration
+// Asset loader configuration for images and fonts
 const imageLoaderConfiguration = {
-    test: /\.(gif|jpe?g|png|svg)$/,
+    test: /\.(gif|jpe?g|png|svg|ttf)$/,
     type: 'asset/resource',
 };
 

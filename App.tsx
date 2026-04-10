@@ -33,6 +33,19 @@ import RequestsOverlay from './src/screens/RequestsOverlay';
 import AccountScreen from './src/screens/AccountScreen';
 import SosScreen from './src/screens/SosScreen';
 import ChatScreen from './src/screens/ChatScreen';
+import Icon from 'react-native-vector-icons/Ionicons';
+
+const linking = {
+  prefixes: ['http://localhost:3000', 'raahi://'],
+  config: {
+    screens: {
+      Home: 'Home',
+      Trips: 'Trips',
+      SOS: 'SOS',
+      Account: 'Account',
+    },
+  },
+};
 
 const Tab = createBottomTabNavigator();
 
@@ -70,12 +83,11 @@ function AppHeader({ onToggleNotifications, notificationCount = 0 }: { onToggleN
           headerStyles.themeButton,
           {
             borderColor: isDark ? '#222260' : '#5B4FFF',
+            backgroundColor: isDark ? '#1E1E1E' : '#FFFFFF',
           },
         ]}
         activeOpacity={0.7}>
-        <Text style={headerStyles.themeIcon}>
-          {isDark ? '☀️' : '🌙'}
-        </Text>
+        <Icon name={isDark ? 'sunny' : 'moon'} size={20} color={isDark ? '#FBC02D' : '#5B4FFF'} />
       </TouchableOpacity>
 
       {/* Notification Bell */}
@@ -86,11 +98,12 @@ function AppHeader({ onToggleNotifications, notificationCount = 0 }: { onToggleN
           headerStyles.themeButton,
           {
             borderColor: isDark ? '#222260' : '#5B4FFF',
+            backgroundColor: isDark ? '#1E1E1E' : '#FFFFFF',
           },
         ]}
         activeOpacity={0.7}>
         <View>
-          <Text style={headerStyles.themeIcon}>🔔</Text>
+          <Icon name="notifications" size={20} color={isDark ? '#FFF' : '#5B4FFF'} />
           {notificationCount > 0 && (
             <View style={headerStyles.badge}>
               <Text style={headerStyles.badgeText}>{notificationCount}</Text>
@@ -180,10 +193,10 @@ const headerStyles = StyleSheet.create({
 
 // ─── Tab Icons ───────────────────────────────────────────────────────
 const tabIcons: Record<string, { default: string; focused: string }> = {
-  Home: { default: '🏠', focused: '🏠' },
-  Trips: { default: '🚗', focused: '🚗' },
-  SOS: { default: '⚠️', focused: '⚠️' },
-  Account: { default: '👤', focused: '👤' },
+  Home: { default: 'home-outline', focused: 'home' },
+  Trips: { default: 'car-sport-outline', focused: 'car-sport' },
+  SOS: { default: 'warning-outline', focused: 'warning' },
+  Account: { default: 'person-outline', focused: 'person' },
 };
 
 // ─── Main Tab Navigator ──────────────────────────────────────────────
@@ -260,12 +273,11 @@ function MainTabs() {
             const icon = tabIcons[route.name];
             return (
               <View style={route.name === 'SOS' ? tabStyles.sosIconContainer : null}>
-                <Text style={[
-                  route.name === 'SOS' ? tabStyles.sosIcon : tabStyles.tabIcon,
-                  focused && route.name !== 'SOS' ? tabStyles.tabIconFocused : null
-                ]}>
-                  {focused ? icon.focused : icon.default}
-                </Text>
+                <Icon
+                  name={focused ? icon.focused : icon.default}
+                  size={route.name === 'SOS' ? 22 : 24}
+                  color={route.name === 'SOS' ? '#FFFFFF' : (focused ? colors.primary : colors.subtextColor)}
+                />
               </View>
             );
           },
@@ -386,7 +398,7 @@ function RootApp() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer linking={linking}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
       <MainTabs />
     </NavigationContainer>

@@ -14,6 +14,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { apiRequest } from '../utils/api';
+import Icon from 'react-native-vector-icons/Ionicons';
 
 import AvailableRidesScreen from './AvailableRidesScreen';
 import BookRideScreen from './BookRideScreen';
@@ -254,7 +255,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
                                     <Text style={[styles.datePickerText, { color: date ? colors.textColor : (isDark ? 'rgba(255,255,255,0.3)' : 'rgba(34,34,96,0.35)') }]}>
                                         {date || t('home.datePlaceholder')}
                                     </Text>
-                                    <Text style={{ fontSize: 18 }}>📅</Text>
+                                    <Icon name="calendar-outline" size={20} color={colors.primary} />
                                 </TouchableOpacity>
                             </View>
                             <View style={{ width: 12 }} />
@@ -340,10 +341,10 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
                                 {t('home.from')} {ride.pickup ?? 'Unknown'}
                             </Text>
                             <View style={styles.detailRow}>
-                                <Text style={styles.detailIcon}>📅</Text>
+                                <Icon name="calendar-outline" size={14} color={colors.subtextColor} style={styles.detailIcon} />
                                 <Text style={[styles.detailText, { color: colors.subtextColor }]}>{ride.date || '—'}</Text>
                                 <View style={{ width: 12 }} />
-                                <Text style={styles.detailIcon}>🕒</Text>
+                                <Icon name="time-outline" size={14} color={colors.subtextColor} style={styles.detailIcon} />
                                 <Text style={[styles.detailText, { color: colors.subtextColor }]}>{ride.departureTime || '—'}</Text>
                             </View>
                             {isDriver && ride.seatsTotal !== undefined && (
@@ -379,9 +380,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
                         },
                         styles.whyCardFirst,
                     ]}>
-                    <Text style={[styles.whyIcon, { color: colors.accentColor }]}>
-                        🛡️
-                    </Text>
+                    <Icon name="shield-checkmark-outline" size={28} color={colors.accentColor} />
                     <View style={styles.spacer8} />
                     <Text style={[styles.whyTitle, { color: colors.textColor }]}>
                         {t('home.safeTravel')}
@@ -399,9 +398,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
                             borderColor: colors.borderColor,
                         },
                     ]}>
-                    <Text style={[styles.whyIcon, { color: colors.accentColor }]}>
-                        👥
-                    </Text>
+                    <Icon name="people-outline" size={28} color={colors.accentColor} />
                     <View style={styles.spacer8} />
                     <Text style={[styles.whyTitle, { color: colors.textColor }]}>
                         {t('home.shareSave')}

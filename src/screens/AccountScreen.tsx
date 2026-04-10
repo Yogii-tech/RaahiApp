@@ -13,6 +13,7 @@ import {
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage, LanguageType } from '../context/LanguageContext';
+import Icon from 'react-native-vector-icons/Ionicons';
 
 import { API_BASE } from '../apiConfig';
 import { apiRequest } from '../utils/api';
@@ -81,12 +82,12 @@ const AccountScreen: React.FC = () => {
     const handleSupportPress = () => setSupportVisible(true);
 
     const optionItems = [
-        { icon: '💳', title: t('account.paymentMethods') },
-        { icon: '📇', title: t('account.trustedContacts'), action: () => setView('trusted') },
-        { icon: '🌐', title: t('account.language'), action: handleLanguagePress },
-        ...(user?.role === 'driver' ? [{ icon: '🚕', title: t('account.vehicleDetails'), action: () => setView('vehicle') }] : []),
-        { icon: '🎧', title: t('account.support'), action: handleSupportPress },
-        { icon: '🚪', title: t('account.logout'), action: handleLogoutPress, color: '#C62828' },
+        { icon: 'card-outline', title: t('account.paymentMethods') },
+        { icon: 'id-card-outline', title: t('account.trustedContacts'), action: () => setView('trusted') },
+        { icon: 'globe-outline', title: t('account.language'), action: handleLanguagePress },
+        ...(user?.role === 'driver' ? [{ icon: 'car-sport-outline', title: t('account.vehicleDetails'), action: () => setView('vehicle') }] : []),
+        { icon: 'headset-outline', title: t('account.support'), action: handleSupportPress },
+        { icon: 'log-out-outline', title: t('account.logout'), action: handleLogoutPress, color: '#C62828' },
     ];
 
     if (view === 'trusted') {
@@ -118,9 +119,7 @@ const AccountScreen: React.FC = () => {
                             backgroundColor: isDark ? '#181F2A' : '#F8F9FF',
                         },
                     ]}>
-                    <Text style={[styles.avatarIcon, { color: colors.accentColor }]}>
-                        👤
-                    </Text>
+                    <Icon name="person" size={40} color={colors.accentColor} style={styles.avatarIcon} />
                 </View>
 
                 <View style={styles.profileInfo}>
@@ -141,7 +140,7 @@ const AccountScreen: React.FC = () => {
                         <>
                             <View style={styles.spacer8} />
                             <View style={styles.ratingRow}>
-                                <Text style={[styles.star, { color: ratingColor }]}>⭐</Text>
+                                <Icon name="star" size={16} color={ratingColor} style={styles.star} />
                                 <Text style={[styles.ratingText, { color: ratingColor }]}>
                                     4.8 {t('account.rating')}
                                 </Text>
@@ -167,13 +166,12 @@ const AccountScreen: React.FC = () => {
                         ]}
                         activeOpacity={0.7}
                         onPress={item.action}>
-                        <Text
-                            style={[
-                                styles.optionIcon,
-                                { color: item.color ?? '#FFEA00' },
-                            ]}>
-                            {item.icon}
-                        </Text>
+                        <Icon
+                            name={item.icon}
+                            size={24}
+                            color={item.color ?? colors.primary}
+                            style={styles.optionIcon}
+                        />
                         <Text style={[styles.optionTitle, { color: item.color ?? colors.textColor }]}>
                             {item.title}
                         </Text>
@@ -268,7 +266,7 @@ const AccountScreen: React.FC = () => {
                         <TouchableOpacity
                             style={[styles.supportOption, { borderColor: colors.borderColor }]}
                             onPress={handleSupportCall}>
-                            <Text style={styles.supportOptionIcon}>📞</Text>
+                            <Icon name="call-outline" size={22} color={colors.textColor} style={styles.supportOptionIcon} />
                             <Text style={[styles.supportOptionText, { color: colors.textColor }]}>{t('account.callSupport') || 'Call Support'}</Text>
                         </TouchableOpacity>
 
@@ -277,7 +275,7 @@ const AccountScreen: React.FC = () => {
                         <TouchableOpacity
                             style={[styles.supportOption, { borderColor: colors.borderColor }]}
                             onPress={handleSupportWhatsApp}>
-                            <Text style={styles.supportOptionIcon}>💬</Text>
+                            <Icon name="chatbubble-language-outline" size={22} color={colors.textColor} style={styles.supportOptionIcon} />
                             <Text style={[styles.supportOptionText, { color: colors.textColor }]}>{t('account.whatsappSupport') || 'WhatsApp Support'}</Text>
                         </TouchableOpacity>
 

@@ -7,6 +7,7 @@ import JeepLayout from '../components/JeepLayout';
 
 import { API_BASE } from '../apiConfig';
 import { apiRequest } from '../utils/api';
+import Icon from 'react-native-vector-icons/Ionicons';
 
 interface Booking {
     id: string;
@@ -73,12 +74,12 @@ const TripsScreen: React.FC = () => {
                         {isDriver ? `${t('book.pickup')}: ${item.pickup}` : `${t('book.pickup')}: ${item.ride?.pickup} ${t('home.from').toLowerCase()} ${item.ride?.dropoff}`}
                     </Text>
                     <View style={styles.dateTimeRow}>
-                        <Text style={styles.dateTimeIcon}>📅</Text>
+                        <Icon name="calendar-outline" size={14} color={colors.textColor} style={styles.dateTimeIcon} />
                         <Text style={[styles.dateTimeText, { color: colors.textColor }]}>
                             {isDriver ? item.date : item.ride?.date}
                         </Text>
                         <View style={{ width: 12 }} />
-                        <Text style={styles.dateTimeIcon}>🕒</Text>
+                        <Icon name="time-outline" size={14} color={colors.textColor} style={styles.dateTimeIcon} />
                         <Text style={[styles.dateTimeText, { color: colors.textColor }]}>
                             {isDriver ? item.departureTime : item.ride?.departureTime}
                         </Text>
