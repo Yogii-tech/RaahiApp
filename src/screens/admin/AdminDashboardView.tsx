@@ -77,12 +77,14 @@ export default function AdminDashboardView({ token }: { token: string }) {
                 {/* Latest Activity */}
                 <View style={styles.activityCard}>
                     <Text style={styles.activityTitle}>LATEST ACTIVITY</Text>
-                    {(stats?.activities ?? []).map((a, i) => (
-                        <View key={i} style={styles.activityRow}>
-                            <Text style={styles.activityName} numberOfLines={1}>{a.name}</Text>
-                            <Text style={styles.activityAmount} numberOfLines={1}>{a.detail}</Text>
-                        </View>
-                    ))}
+                    <ScrollView style={styles.activitiesList} showsVerticalScrollIndicator={false}>
+                        {(stats?.activities ?? []).map((a, i) => (
+                            <View key={i} style={styles.activityRow}>
+                                <Text style={styles.activityName} numberOfLines={1}>{a.name}</Text>
+                                <Text style={styles.activityAmount} numberOfLines={1}>{a.detail}</Text>
+                            </View>
+                        ))}
+                    </ScrollView>
                 </View>
             </View>
         </ScrollView>
@@ -110,10 +112,17 @@ const styles = StyleSheet.create({
     barWrapper: { flex: 1, alignItems: 'center', justifyContent: 'flex-end' },
     bar: { width: '80%', backgroundColor: '#1FAF63', borderRadius: 6, opacity: 0.7 },
     activityCard: {
-        flex: 1, minWidth: 200, backgroundColor: '#111827', borderRadius: 16,
-        padding: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
+        flex: 1, 
+        minWidth: 200, 
+        backgroundColor: '#111827', 
+        borderRadius: 16,
+        padding: 20, 
+        borderWidth: 1, 
+        borderColor: 'rgba(255,255,255,0.06)',
+        maxHeight: 400, // Added to prevent infinite growth
     },
     activityTitle: { color: '#6B7280', fontSize: 11, letterSpacing: 2, fontWeight: 'bold', marginBottom: 16 },
+    activitiesList: { flex: 1 },
     activityRow: {
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
         paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)',

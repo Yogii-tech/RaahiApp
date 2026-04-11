@@ -53,11 +53,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
 
     useEffect(() => {
         if (Platform.OS === 'web') {
-            const params = new URLSearchParams(window.location.search);
-            if (params.get('admin') === 'true') {
-                setPhoneNumber('');
-                setOtp('');
-                setStep('admin_phone');
+            const w = globalThis as any;
+            if (w.window && w.window.location) {
+                const params = new URLSearchParams(w.window.location.search);
+                if (params.get('admin') === 'true') {
+                    setPhoneNumber('');
+                    setOtp('');
+                    setStep('admin_phone');
+                }
             }
         }
     }, [setStep]);
@@ -237,12 +240,15 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
     const handleCompleteRegistration = async (role: 'passenger' | 'driver') => {
         const activeToken = tempToken || token;
 
-        if (role === 'driver' && (
-            !vehicleDocs.name || !vehicleDocs.type || !vehicleDocs.seats || !vehicleDocs.number ||
-            !vehicleDocs.dl || !vehicleDocs.rc || !vehicleDocs.pollution || !vehicleDocs.image
-        )) {
-            Alert.alert(t('common.error'), t('login.uploadError'));
-            return;
+        if (role === 'driver') {
+            if (!vehicleDocs.name || !vehicleDocs.type || !vehicleDocs.seats || !vehicleDocs.number) {
+                Alert.alert(t('common.error'), 'Please fill in all vehicle details (Name, Type, Seats, Number).');
+                return;
+            }
+            if (!vehicleDocs.dl || !vehicleDocs.rc || !vehicleDocs.pollution || !vehicleDocs.image) {
+                Alert.alert(t('common.error'), t('login.uploadError'));
+                return;
+            }
         }
 
         setLoading(true);

@@ -55,9 +55,11 @@ export default function AdminBookingsView({ token }: { token: string }) {
                         <Text style={[styles.statusText, { color: statusColor }]}>{item.status}</Text>
                     </View>
                 </View>
-                <View style={[styles.driverPill, { flex: 2 }]}>
-                    <Text style={styles.driverText}>{item.driverName || 'Assign...'}</Text>
-                    <Text style={styles.dropdownArrow}> ▾</Text>
+                <View style={{ flex: 2, flexDirection: 'row', alignItems: 'center' }}>
+                    <Text style={[styles.cell, { color: item.driverName ? '#E5E7EB' : '#6B7280' }]}>
+                        {item.driverName || 'Assign...'}
+                    </Text>
+                    {!item.driverName && <Text style={{ color: '#6B7280', fontSize: 12 }}> ▾</Text>}
                 </View>
             </View>
         );
