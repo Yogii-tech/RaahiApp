@@ -13,6 +13,7 @@ interface Driver {
     seatsFilled: number;
     seats: number;
     totalRides: number;
+    currentRide?: string;
 }
 
 export default function AdminDriversView({ token }: { token: string }) {
@@ -37,6 +38,7 @@ export default function AdminDriversView({ token }: { token: string }) {
             <Text style={[styles.headerCell, { flex: 1.5 }]}>PHONE</Text>
             <Text style={[styles.headerCell, { flex: 2 }]}>VEHICLE</Text>
             <Text style={[styles.headerCell, { flex: 1.5 }]}>REG. NUMBER</Text>
+            <Text style={[styles.headerCell, { flex: 2 }]}>RIDE</Text>
             <Text style={[styles.headerCell, { flex: 1 }]}>REMAINING</Text>
             <Text style={[styles.headerCell, { flex: 0.8 }]}>SEATS</Text>
             <Text style={[styles.headerCell, { flex: 1, textAlign: 'right' }]}>RIDES</Text>
@@ -61,6 +63,7 @@ export default function AdminDriversView({ token }: { token: string }) {
                     <Text style={styles.numberText}>{item.vehicleNumber || '—'}</Text>
                 </View>
             </View>
+            <Text style={[styles.cell, { flex: 2, fontSize: 12, color: '#9CA3AF' }]} numberOfLines={1}>{item.currentRide || '—'}</Text>
             <Text style={[styles.cell, { flex: 1, color: '#9CA3AF' }]}>{item.seatsFilled != null ? item.seatsFilled : '—'}</Text>
             <Text style={[styles.cell, { flex: 0.8, textAlign: 'center' }]}>{item.seats || '—'}</Text>
             <View style={{ flex: 1, alignItems: 'flex-end' }}>
@@ -83,7 +86,7 @@ export default function AdminDriversView({ token }: { token: string }) {
 
             <View style={styles.tableCard}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ minWidth: '100%' }}>
-                    <View style={{ minWidth: 850, flex: 1 }}>
+                    <View style={{ minWidth: 1000, flex: 1 }}>
                         {renderHeader()}
                         <FlatList
                             data={drivers}
