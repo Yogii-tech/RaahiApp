@@ -447,6 +447,18 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                                 <Text style={[styles.roleDesc, { color: colors.subtextColor }]}>{t('login.provideLocal')}</Text>
                             </View>
                         </TouchableOpacity>
+
+                        <View style={styles.spacer16} />
+
+                        <TouchableOpacity
+                            style={[styles.roleCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}
+                            onPress={() => Alert.alert(t('login.iAmParceller'), "Coming Soon!")}>
+                            <Text style={styles.roleEmoji}>📦</Text>
+                            <View style={styles.roleInfo}>
+                                <Text style={[styles.roleLabel, { color: colors.textColor }]}>{t('login.iAmParceller')}</Text>
+                                <Text style={[styles.roleDesc, { color: colors.subtextColor }]}>{t('login.shipGoods')}</Text>
+                            </View>
+                        </TouchableOpacity>
                     </View>
                 )}
 

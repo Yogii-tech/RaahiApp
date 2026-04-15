@@ -87,7 +87,7 @@ function AppHeader({ onToggleNotifications, notificationCount = 0 }: { onToggleN
           },
         ]}
         activeOpacity={0.7}>
-        <Icon name={isDark ? 'sunny' : 'moon'} size={20} color={isDark ? '#FBC02D' : '#5B4FFF'} />
+        <Icon name={isDark ? 'sunny' : 'moon'} size={20} color={isDark ? '#FBC02D' : '#000000'} />
       </TouchableOpacity>
 
       {/* Notification Bell */}
@@ -103,7 +103,7 @@ function AppHeader({ onToggleNotifications, notificationCount = 0 }: { onToggleN
         ]}
         activeOpacity={0.7}>
         <View>
-          <Icon name="notifications" size={20} color={isDark ? '#FFF' : '#5B4FFF'} />
+          <Icon name="notifications" size={20} color="#FBC02D" />
           {notificationCount > 0 && (
             <View style={headerStyles.badge}>
               <Text style={headerStyles.badgeText}>{notificationCount}</Text>

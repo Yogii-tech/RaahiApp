@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
+import Icon from 'react-native-vector-icons/Ionicons';
 
 interface JeepLayoutProps {
     selectedSeats?: number[];
@@ -14,6 +15,10 @@ interface JeepLayoutProps {
     layoutType?: string;
     date?: string;
     departureTime?: string;
+    completedSeats?: number[];
+    isCompleted?: boolean;
+    dropoff?: string;
+    completedAt?: string;
 }
 
 const JeepLayout: React.FC<JeepLayoutProps> = ({
@@ -27,6 +32,10 @@ const JeepLayout: React.FC<JeepLayoutProps> = ({
     layoutType: propLayoutType,
     date,
     departureTime,
+    completedSeats = [],
+    isCompleted = false,
+    dropoff,
+    completedAt,
 }) => {
     const { colors, isDark } = useTheme();
     const { t } = useLanguage();
@@ -42,6 +51,7 @@ const JeepLayout: React.FC<JeepLayoutProps> = ({
     const getSeatColor = (index: number) => {
         if (takenSeats.includes(index)) return '#FF5252';   // TAKEN — red
         if (pendingSeats.includes(index)) return '#F59E0B'; // PENDING — yellow
+        if (completedSeats.includes(index)) return '#9E9E9E'; // COMPLETED — grey
         if (selectedSeats.includes(index)) return colors.primary; // SELECTED — primary
         return colors.background; // FREE
     };
@@ -82,11 +92,10 @@ const JeepLayout: React.FC<JeepLayoutProps> = ({
         let currentSeat = 1;
 
         if (layoutType === 'sedan') {
-            // Row 0: Seat 1 | Aisle | Driver
+            // Row 0: Seat 1 | Driver
             rows.push(
                 <View key="row0" style={styles.seatRow}>
                     {renderSeat(1)}
-                    {renderAisle('front')}
                     {renderDriver()}
                 </View>
             );
@@ -181,54 +190,110 @@ const JeepLayout: React.FC<JeepLayoutProps> = ({
     };
 
     return (
-        <View style={[styles.layoutCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}>
-            <View style={styles.layoutHeader}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Text style={[styles.layoutTitle, { color: colors.textColor }]}>
-                        {getLayoutTitle()}
-                    </Text>
-                    {date && departureTime && (
-                        <Text style={{ fontSize: 12, color: colors.subtextColor, marginLeft: 8, fontWeight: '500' }}>
-                            • 🕒 {departureTime}  📅 {date}
-                        </Text>
-                    )}
+        <View style={[
+            styles.layoutCard, 
+            { backgroundColor: isCompleted ? '#C8F7D2' : colors.cardColor, borderColor: isCompleted ? 'transparent' : colors.borderColor }
+        ]}>
+            {isCompleted ? (
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 }}>
+                    <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#5B4FFF' }}>SUV / JEEP</Text>
+                        <Text style={{ fontSize: 10, color: '#7986A3', marginTop: 2 }}>BOOKING STATUS</Text>
+                    </View>
+                    <View style={{ flex: 1, alignItems: 'center' }}>
+                        <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(76, 175, 80, 0.2)', justifyContent: 'center', alignItems: 'center' }}>
+                            <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: '#4CAF50', justifyContent: 'center', alignItems: 'center' }}>
+                                <Icon name="checkmark-done" size={20} color="#FFF" />
+                            </View>
+                        </View>
+                    </View>
+                    <View style={{ flex: 1, alignItems: 'flex-end', gap: 8 }}>
+                        <View style={{ flexDirection: 'row', gap: 10 }}>
+                            <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#7986A3' }}>REACHED AT</Text>
+                            <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#111822' }}>{dropoff}</Text>
+                        </View>
+                        <View style={{ flexDirection: 'row', gap: 10 }}>
+                            <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#7986A3' }}>COMPLETED ON</Text>
+                            <Text style={{ fontSize: 10, color: '#111822' }}>
+                                {completedAt ? new Date(completedAt).toLocaleDateString() : (date || new Date().toLocaleDateString())}
+                            </Text>
+                        </View>
+                        <View style={{ flexDirection: 'row', gap: 10 }}>
+                            <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#7986A3' }}>FINAL TIME</Text>
+                            <Text style={{ fontSize: 10, color: '#111822' }}>
+                                {completedAt ? new Date(completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </Text>
+                        </View>
+                    </View>
                 </View>
-                {interactive && (
-                    <Text style={[styles.layoutStatus, { color: colors.primary }]}>
-                        {selectedSeats.length} {t('jeep.selected').toUpperCase()}
+            ) : (
+                <>
+                    <View style={styles.layoutHeader}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <Text style={[styles.layoutTitle, { color: colors.textColor }]}>
+                                {getLayoutTitle()}
+                            </Text>
+                            {date && departureTime && (
+                                <Text style={{ fontSize: 12, color: colors.subtextColor, marginLeft: 8, fontWeight: '500' }}>
+                                    • 🕒 {departureTime}  📅 {date}
+                                </Text>
+                            )}
+                        </View>
+                        {interactive && (
+                            <Text style={[styles.layoutStatus, { color: colors.primary }]}>
+                                {selectedSeats.length} {t('jeep.selected').toUpperCase()}
+                            </Text>
+                        )}
+                    </View>
+                    <Text style={[styles.layoutSubtitle, { color: colors.subtextColor }]}>
+                        {interactive ? t('jeep.tapToReserve') : t('jeep.status')}
                     </Text>
-                )}
-            </View>
-            <Text style={[styles.layoutSubtitle, { color: colors.subtextColor }]}>
-                {interactive ? t('jeep.tapToReserve') : t('jeep.status')}
-            </Text>
+                </>
+            )}
 
             <View style={styles.seatContainer}>
                 {renderRows()}
             </View>
 
-            <View style={styles.legendRow}>
-                <View style={styles.legendItem}>
-                    <View style={[styles.dot, { backgroundColor: colors.borderColor }]} />
-                    <Text style={[styles.legendText, { color: colors.subtextColor }]}>{t('jeep.free')}</Text>
-                </View>
-                {interactive && (
-                    <View style={styles.legendItem}>
-                        <View style={[styles.dot, { backgroundColor: colors.primary }]} />
-                        <Text style={[styles.legendText, { color: colors.subtextColor }]}>{t('jeep.pick')}</Text>
+            {isCompleted ? (
+                <View style={{ alignItems: 'center', marginTop: 10 }}>
+                    <View style={{ backgroundColor: '#FFF', paddingHorizontal: 16, paddingVertical: 4, borderRadius: 4 }}>
+                        <Text style={{ color: '#5B4FFF', fontWeight: 'bold', fontSize: 14 }}>RIDE COMPLETED</Text>
                     </View>
-                )}
-                {pendingSeats.length > 0 && (
-                    <View style={styles.legendItem}>
-                        <View style={[styles.dot, { backgroundColor: '#F59E0B' }]} />
-                        <Text style={[styles.legendText, { color: colors.subtextColor }]}>PENDING</Text>
-                    </View>
-                )}
-                <View style={styles.legendItem}>
-                    <View style={[styles.dot, { backgroundColor: '#FF5252' }]} />
-                    <Text style={[styles.legendText, { color: colors.subtextColor }]}>{t('jeep.taken')}</Text>
+                    <Text style={{ color: '#7986A3', fontSize: 10, marginTop: 4 }}>
+                        Trip to {dropoff} successfully closed
+                    </Text>
                 </View>
-            </View>
+            ) : (
+                <View style={styles.legendRow}>
+                    <View style={styles.legendItem}>
+                        <View style={[styles.dot, { backgroundColor: colors.borderColor }]} />
+                        <Text style={[styles.legendText, { color: colors.subtextColor }]}>{t('jeep.free')}</Text>
+                    </View>
+                    {interactive && (
+                        <View style={styles.legendItem}>
+                            <View style={[styles.dot, { backgroundColor: colors.primary }]} />
+                            <Text style={[styles.legendText, { color: colors.subtextColor }]}>{t('jeep.pick')}</Text>
+                        </View>
+                    )}
+                    {pendingSeats.length > 0 && (
+                        <View style={styles.legendItem}>
+                            <View style={[styles.dot, { backgroundColor: '#F59E0B' }]} />
+                            <Text style={[styles.legendText, { color: colors.subtextColor }]}>PENDING</Text>
+                        </View>
+                    )}
+                    <View style={styles.legendItem}>
+                        <View style={[styles.dot, { backgroundColor: '#FF5252' }]} />
+                        <Text style={[styles.legendText, { color: colors.subtextColor }]}>{t('jeep.taken')}</Text>
+                    </View>
+                    {completedSeats.length > 0 && (
+                        <View style={styles.legendItem}>
+                            <View style={[styles.dot, { backgroundColor: '#9E9E9E' }]} />
+                            <Text style={[styles.legendText, { color: colors.subtextColor }]}>FINISHED</Text>
+                        </View>
+                    )}
+                </View>
+            )}
         </View>
     );
 };

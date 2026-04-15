@@ -115,7 +115,7 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
                 <View style={[
                     styles.bubble,
                     isMe ?
-                        { backgroundColor: '#4285F4', borderBottomRightRadius: 4 } :
+                        { backgroundColor: colors.primary, borderBottomRightRadius: 4 } :
                         { backgroundColor: isDark ? '#2C3E50' : '#F1F3F4', borderBottomLeftRadius: 4 }
                 ]}>
                     <Text style={[styles.messageText, { color: isMe ? '#FFFFFF' : colors.textColor }]}>
@@ -142,7 +142,7 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
             {/* Header */}
-            <View style={[styles.header, { backgroundColor: '#4285F4' }]}>
+            <View style={[styles.header, { backgroundColor: colors.primary }]}>
                 <TouchableOpacity onPress={onBack} style={styles.backButton}>
                     <Text style={styles.headerIcon}>←</Text>
                 </TouchableOpacity>
@@ -155,7 +155,7 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
                         <View>
                             <Text style={styles.recipientName}>{recipientName}</Text>
                             <View style={styles.routePill}>
-                                <Text style={styles.routeText}>RH - 2847</Text>
+                                <Text style={styles.routeText}>RA-{bookingId.slice(-4).toUpperCase()}</Text>
                                 <Text style={styles.routeArrow}> 🛣️ {pickup} → {dropoff}</Text>
                             </View>
                         </View>
@@ -170,13 +170,13 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
 
             {/* Sub-header */}
             <View style={[styles.subHeader, { backgroundColor: isDark ? '#1C2939' : '#E8F0FE', borderBottomColor: colors.borderColor }]}>
-                <Text style={[styles.subHeaderText, { color: '#4285F4' }]}>
+                <Text style={[styles.subHeaderText, { color: colors.primary }]}>
                     ● {user?.role === 'driver' ? `${t('chat.passenger')}: ` : `${t('chat.driver')}: `}{recipientName}  •  {seatInfo || 'Seat 2A'}  •  Dep. {departureTime}
                 </Text>
             </View>
 
             {isLoading ? (
-                <ActivityIndicator size="large" color="#4285F4" style={{ flex: 1 }} />
+                <ActivityIndicator size="large" color={colors.primary} style={{ flex: 1 }} />
             ) : (
                 <FlatList
                     ref={flatListRef}
@@ -228,7 +228,7 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                        style={[styles.sendButton, { backgroundColor: inputText.trim() ? '#4285F4' : '#BDC3C7' }]}
+                        style={[styles.sendButton, { backgroundColor: inputText.trim() ? colors.primary : '#BDC3C7' }]}
                         onPress={() => handleSend()}
                         disabled={!inputText.trim() || isSending}>
                         <Text style={styles.sendIcon}>➔</Text>

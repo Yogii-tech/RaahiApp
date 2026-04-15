@@ -275,7 +275,7 @@ const AccountScreen: React.FC = () => {
                         <TouchableOpacity
                             style={[styles.supportOption, { borderColor: colors.borderColor }]}
                             onPress={handleSupportWhatsApp}>
-                            <Icon name="chatbubble-language-outline" size={22} color={colors.textColor} style={styles.supportOptionIcon} />
+                            <Icon name="logo-whatsapp" size={22} color="#25D366" style={styles.supportOptionIcon} />
                             <Text style={[styles.supportOptionText, { color: colors.textColor }]}>{t('account.whatsappSupport') || 'WhatsApp Support'}</Text>
                         </TouchableOpacity>
 

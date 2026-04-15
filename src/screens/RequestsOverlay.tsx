@@ -151,15 +151,15 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
                             </Text>
                         </View>
 
-                        <View style={styles.bookingIdCard}>
+                        <View style={[styles.bookingIdCard, { backgroundColor: isDark ? '#111822' : '#EEF2FF' }]}>
                             <View style={styles.bookingIdHeader}>
-                                <Text style={styles.bookingIdLabel}>{t('trips.offlineBookingId')}</Text>
+                                <Text style={[styles.bookingIdLabel, { color: isDark ? '#607D8B' : '#7986A3' }]}>{t('trips.offlineBookingId')}</Text>
                                 <View style={styles.verifiedTag}>
                                     <Text style={styles.verifiedTagText}>{t('trips.verifiedDriver')}</Text>
                                 </View>
                             </View>
                             <Text style={styles.bookingIdText}>RA-{item.id.slice(-4).toUpperCase()}</Text>
-                            <Text style={styles.bookingIdFooter}>{t('trips.showDriverOffline')}</Text>
+                            <Text style={[styles.bookingIdFooter, { color: isDark ? '#4B5C6B' : '#8A96BB' }]}>{t('trips.showDriverOffline')}</Text>
 
                             <TouchableOpacity
                                 style={[styles.chatBtn, { marginTop: 12, width: '100%' }]}
@@ -373,7 +373,6 @@ const styles = StyleSheet.create({
         opacity: 0.7,
     },
     bookingIdCard: {
-        backgroundColor: '#111822',
         borderRadius: 16,
         padding: 20,
         marginTop: 10,
@@ -385,7 +384,6 @@ const styles = StyleSheet.create({
         marginBottom: 15,
     },
     bookingIdLabel: {
-        color: '#607D8B',
         fontSize: 10,
         fontWeight: 'bold',
         letterSpacing: 0.5,

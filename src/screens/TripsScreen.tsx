@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import JeepLayout from '../components/JeepLayout';
+import SlideToComplete from '../components/SlideToComplete';
 
 import { API_BASE } from '../apiConfig';
 import { apiRequest } from '../utils/api';
@@ -55,17 +56,54 @@ const TripsScreen: React.FC = () => {
             setLoading(false);
         }
     };
+    const handleCompleteTrip = async (rideId: string) => {
+        try {
+            const response = await apiRequest(`/api/rides/${rideId}/complete`, {
+                method: 'PUT',
+            }, logout);
+            if (response.ok) {
+                Alert.alert(t('common.success') || 'Success', t('trips.tripCompleted') || 'Trip marked successfully');
+                fetchData();
+            } else {
+                const data = await response.json();
+                Alert.alert(t('common.error') || 'Error', data.error || 'Failed to complete trip');
+            }
+        } catch (err) {
+            console.error('Error completing trip:', err);
+        }
+    };
+
+    const handleCompleteBooking = async (bookingId: string) => {
+        try {
+            const response = await apiRequest(`/api/rides/bookings/${bookingId}/complete`, {
+                method: 'PUT',
+            }, logout);
+            if (response.ok) {
+                Alert.alert(t('common.success') || 'Success', 'Booking marked as completed');
+                fetchData();
+            } else {
+                const data = await response.json();
+                Alert.alert(t('common.error') || 'Error', data.error || 'Failed to complete booking');
+            }
+        } catch (err) {
+            console.error('Error completing booking:', err);
+        }
+    };
 
     const renderRequestItem = ({ item }: { item: any }) => {
         const isExpanded = expandedRideId === item.id;
+        const isCompleted = isDriver && item.status === 'completed';
+        const cardBgColor = isCompleted ? (isDark ? '#1C2939' : '#F5F5F5') : colors.cardColor;
+        const cardOpacity = isCompleted ? 0.7 : 1;
+
         return (
-            <View style={[styles.card, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}>
+            <View style={[styles.card, { backgroundColor: cardBgColor, borderColor: colors.borderColor, opacity: cardOpacity }]}>
                 <View style={styles.cardHeader}>
                     <Text style={[styles.requestTitle, { color: colors.textColor }]}>
                         {isDriver ? `${t('trips.rideTo')} ${item.dropoff}` : `${t('trips.bookingFor')} ${item.ride?.vehicleModel || 'SUV'}`}
                     </Text>
-                    <Text style={[styles.statusTag, { color: colors.primary }]}>
-                        {t(`requests.${item.status || 'pending'}`).toUpperCase()}
+                    <Text style={[styles.statusTag, { color: isCompleted ? '#4CAF50' : colors.primary, backgroundColor: isCompleted ? 'rgba(76, 175, 80, 0.1)' : 'rgba(91, 79, 255, 0.1)' }]}>
+                        {isCompleted ? 'COMPLETED' : t(`requests.${item.status || 'pending'}`).toUpperCase()}
                     </Text>
                 </View>
 
@@ -84,6 +122,10 @@ const TripsScreen: React.FC = () => {
                             {isDriver ? item.departureTime : item.ride?.departureTime}
                         </Text>
                     </View>
+                    <Text style={{ fontSize: 11, color: colors.subtextColor, marginTop: 4, fontStyle: 'italic' }}>
+                        {isDriver ? 'Posted on: ' : 'Booked on: '} 
+                        {new Date(item.createdAt).toLocaleDateString()} at {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </Text>
                     <View style={{ height: 8 }} />
                     <Text style={[styles.detailText, { color: colors.subtextColor }]}>
                         {isDriver ? `${t('trips.seatsBooked')}: ${item.seatsBooked || 0} / ${item.seatsTotal}` : `${t('trips.seatsRequested')}: ${item.seatsRequested}`}
@@ -107,23 +149,138 @@ const TripsScreen: React.FC = () => {
                         <JeepLayout
                             interactive={false}
                             selectedSeats={item.seatLayout || []}
-                            takenSeats={(item.ride?.takenSeats || []).filter((s: number) => !(item.seatLayout || []).includes(s))}
+                            takenSeats={(item.ride?.takenSeats || []).filter((s: number) => !(item.seatLayout || []).includes(s) && !(item.completedSeats || []).includes(s))}
+                            completedSeats={item.completedSeats || []}
                             totalSeats={item.ride?.seatsTotal}
                             layoutType={item.ride?.seatingLayout || 'suv'}
                         />
 
-                        {item.status === 'accepted' && (
-                            <View style={styles.bookingIdCard}>
-                                <View style={styles.bookingIdHeader}>
-                                    <Text style={styles.bookingIdLabel}>{t('trips.offlineBookingId')}</Text>
-                                    <View style={styles.verifiedTag}>
-                                        <Text style={styles.verifiedTagText}>{t('trips.verifiedDriver')}</Text>
+                        {/* Ticket Layout or Completion Receipt */}
+                        {item.status === 'completed' ? (
+                            <View style={[styles.bookingIdCard, { marginTop: 20, backgroundColor: isDark ? '#1C2939' : '#F0F4F8', borderWidth: 1, borderColor: '#4CAF50' }]}>
+                                <View style={{ alignItems: 'center', paddingVertical: 10 }}>
+                                    <View style={{ width: 50, height: 50, borderRadius: 25, backgroundColor: 'rgba(76, 175, 80, 0.1)', justifyContent: 'center', alignItems: 'center', marginBottom: 12 }}>
+                                        <Icon name="checkmark-circle" size={32} color="#4CAF50" />
+                                    </View>
+                                    <Text style={{ color: colors.textColor, fontSize: 18, fontWeight: 'bold', marginBottom: 4 }}>TRIP FINISHED</Text>
+                                    <Text style={{ color: colors.subtextColor, fontSize: 13, textAlign: 'center' }}>
+                                        You reached {item.ride?.dropoff || 'destination'} safely.
+                                    </Text>
+                                    
+                                    <View style={{ width: '100%', height: 1, backgroundColor: colors.borderColor, marginVertical: 15 }} />
+                                    
+                                    <View style={{ width: '100%', flexDirection: 'row', justifyContent: 'space-between' }}>
+                                        <View>
+                                            <Text style={{ color: colors.subtextColor, fontSize: 10, fontWeight: 'bold' }}>FINISHED ON</Text>
+                                            <Text style={{ color: colors.textColor, fontSize: 12, marginTop: 2 }}>
+                                                {item.completedAt ? new Date(item.completedAt).toLocaleDateString() : new Date().toLocaleDateString()}
+                                            </Text>
+                                        </View>
+                                        <View style={{ alignItems: 'flex-end' }}>
+                                            <Text style={{ color: colors.subtextColor, fontSize: 10, fontWeight: 'bold' }}>TIME</Text>
+                                            <Text style={{ color: colors.textColor, fontSize: 12, marginTop: 2 }}>
+                                                {item.completedAt ? new Date(item.completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                                            </Text>
+                                        </View>
                                     </View>
                                 </View>
-                                <Text style={styles.bookingIdText}>RA-{item.id.slice(-4).toUpperCase()}</Text>
-                                <Text style={styles.bookingIdFooter}>{t('trips.showDriverOffline')}</Text>
                             </View>
-                        )}
+                        ) : item.status === 'accepted' && (() => {
+                            const ticketBg = isDark ? '#111822' : '#EEF2FF';
+                            const ticketLabel = isDark ? '#607D8B' : '#7986A3';
+                            const ticketText = isDark ? '#FFFFFF' : '#222260';
+                            const ticketDash = isDark ? 'rgba(255,255,255,0.2)' : 'rgba(34,34,96,0.15)';
+                            const ticketFooter = isDark ? '#4B5C6B' : '#8A96BB';
+                            return (
+                            <View style={[styles.bookingIdCard, { marginTop: 20, backgroundColor: ticketBg }]}>
+                                {/* Ticket Layout Redesign - Row Based */}
+                                <View style={{ flexDirection: 'column', width: '100%' }}>
+
+                                    {/* Row 1: Header / Vehicle / Verification */}
+                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={{ color: ticketLabel, fontSize: 10, fontWeight: 'bold' }}>CONFIRMED E-TICKET</Text>
+                                        </View>
+                                        <View style={{ flex: 1.5, alignItems: 'center' }}>
+                                            <Text style={{ color: ticketLabel, fontSize: 10, fontWeight: 'bold', textAlign: 'center' }}>VEHICLE NUMBER</Text>
+                                            <Text style={{ color: ticketText, fontSize: 13, marginTop: 2, textAlign: 'center' }}>{item.ride?.vehicleNumber || 'Pending'}</Text>
+                                        </View>
+                                        <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                                            <View style={[styles.verifiedTag, { margin: 0 }]}>
+                                                <Text style={styles.verifiedTagText}>{t('trips.verifiedDriver')}</Text>
+                                            </View>
+                                        </View>
+                                    </View>
+
+                                    {/* Dashed Line Center */}
+                                    <View style={{ flexDirection: 'row' }}>
+                                        <View style={{ flex: 1 }} />
+                                        <View style={{ flex: 1.5 }}>
+                                            <View style={{ width: '100%', height: 1, borderStyle: 'dashed', borderColor: ticketDash, borderWidth: 1, marginVertical: 15 }} />
+                                        </View>
+                                        <View style={{ flex: 1 }} />
+                                    </View>
+
+                                    {/* Row 2: Booking Details */}
+                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <View style={{ flex: 1, paddingRight: 10 }}>
+                                            <Text style={{ color: ticketLabel, fontSize: 10, fontWeight: 'bold' }}>BOOKED ON</Text>
+                                            <Text style={{ color: ticketText, fontSize: 11, marginTop: 2 }}>{new Date(item.createdAt).toLocaleDateString()} at {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
+                                        </View>
+                                        <View style={{ flex: 1.5, alignItems: 'center' }}>
+                                            <Text style={{ color: ticketLabel, fontSize: 10, fontWeight: 'bold' }}>BOOKING REF</Text>
+                                            <Text style={{ color: '#4CAF50', fontSize: 14, marginTop: 2, fontWeight: 'bold', letterSpacing: 1 }}>RA-{item.id.slice(-4).toUpperCase()}</Text>
+                                        </View>
+                                        <View style={{ flex: 1, alignItems: 'flex-end', paddingLeft: 10 }}>
+                                            <Text style={{ color: ticketLabel, fontSize: 10, fontWeight: 'bold' }}>JOURNEY DATE & TIME</Text>
+                                            <Text style={{ color: ticketText, fontSize: 11, marginTop: 2, textAlign: 'right' }}>{item.ride?.date} at {item.ride?.departureTime}</Text>
+                                        </View>
+                                    </View>
+
+                                    {/* Row 3: Places and Arrow */}
+                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 15 }}>
+                                        <View style={{ flex: 1, paddingRight: 10 }}>
+                                            <Text style={{ color: ticketLabel, fontSize: 10, fontWeight: 'bold' }}>FROM</Text>
+                                            <Text style={{ color: ticketText, fontSize: 13, marginTop: 2 }} numberOfLines={2}>{item.ride?.pickup}</Text>
+                                        </View>
+                                        <View style={{ flex: 1.5, alignItems: 'center' }}>
+                                            <Text style={{ fontSize: 9, color: ticketLabel, marginBottom: 2 }}>~ 45 km</Text>
+                                            <Text style={{ color: '#4CAF50', fontSize: 16 }}>➔</Text>
+                                        </View>
+                                        <View style={{ flex: 1, alignItems: 'flex-end', paddingLeft: 10 }}>
+                                            <Text style={{ color: ticketLabel, fontSize: 10, fontWeight: 'bold' }}>TO</Text>
+                                            <Text style={{ color: ticketText, fontSize: 13, marginTop: 2, textAlign: 'right' }} numberOfLines={2}>{item.ride?.dropoff}</Text>
+                                        </View>
+                                    </View>
+
+                                    {/* Row 4: Seat No */}
+                                    <View style={{ flexDirection: 'row', marginTop: 15 }}>
+                                        <View style={{ flex: 1 }} />
+                                        <View style={{ flex: 1.5, alignItems: 'center' }}>
+                                            <Text style={{ color: ticketLabel, fontSize: 10, fontWeight: 'bold' }}>SEAT NO(S)</Text>
+                                            <Text style={{ color: ticketText, fontSize: 13, marginTop: 2 }}>
+                                                {item.seatLayout && item.seatLayout.length > 0 ? item.seatLayout.join(', ') : item.seatsRequested}
+                                            </Text>
+                                        </View>
+                                        <View style={{ flex: 1 }} />
+                                    </View>
+
+                                    {/* Footer Dashed Line & Text Row */}
+                                    <View style={{ flexDirection: 'row', marginTop: 15 }}>
+                                        <View style={{ flex: 1 }} />
+                                        <View style={{ flex: 1.5, alignItems: 'center' }}>
+                                            <View style={{ width: '100%', height: 1, borderStyle: 'dashed', borderColor: ticketDash, borderWidth: 1, marginBottom: 15 }} />
+                                            <Text style={{ color: ticketFooter, fontSize: 9, fontWeight: 'bold', textAlign: 'center', letterSpacing: 1 }}>
+                                                SHOW THIS E-TICKET TO YOUR DRIVER
+                                            </Text>
+                                        </View>
+                                        <View style={{ flex: 1 }} />
+                                    </View>
+
+                                </View>
+                            </View>
+                            );
+                        })()}
                     </View>
                 )}
 
@@ -131,14 +288,63 @@ const TripsScreen: React.FC = () => {
                     <View style={{ marginTop: 20 }}>
                         <JeepLayout
                             interactive={false}
-                            takenSeats={item.takenSeats?.filter((s: number) =>
-                                // accepted bookings' seats only
-                                (item.acceptedSeats || item.takenSeats || []).includes(s)
-                            ) || []}
+                            takenSeats={item.acceptedSeats?.filter((s: number) => !item.completedSeats?.includes(s)) || []}
+                            completedSeats={item.completedSeats || []}
                             pendingSeats={item.pendingSeats || []}
                             totalSeats={item.seatsTotal}
                             layoutType={item.seatingLayout || 'suv'}
+                            isCompleted={isCompleted}
+                            dropoff={item.dropoff}
+                            completedAt={item.completedAt}
+                            date={item.date}
                         />
+                        
+                        {/* List of active bookings for completion */}
+                        {!isCompleted && item.bookings && item.bookings.length > 0 && (
+                            <View style={{ marginTop: 20 }}>
+                                <Text style={{ color: colors.textColor, fontSize: 14, fontWeight: 'bold', marginBottom: 12 }}>MANAGE PASSENGERS</Text>
+                                {item.bookings.map((booking: any) => (
+                                    <View key={booking.id} style={{ 
+                                        backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
+                                        borderRadius: 12,
+                                        padding: 12,
+                                        marginBottom: 10,
+                                        flexDirection: 'row',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        borderWidth: 1,
+                                        borderColor: booking.status === 'completed' ? '#4CAF50' : colors.borderColor
+                                    }}>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={{ color: colors.textColor, fontWeight: 'bold', fontSize: 13 }}>Pass. RA-{booking.id.slice(-4).toUpperCase()}</Text>
+                                            <Text style={{ color: colors.subtextColor, fontSize: 11 }}>Seats: {booking.seatLayout?.join(', ')}</Text>
+                                        </View>
+                                        {booking.status === 'accepted' ? (
+                                            <TouchableOpacity 
+                                                onPress={() => handleCompleteBooking(booking.id)}
+                                                style={{ backgroundColor: colors.primary, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}
+                                            >
+                                                <Text style={{ color: '#FFF', fontSize: 10, fontWeight: 'bold' }}>MARK COMPLETED</Text>
+                                            </TouchableOpacity>
+                                        ) : booking.status === 'completed' ? (
+                                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                                <Icon name="checkmark-circle" size={16} color="#4CAF50" />
+                                                <Text style={{ color: '#4CAF50', fontSize: 10, fontWeight: 'bold', marginLeft: 4 }}>FINISHED</Text>
+                                            </View>
+                                        ) : null}
+                                    </View>
+                                ))}
+                            </View>
+                        )}
+
+                        {!isCompleted && (
+                            <View style={{ marginTop: 20 }}>
+                                <SlideToComplete 
+                                    title="Finish the ride"
+                                    onComplete={() => handleCompleteTrip(item.id)}
+                                />
+                            </View>
+                        )}
                     </View>
                 )}
             </View>
@@ -255,7 +461,6 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
     },
     bookingIdCard: {
-        backgroundColor: '#111822',
         borderRadius: 16,
         padding: 20,
         marginTop: 20,
