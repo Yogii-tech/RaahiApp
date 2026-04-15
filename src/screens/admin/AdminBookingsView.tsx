@@ -8,6 +8,7 @@ interface Booking {
     passengerName: string;
     status: string;
     driverName: string;
+    ride: string;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -39,6 +40,7 @@ export default function AdminBookingsView({ token }: { token: string }) {
             <Text style={[styles.headerCell, { flex: 1 }]}>ID</Text>
             <Text style={[styles.headerCell, { flex: 2 }]}>PASSENGER</Text>
             <Text style={[styles.headerCell, { flex: 2 }]}>STATUS</Text>
+            <Text style={[styles.headerCell, { flex: 2 }]}>RIDE</Text>
             <Text style={[styles.headerCell, { flex: 2 }]}>DRIVER</Text>
         </View>
     );
@@ -55,9 +57,12 @@ export default function AdminBookingsView({ token }: { token: string }) {
                         <Text style={[styles.statusText, { color: statusColor }]}>{item.status}</Text>
                     </View>
                 </View>
-                <View style={[styles.driverPill, { flex: 2 }]}>
-                    <Text style={styles.driverText}>{item.driverName || 'Assign...'}</Text>
-                    <Text style={styles.dropdownArrow}> ▾</Text>
+                <Text style={[styles.cell, { flex: 2, fontSize: 13, color: '#9CA3AF' }]} numberOfLines={1}>{item.ride || '—'}</Text>
+                <View style={{ flex: 2, flexDirection: 'row', alignItems: 'center' }}>
+                    <Text style={[styles.cell, { color: item.driverName ? '#E5E7EB' : '#6B7280' }]}>
+                        {item.driverName || 'Assign...'}
+                    </Text>
+                    {!item.driverName && <Text style={{ color: '#6B7280', fontSize: 12 }}> ▾</Text>}
                 </View>
             </View>
         );
@@ -68,7 +73,7 @@ export default function AdminBookingsView({ token }: { token: string }) {
             <Text style={styles.sectionLabel}>MANAGEMENT HUB</Text>
             <View style={styles.tableCard}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ minWidth: '100%' }}>
-                    <View style={{ minWidth: 600, flex: 1 }}>
+                    <View style={{ minWidth: 800, flex: 1 }}>
                         {renderHeader()}
                         <FlatList
                             data={bookings}

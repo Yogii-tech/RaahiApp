@@ -42,7 +42,6 @@ export default function AdminDashboardScreen() {
     const { token, user, logout } = useAuth();
     const [activeView, setActiveView] = useState<AdminView>('dashboard');
     const [isDark, setIsDark] = useState(true);
-    const [pendingCount] = useState(5);
     const { width } = useWindowDimensions();
     const isMobile = width < 768;
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -120,11 +119,6 @@ export default function AdminDashboardScreen() {
                                 <Text style={[styles.navLabel, { color: isActive ? '#FFFFFF' : T.text }]}>
                                     {item.label}
                                 </Text>
-                                {item.id === 'bookings' && pendingCount > 0 && (
-                                    <View style={styles.badge}>
-                                        <Text style={styles.badgeText}>{pendingCount}</Text>
-                                    </View>
-                                )}
                             </TouchableOpacity>
                         );
                     })}
