@@ -65,11 +65,13 @@ function AppHeader({ onToggleNotifications, notificationCount = 0 }: { onToggleN
         },
       ]}>
       {/* Logo */}
-      <Image
-        source={require('./src/assets/raahi_logo.png')}
-        style={headerStyles.logo}
-        resizeMode="contain"
-      />
+      <View style={headerStyles.logoContainer}>
+        <Image
+          source={require('./src/assets/logo_brand.png')}
+          style={headerStyles.logo}
+          resizeMode="contain"
+        />
+      </View>
       <Text style={[headerStyles.title, { color: colors.primary }]}>
         Raahi
       </Text>
@@ -82,28 +84,28 @@ function AppHeader({ onToggleNotifications, notificationCount = 0 }: { onToggleN
         style={[
           headerStyles.themeButton,
           {
-            borderColor: isDark ? '#222260' : '#5B4FFF',
-            backgroundColor: isDark ? '#1E1E1E' : '#FFFFFF',
+            backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(91, 79, 255, 0.05)',
+            borderColor: 'transparent',
           },
         ]}
         activeOpacity={0.7}>
-        <Icon name={isDark ? 'sunny' : 'moon'} size={20} color={isDark ? '#FBC02D' : '#000000'} />
+        <Icon name={isDark ? 'sunny-outline' : 'moon-outline'} size={22} color={isDark ? '#FBC02D' : '#5B4FFF'} />
       </TouchableOpacity>
 
       {/* Notification Bell */}
-      <View style={headerStyles.gap} />
+      <View style={{ width: 10 }} />
       <TouchableOpacity
         onPress={onToggleNotifications}
         style={[
           headerStyles.themeButton,
           {
-            borderColor: isDark ? '#222260' : '#5B4FFF',
-            backgroundColor: isDark ? '#1E1E1E' : '#FFFFFF',
+            backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(91, 79, 255, 0.05)',
+            borderColor: 'transparent',
           },
         ]}
         activeOpacity={0.7}>
         <View>
-          <Icon name="notifications" size={20} color="#FBC02D" />
+          <Icon name="notifications-outline" size={22} color={isDark ? '#FBC02D' : '#5B4FFF'} />
           {notificationCount > 0 && (
             <View style={headerStyles.badge}>
               <Text style={headerStyles.badgeText}>{notificationCount}</Text>
@@ -120,30 +122,36 @@ const headerStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingBottom: 16,
+  },
+  logoContainer: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: 'transparent',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   logo: {
-    width: 40,
-    height: 40,
+    width: 42,
+    height: 42,
   },
   title: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginLeft: 12,
+    fontSize: 24,
+    fontWeight: '700',
+    marginLeft: 10,
+    letterSpacing: -0.5,
   },
   spacer: {
     flex: 1,
   },
   themeButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    borderWidth: 2,
-    backgroundColor: '#FFFFFF',
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 1.5,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.12,
     shadowRadius: 8,
     elevation: 3,

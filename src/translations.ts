@@ -17,6 +17,7 @@ export const translations = {
     'common.error': 'Error occurred',
     'common.yes': 'Yes',
     'common.no': 'No',
+    'common.chooseAction': 'Choose how you want to reach us',
 
     // Login Screen
     'login.welcome': 'Welcome. Log in to continue.',
@@ -208,6 +209,8 @@ export const translations = {
     'account.languageModalTitle': 'Select Language',
     'account.logoutTitle': 'Logout',
     'account.logoutConfirm': 'Are you sure you want to log out?',
+    'account.callSupport': 'Call Support',
+    'account.whatsappSupport': 'WhatsApp Support',
     'account.noNumber': 'No number',
 
     // Trusted Contacts
@@ -319,6 +322,7 @@ export const translations = {
     'common.error': 'त्रुटि हुई',
     'common.yes': 'हाँ',
     'common.no': 'नहीं',
+    'common.chooseAction': 'चुनें कि आप हम तक कैसे पहुँचना चाहते हैं',
 
     // Login Screen
     'login.welcome': 'नमस्ते। जारी रखने के लिए लॉग इन करें।',
@@ -509,6 +513,8 @@ export const translations = {
     'account.languageModalTitle': 'भाषा चुनें',
     'account.logoutTitle': 'लॉग आउट',
     'account.logoutConfirm': 'क्या आप वाकई लॉग आउट करना चाहते हैं?',
+    'account.callSupport': 'सहायता को कॉल करें',
+    'account.whatsappSupport': 'WhatsApp सहायता',
     'account.noNumber': 'कोई नंबर नहीं',
 
     // Trusted Contacts

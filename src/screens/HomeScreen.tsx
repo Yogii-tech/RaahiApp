@@ -138,9 +138,13 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
                 setDepartureTime('');
                 setShowPostSuccess(true);
                 fetchRecentRides(); // Refresh recent list
+            } else {
+                const data = await response.json();
+                Alert.alert(t('common.error'), data.error || 'Failed to post ride');
             }
         } catch (err) {
             console.error('Post ride error:', err);
+            Alert.alert(t('common.error'), t('login.connectionError'));
         }
     };
 
