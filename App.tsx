@@ -203,6 +203,7 @@ const headerStyles = StyleSheet.create({
 const tabIcons: Record<string, { default: string; focused: string }> = {
   Home: { default: 'home-outline', focused: 'home' },
   Trips: { default: 'car-sport-outline', focused: 'car-sport' },
+  ParcelTrips: { default: 'cube-outline', focused: 'cube' },
   SOS: { default: 'warning-outline', focused: 'warning' },
   Account: { default: 'person-outline', focused: 'person' },
 };
@@ -216,6 +217,7 @@ function MainTabs() {
   const [notificationsVisible, setNotificationsVisible] = useState(false);
   const [notificationCount, setNotificationCount] = useState(0);
   const [activeChat, setActiveChat] = useState<any>(null);
+  const [parcelMode, setParcelMode] = useState(false);
   const insets = useSafeAreaInsets();
 
   const isDriver = user?.role === 'driver';
@@ -278,7 +280,8 @@ function MainTabs() {
         screenOptions={({ route }) => ({
           headerShown: false,
           tabBarIcon: ({ focused }) => {
-            const icon = tabIcons[route.name];
+            const isParcel = route.name === 'Trips' && (user?.role === 'parceller' || parcelMode);
+            const icon = isParcel ? tabIcons.ParcelTrips : tabIcons[route.name];
             return (
               <View style={route.name === 'SOS' ? tabStyles.sosIconContainer : null}>
                 <Icon
@@ -300,8 +303,14 @@ function MainTabs() {
           },
         })}
       >
-        <Tab.Screen name="Home" component={HomeScreen} options={{ title: t('tab.home') }} />
-        <Tab.Screen name="Trips" component={TripsScreen} options={{ title: t('tab.trips') }} />
+        <Tab.Screen name="Home">
+          {props => <HomeScreen {...props} setParcelMode={setParcelMode} />}
+        </Tab.Screen>
+        <Tab.Screen 
+          name="Trips" 
+          component={TripsScreen} 
+          options={{ title: (user?.role === 'parceller' || parcelMode) ? t('tab.trackPackage') : t('tab.trips') }} 
+        />
         <Tab.Screen
           name="SOS"
           component={SosScreenTab}
