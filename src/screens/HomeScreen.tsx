@@ -18,9 +18,11 @@ import Icon from 'react-native-vector-icons/Ionicons';
 
 import AvailableRidesScreen from './AvailableRidesScreen';
 import BookRideScreen from './BookRideScreen';
+import ParcelBookingView from './ParcelBookingView';
 
 interface HomeScreenProps {
     onSosPressed?: () => void;
+    setParcelMode?: (mode: boolean) => void;
 }
 
 interface Ride {
@@ -38,7 +40,7 @@ interface Ride {
 
 import { API_BASE } from '../apiConfig';
 
-const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
+const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) => {
     const { isDark, colors } = useTheme();
     const { token, user, logout } = useAuth();
     const { t } = useLanguage();
@@ -149,6 +151,21 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
     };
 
     const isDriver = user?.role === 'driver';
+    const isParceller = user?.role === 'parceller';
+
+    if (isParceller || view === 'parcel') {
+        return <ParcelBookingView onBack={() => {
+            if (isParceller) {
+                // If they are a parceller role, maybe logout or switch role? 
+                // But for now, just stay on home if they are parceller role.
+                setView('home');
+                if (setParcelMode) setParcelMode(false);
+            } else {
+                setView('home');
+                if (setParcelMode) setParcelMode(false);
+            }
+        }} />;
+    }
 
     if (view === 'available') {
         return (
@@ -394,23 +411,28 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
                     </Text>
                 </View>
 
-                <View
+                <TouchableOpacity
                     style={[
                         styles.whyCard,
                         {
                             backgroundColor: isDark ? colors.cardColor : '#F8F9FF',
                             borderColor: colors.borderColor,
                         },
-                    ]}>
-                    <Icon name="people-outline" size={28} color={colors.accentColor} />
+                    ]}
+                    onPress={() => {
+                        setView('parcel');
+                        if (setParcelMode) setParcelMode(true);
+                    }}
+                    activeOpacity={0.8}>
+                    <Icon name="cube-outline" size={28} color={colors.accentColor} />
                     <View style={styles.spacer8} />
                     <Text style={[styles.whyTitle, { color: colors.textColor }]}>
-                        {t('home.shareSave')}
+                        {t('login.iAmParceller')}
                     </Text>
                     <Text style={[styles.whyDesc, { color: colors.subtextColor }]}>
-                        {t('home.splitCosts')}
+                        {t('login.shipGoods')}
                     </Text>
-                </View>
+                </TouchableOpacity>
             </View>
 
             <View style={styles.spacer24} />

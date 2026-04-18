@@ -187,9 +187,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
         setStep('role');
     };
 
-    const handleRoleSelect = (role: 'passenger' | 'driver') => {
-        if (role === 'passenger') {
-            handleCompleteRegistration('passenger');
+    const handleRoleSelect = (role: 'passenger' | 'driver' | 'parceller') => {
+        if (role === 'passenger' || role === 'parceller') {
+            handleCompleteRegistration(role);
         } else {
             setStep('vehicle');
         }
@@ -237,7 +237,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
         }
     };
 
-    const handleCompleteRegistration = async (role: 'passenger' | 'driver') => {
+    const handleCompleteRegistration = async (role: 'passenger' | 'driver' | 'parceller') => {
         const activeToken = tempToken || token;
 
         if (role === 'driver') {
@@ -458,7 +458,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
 
                         <TouchableOpacity
                             style={[styles.roleCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}
-                            onPress={() => Alert.alert(t('login.iAmParceller'), "Coming Soon!")}>
+                            onPress={() => handleRoleSelect('parceller')}>
                             <Text style={styles.roleEmoji}>📦</Text>
                             <View style={styles.roleInfo}>
                                 <Text style={[styles.roleLabel, { color: colors.textColor }]}>{t('login.iAmParceller')}</Text>
