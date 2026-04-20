@@ -57,6 +57,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
         return `${dd}/${mm}/${yyyy}`;
     });
     const [departureTime, setDepartureTime] = useState('');
+    const [timePeriod, setTimePeriod] = useState<'AM' | 'PM'>('AM');
     const [showCalendar, setShowCalendar] = useState(false);
     const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
     const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
@@ -114,13 +115,43 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
         if (!pickup.trim() || !dropoff.trim()) return;
 
         try {
+            const finalTime = departureTime.trim().toUpperCase().includes('AM') || departureTime.trim().toUpperCase().includes('PM') 
+                ? departureTime.trim() 
+                : `${departureTime.trim()} ${timePeriod}`;
+
+            // Time Validation
+            const today = new Date();
+            const dd = String(today.getDate()).padStart(2, '0');
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const yyyy = today.getFullYear();
+            const currentDateStr = `${dd}/${mm}/${yyyy}`;
+
+            if (date.trim() === currentDateStr) {
+                // Parse time
+                const timeParts = finalTime.split(' ');
+                const timePart = timeParts[0];
+                const period = timeParts[1] || timePeriod;
+                
+                let [hours, minutes] = timePart.split(':').map(Number);
+                if (period.toUpperCase() === 'PM' && hours !== 12) hours += 12;
+                if (period.toUpperCase() === 'AM' && hours === 12) hours = 0;
+
+                const selectedTotalMinutes = hours * 60 + (minutes || 0);
+                const currentTotalMinutes = today.getHours() * 60 + today.getMinutes();
+
+                if (selectedTotalMinutes < currentTotalMinutes) {
+                    Alert.alert(t('common.error'), 'Cannot post a ride for a past time today.');
+                    return;
+                }
+            }
+
             const response = await apiRequest('/api/rides/create', {
                 method: 'POST',
                 body: JSON.stringify({
                     pickup: pickup.trim(),
                     dropoff: dropoff.trim(),
                     date: date.trim(),
-                    departureTime: departureTime.trim(),
+                    departureTime: finalTime,
                     vehicleModel: user?.vehicle?.vehicle_name || "Mountain SUV",
                     vehicleNumber: user?.vehicle?.vehicle_number || "UK07-AX-4421",
                     seatsTotal: user?.vehicle?.seats || 5,
@@ -260,42 +291,53 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                     placeholderTextColor={colors.subtextColor}
                 />
 
-                {isDriver && (
-                    <>
-                        <View style={styles.spacer14} />
-                        <View style={styles.row}>
-                            <View style={{ flex: 1 }}>
-                                <Text style={[styles.fieldLabel, { color: colors.primary }]}>
-                                    {t('home.rideDate').toUpperCase()}
-                                </Text>
-                                <View style={styles.spacer6} />
-                                <TouchableOpacity
-                                    onPress={() => setShowCalendar(true)}
-                                    activeOpacity={0.8}
-                                    style={[styles.textInput, styles.datePickerButton, { backgroundColor: colors.inputFillColor, borderColor: date ? colors.primary : colors.inputBorderColor }]}>
-                                    <Text style={[styles.datePickerText, { color: date ? colors.textColor : (isDark ? 'rgba(255,255,255,0.3)' : 'rgba(34,34,96,0.35)') }]}>
-                                        {date || t('home.datePlaceholder')}
-                                    </Text>
-                                    <Icon name="calendar-outline" size={20} color={colors.primary} />
+                <View style={styles.spacer14} />
+                <View style={styles.row}>
+                    <View style={{ flex: 1 }}>
+                        <Text style={[styles.fieldLabel, { color: colors.primary }]}>
+                            {t('home.rideDate').toUpperCase()}
+                        </Text>
+                        <View style={styles.spacer6} />
+                        <TouchableOpacity
+                            onPress={() => setShowCalendar(true)}
+                            activeOpacity={0.8}
+                            style={[styles.textInput, styles.datePickerButton, { backgroundColor: colors.inputFillColor, borderColor: date ? colors.primary : colors.inputBorderColor }]}>
+                            <Text style={[styles.datePickerText, { color: date ? colors.textColor : (isDark ? 'rgba(255,255,255,0.3)' : 'rgba(34,34,96,0.35)') }]}>
+                                {date || t('home.datePlaceholder')}
+                            </Text>
+                            <Icon name="calendar-outline" size={20} color={colors.primary} />
+                        </TouchableOpacity>
+                    </View>
+                    <View style={{ width: 12 }} />
+                    <View style={{ flex: 1 }}>
+                        <Text style={[styles.fieldLabel, { color: colors.primary }]}>
+                            {t('home.departureTime').toUpperCase()}
+                        </Text>
+                        <View style={styles.spacer6} />
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <TextInput
+                                style={[styles.textInput, { flex: 1, backgroundColor: colors.inputFillColor, color: colors.textColor, borderColor: colors.inputBorderColor, height: 50 }]}
+                                placeholder="08:00"
+                                placeholderTextColor={isDark ? 'rgba(255,255,255,0.24)' : 'rgba(34,34,96,0.3)'}
+                                value={departureTime}
+                                onChangeText={setDepartureTime}
+                                keyboardType="numbers-and-punctuation"
+                            />
+                            <View style={{ flexDirection: 'column', width: 44, height: 50, borderRadius: 8, borderWidth: 1, borderColor: colors.inputBorderColor, overflow: 'hidden', marginLeft: 8 }}>
+                                <TouchableOpacity 
+                                    onPress={() => setTimePeriod('AM')}
+                                    style={[{ flex: 1, justifyContent: 'center', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.inputBorderColor }, timePeriod === 'AM' ? { backgroundColor: isDark ? 'rgba(91, 79, 255, 0.3)' : '#EADDFF' } : { backgroundColor: isDark ? 'transparent' : '#FFF' }]}>
+                                    <Text style={{ fontSize: 11, fontWeight: 'bold', color: timePeriod === 'AM' ? (isDark ? '#FFF' : '#381E72') : colors.subtextColor }}>AM</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity 
+                                    onPress={() => setTimePeriod('PM')}
+                                    style={[{ flex: 1, justifyContent: 'center', alignItems: 'center' }, timePeriod === 'PM' ? { backgroundColor: isDark ? 'rgba(91, 79, 255, 0.3)' : '#EADDFF' } : { backgroundColor: isDark ? 'transparent' : '#FFF' }]}>
+                                    <Text style={{ fontSize: 11, fontWeight: 'bold', color: timePeriod === 'PM' ? (isDark ? '#FFF' : '#381E72') : colors.subtextColor }}>PM</Text>
                                 </TouchableOpacity>
                             </View>
-                            <View style={{ width: 12 }} />
-                            <View style={{ flex: 1 }}>
-                                <Text style={[styles.fieldLabel, { color: colors.primary }]}>
-                                    {t('home.departureTime').toUpperCase()}
-                                </Text>
-                                <View style={styles.spacer6} />
-                                <TextInput
-                                    style={[styles.textInput, { backgroundColor: colors.inputFillColor, color: colors.textColor, borderColor: colors.inputBorderColor }]}
-                                    placeholder={t('home.departureTimePlaceholder')}
-                                    placeholderTextColor={isDark ? 'rgba(255,255,255,0.24)' : 'rgba(34,34,96,0.3)'}
-                                    value={departureTime}
-                                    onChangeText={setDepartureTime}
-                                />
-                            </View>
                         </View>
-                    </>
-                )}
+                    </View>
+                </View>
 
                 <View style={styles.spacer18} />
 
@@ -448,6 +490,10 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                         {/* Calendar Header */}
                         <View style={styles.calendarHeader}>
                             <TouchableOpacity onPress={() => {
+                                const current = new Date();
+                                if (calendarYear < current.getFullYear() || (calendarYear === current.getFullYear() && calendarMonth <= current.getMonth())) {
+                                    return; // Prevent navigating to past months
+                                }
                                 if (calendarMonth === 0) {
                                     setCalendarMonth(11);
                                     setCalendarYear(calendarYear - 1);
@@ -486,16 +532,20 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                             ))}
                             {Array.from({ length: new Date(calendarYear, calendarMonth + 1, 0).getDate() }).map((_, i) => {
                                 const day = i + 1;
-                                const isToday = day === new Date().getDate() && calendarMonth === new Date().getMonth() && calendarYear === new Date().getFullYear();
+                                const current = new Date();
+                                const isToday = day === current.getDate() && calendarMonth === current.getMonth() && calendarYear === current.getFullYear();
                                 const isSelected = date === `${day < 10 ? '0' : ''}${day}/${calendarMonth + 1 < 10 ? '0' : ''}${calendarMonth + 1}/${calendarYear}`;
+                                const isPast = new Date(calendarYear, calendarMonth, day) < new Date(current.getFullYear(), current.getMonth(), current.getDate());
 
                                 return (
                                     <TouchableOpacity
                                         key={`day-${day}`}
+                                        disabled={isPast}
                                         style={[
                                             styles.calendarDay,
                                             isToday && { backgroundColor: 'rgba(31, 175, 99, 0.15)' },
-                                            isSelected && { backgroundColor: colors.primary, borderRadius: 8 }
+                                            isSelected && { backgroundColor: colors.primary, borderRadius: 8 },
+                                            isPast && { opacity: 0.3 }
                                         ]}
                                         onPress={() => {
                                             const formattedDate = `${day < 10 ? '0' : ''}${day}/${calendarMonth + 1 < 10 ? '0' : ''}${calendarMonth + 1}/${calendarYear}`;
