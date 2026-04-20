@@ -125,19 +125,19 @@ const headerStyles = StyleSheet.create({
     paddingBottom: 16,
   },
   logoContainer: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
+    width: 60,
+    height: 60,
+    borderRadius: 50,
     backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
   },
   logo: {
-    width: 42,
-    height: 42,
+    width: 100,
+    height: 100,
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: '700',
     marginLeft: 10,
     letterSpacing: -0.5,
@@ -306,10 +306,10 @@ function MainTabs() {
         <Tab.Screen name="Home">
           {props => <HomeScreen {...props} setParcelMode={setParcelMode} />}
         </Tab.Screen>
-        <Tab.Screen 
-          name="Trips" 
-          component={TripsScreen} 
-          options={{ title: (user?.role === 'parceller' || parcelMode) ? t('tab.trackPackage') : t('tab.trips') }} 
+        <Tab.Screen
+          name="Trips"
+          component={TripsScreen}
+          options={{ title: (user?.role === 'parceller' || parcelMode) ? t('tab.trackPackage') : t('tab.trips') }}
         />
         <Tab.Screen
           name="SOS"

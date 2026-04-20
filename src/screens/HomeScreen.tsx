@@ -57,8 +57,9 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
         return `${dd}/${mm}/${yyyy}`;
     });
     const [departureTime, setDepartureTime] = useState('');
-    const [timePeriod, setTimePeriod] = useState<'AM' | 'PM'>('AM');
+    const [timePeriod, setTimePeriod] = useState<'AM' | 'PM' | ''>('');
     const [showCalendar, setShowCalendar] = useState(false);
+    const [showTimePeriodDropdown, setShowTimePeriodDropdown] = useState(false);
     const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
     const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
     const [recentRides, setRecentRides] = useState<any[]>([]);
@@ -113,10 +114,14 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
 
     const handlePostRide = async () => {
         if (!pickup.trim() || !dropoff.trim()) return;
+        if (!timePeriod) {
+            Alert.alert(t('common.error'), 'Please select AM or PM for your departure time.');
+            return;
+        }
 
         try {
-            const finalTime = departureTime.trim().toUpperCase().includes('AM') || departureTime.trim().toUpperCase().includes('PM') 
-                ? departureTime.trim() 
+            const finalTime = departureTime.trim().toUpperCase().includes('AM') || departureTime.trim().toUpperCase().includes('PM')
+                ? departureTime.trim()
                 : `${departureTime.trim()} ${timePeriod}`;
 
             // Time Validation
@@ -131,7 +136,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                 const timeParts = finalTime.split(' ');
                 const timePart = timeParts[0];
                 const period = timeParts[1] || timePeriod;
-                
+
                 let [hours, minutes] = timePart.split(':').map(Number);
                 if (period.toUpperCase() === 'PM' && hours !== 12) hours += 12;
                 if (period.toUpperCase() === 'AM' && hours === 12) hours = 0;
@@ -292,7 +297,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                 />
 
                 <View style={styles.spacer14} />
-                <View style={styles.row}>
+                <View style={{ flexDirection: 'row', zIndex: 10, elevation: 10 }}>
                     <View style={{ flex: 1 }}>
                         <Text style={[styles.fieldLabel, { color: colors.primary }]}>
                             {t('home.rideDate').toUpperCase()}
@@ -308,35 +313,65 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                             <Icon name="calendar-outline" size={20} color={colors.primary} />
                         </TouchableOpacity>
                     </View>
-                    <View style={{ width: 12 }} />
-                    <View style={{ flex: 1 }}>
-                        <Text style={[styles.fieldLabel, { color: colors.primary }]}>
-                            {t('home.departureTime').toUpperCase()}
-                        </Text>
-                        <View style={styles.spacer6} />
-                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                            <TextInput
-                                style={[styles.textInput, { flex: 1, backgroundColor: colors.inputFillColor, color: colors.textColor, borderColor: colors.inputBorderColor, height: 50 }]}
-                                placeholder="08:00"
-                                placeholderTextColor={isDark ? 'rgba(255,255,255,0.24)' : 'rgba(34,34,96,0.3)'}
-                                value={departureTime}
-                                onChangeText={setDepartureTime}
-                                keyboardType="numbers-and-punctuation"
-                            />
-                            <View style={{ flexDirection: 'column', width: 44, height: 50, borderRadius: 8, borderWidth: 1, borderColor: colors.inputBorderColor, overflow: 'hidden', marginLeft: 8 }}>
-                                <TouchableOpacity 
-                                    onPress={() => setTimePeriod('AM')}
-                                    style={[{ flex: 1, justifyContent: 'center', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.inputBorderColor }, timePeriod === 'AM' ? { backgroundColor: isDark ? 'rgba(91, 79, 255, 0.3)' : '#EADDFF' } : { backgroundColor: isDark ? 'transparent' : '#FFF' }]}>
-                                    <Text style={{ fontSize: 11, fontWeight: 'bold', color: timePeriod === 'AM' ? (isDark ? '#FFF' : '#381E72') : colors.subtextColor }}>AM</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity 
-                                    onPress={() => setTimePeriod('PM')}
-                                    style={[{ flex: 1, justifyContent: 'center', alignItems: 'center' }, timePeriod === 'PM' ? { backgroundColor: isDark ? 'rgba(91, 79, 255, 0.3)' : '#EADDFF' } : { backgroundColor: isDark ? 'transparent' : '#FFF' }]}>
-                                    <Text style={{ fontSize: 11, fontWeight: 'bold', color: timePeriod === 'PM' ? (isDark ? '#FFF' : '#381E72') : colors.subtextColor }}>PM</Text>
-                                </TouchableOpacity>
+
+                    {isDriver && (
+                        <>
+                            <View style={{ width: 12 }} />
+                            <View style={{ flex: 1, zIndex: 11, elevation: 11 }}>
+                                <Text style={[styles.fieldLabel, { color: colors.primary }]}>
+                                    {t('home.departureTime').toUpperCase()}
+                                </Text>
+                                <View style={styles.spacer6} />
+                                <View style={[styles.unifiedInput, { backgroundColor: colors.inputFillColor, borderColor: colors.inputBorderColor, position: 'relative', zIndex: 1000 }]}>
+                                    <TextInput
+                                        style={[styles.flexInput, { color: colors.textColor }]}
+                                        placeholder="08:00"
+                                        placeholderTextColor={isDark ? 'rgba(255,255,255,0.24)' : 'rgba(34,34,96,0.3)'}
+                                        value={departureTime}
+                                        onChangeText={setDepartureTime}
+                                        keyboardType="numbers-and-punctuation"
+                                    />
+                                    <View style={[styles.verticalSeparator, { backgroundColor: colors.borderColor }]} />
+                                    <TouchableOpacity
+                                        onPress={() => setShowTimePeriodDropdown(!showTimePeriodDropdown)}
+                                        activeOpacity={0.7}
+                                        style={styles.periodDropdownUnified}>
+                                        <Text style={{ fontSize: 13, fontWeight: 'bold', color: timePeriod ? colors.textColor : colors.subtextColor }}>
+                                            {timePeriod || '--'}
+                                        </Text>
+                                        <Icon name="chevron-down" size={14} color={colors.primary} style={{ marginLeft: 4 }} />
+                                    </TouchableOpacity>
+
+                                    {showTimePeriodDropdown && (
+                                        <View style={[
+                                            styles.dropdownMenu,
+                                            {
+                                                backgroundColor: colors.cardColor,
+                                                borderColor: colors.inputBorderColor,
+                                                shadowColor: isDark ? '#000' : colors.primary,
+                                            }
+                                        ]}>
+                                            {timePeriod !== 'AM' && (
+                                                <TouchableOpacity
+                                                    style={styles.dropdownItem}
+                                                    onPress={() => { setTimePeriod('AM'); setShowTimePeriodDropdown(false); }}>
+                                                    <Text style={[styles.dropdownItemText, { color: colors.textColor }]}>AM</Text>
+                                                </TouchableOpacity>
+                                            )}
+                                            {timePeriod === '' && <View style={[styles.dropdownSeparator, { backgroundColor: colors.borderColor }]} />}
+                                            {timePeriod !== 'PM' && (
+                                                <TouchableOpacity
+                                                    style={styles.dropdownItem}
+                                                    onPress={() => { setTimePeriod('PM'); setShowTimePeriodDropdown(false); }}>
+                                                    <Text style={[styles.dropdownItemText, { color: colors.textColor }]}>PM</Text>
+                                                </TouchableOpacity>
+                                            )}
+                                        </View>
+                                    )}
+                                </View>
                             </View>
-                        </View>
-                    </View>
+                        </>
+                    )}
                 </View>
 
                 <View style={styles.spacer18} />
@@ -862,6 +897,70 @@ const styles = StyleSheet.create({
     dayText: {
         fontSize: 15,
         fontWeight: '500',
+    },
+    periodDropdown: {
+        width: 60,
+        height: 50,
+        borderRadius: 12,
+        borderWidth: 1,
+        marginLeft: 8,
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    unifiedInput: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderRadius: 12,
+        borderWidth: 1,
+        height: 50,
+    },
+    flexInput: {
+        flex: 1,
+        paddingHorizontal: 14,
+        fontSize: 15,
+        height: '100%',
+        borderTopLeftRadius: 12,
+        borderBottomLeftRadius: 12,
+    },
+    verticalSeparator: {
+        width: 1,
+        height: '60%',
+    },
+    periodDropdownUnified: {
+        width: 60,
+        height: '100%',
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderTopRightRadius: 12,
+        borderBottomRightRadius: 12,
+    },
+    dropdownMenu: {
+        position: 'absolute',
+        top: 55,
+        right: 0,
+        width: 60,
+        borderRadius: 12,
+        borderWidth: 1,
+        zIndex: 1000,
+        elevation: 10,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        overflow: 'hidden',
+    },
+    dropdownItem: {
+        paddingVertical: 12,
+        alignItems: 'center',
+    },
+    dropdownItemText: {
+        fontSize: 13,
+        fontWeight: 'bold',
+    },
+    dropdownSeparator: {
+        height: 1,
+        width: '100%',
     },
 });
 

@@ -87,7 +87,7 @@ export const translations = {
     // Home Screen
     'home.greetingPassenger': 'Namaste, Traveler 🙏',
     'home.subGreetingPassenger': 'Ready for your next adventure?',
-    'home.greetingDriver': 'Hello, Driver 🚕',
+    'home.greetingDriver': 'Namaste, Driver 🙏',
     'home.subGreetingDriver': 'Provide a safe ride today.',
     'home.pickupLabel': 'PICKUP LOCATION',
     'home.dropoffLabel': 'DROPOFF LOCATION',
@@ -192,6 +192,8 @@ export const translations = {
     'trips.seatsBooked': 'Seats Booked',
     'trips.seatsRequested': 'Seats Requested',
     'trips.needsRoofCarrier': 'Needs Roof Carrier',
+    'trips.bookedOn': 'Booked on: ',
+    'trips.postedOn': 'Posted on: ',
 
     // Account
     'account.passenger': 'PASSENGER',
@@ -525,6 +527,8 @@ export const translations = {
     'trips.seatsBooked': 'बुक की गई सीटें',
     'trips.seatsRequested': 'अनुरोधित सीटें',
     'trips.needsRoofCarrier': 'रूफ कैरियर की जरूरत',
+    'trips.bookedOn': 'बुकिंग की तारीख: ',
+    'trips.postedOn': 'पोस्ट की तारीख: ',
 
     // Account
     'account.passenger': 'यात्री',

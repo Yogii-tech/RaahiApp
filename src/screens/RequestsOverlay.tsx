@@ -83,6 +83,10 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
                             <View style={{ height: 4 }} />
                             <Text style={[styles.detailText, { color: colors.subtextColor }]}>{t('requests.seatsTitle')}{item.seatsRequested}</Text>
                             {item.roofCarrier && <Text style={[styles.detailText, { color: colors.subtextColor }]}>• {t('trips.needsRoofCarrier')}</Text>}
+                            <Text style={{ fontSize: 11, color: colors.subtextColor, marginTop: 4, fontStyle: 'italic' }}>
+                                {t('trips.bookedOn') || 'Booked on: '}
+                                {new Date(item.createdAt).toLocaleDateString()} at {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </Text>
                         </View>
 
                         {/* Layout for Driver to see requested seats */}
@@ -138,28 +142,41 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
                             <View style={styles.successIconOuter}>
                                 <Text style={styles.successIconInner}>✓</Text>
                             </View>
-                            <Text style={[styles.successText, { color: colors.textColor }]}>{t('requests.seatReserved')}</Text>
+                            <Text style={[styles.successText, { color: colors.textColor }]}>
+                                {item.type === 'parcel' ? (t('parcel.parcelScheduled') || 'Parcel Scheduled') : t('requests.seatReserved')}
+                            </Text>
                             <View style={[styles.dateTimeRow, { marginTop: 4 }]}>
                                 <Text style={styles.dateTimeIcon}>📅</Text>
-                                <Text style={[styles.dateTimeText, { color: colors.textColor }]}>{item.ride?.date}</Text>
+                                <Text style={[styles.dateTimeText, { color: colors.textColor }]}>{item.ride?.date || item.date}</Text>
                                 <View style={{ width: 12 }} />
                                 <Text style={styles.dateTimeIcon}>🕒</Text>
                                 <Text style={[styles.dateTimeText, { color: colors.textColor }]}>{item.ride?.departureTime}</Text>
                             </View>
+                            {item.type === 'parcel' && (
+                                <Text style={[styles.routeText, { color: colors.textColor, fontWeight: 'bold', marginTop: 8 }]}>
+                                    {item.pickup} → {item.dropoff}
+                                </Text>
+                            )}
                             <Text style={[styles.successSubtitle, { color: colors.subtextColor }]}>
-                                {t('requests.verifiedSubtitle')}
+                                {item.type === 'parcel' ? 'Your parcel is being tracked' : t('requests.verifiedSubtitle')}
                             </Text>
                         </View>
 
                         <View style={[styles.bookingIdCard, { backgroundColor: isDark ? '#111822' : '#EEF2FF' }]}>
                             <View style={styles.bookingIdHeader}>
-                                <Text style={[styles.bookingIdLabel, { color: isDark ? '#607D8B' : '#7986A3' }]}>{t('trips.offlineBookingId')}</Text>
+                                <Text style={[styles.bookingIdLabel, { color: isDark ? '#607D8B' : '#7986A3' }]}>
+                                    {item.type === 'parcel' ? 'UNIQUE PARCEL ID' : t('trips.offlineBookingId')}
+                                </Text>
                                 <View style={styles.verifiedTag}>
-                                    <Text style={styles.verifiedTagText}>{t('trips.verifiedDriver')}</Text>
+                                    <Text style={styles.verifiedTagText}>{item.type === 'parcel' ? 'PARCEL SECURED' : t('trips.verifiedDriver')}</Text>
                                 </View>
                             </View>
-                            <Text style={styles.bookingIdText}>RA-{item.id.slice(-4).toUpperCase()}</Text>
-                            <Text style={[styles.bookingIdFooter, { color: isDark ? '#4B5C6B' : '#8A96BB' }]}>{t('trips.showDriverOffline')}</Text>
+                            <Text style={styles.bookingIdText}>
+                                {item.type === 'parcel' ? 'RA-P-' : 'RA-'}{item.id.slice(-4).toUpperCase()}
+                            </Text>
+                            <Text style={[styles.bookingIdFooter, { color: isDark ? '#4B5C6B' : '#8A96BB' }]}>
+                                {item.type === 'parcel' ? 'Show this ID to the parcel partner' : t('trips.showDriverOffline')}
+                            </Text>
 
                             <TouchableOpacity
                                 style={[styles.chatBtn, { marginTop: 12, width: '100%' }]}
@@ -442,6 +459,10 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         opacity: 0.7,
         lineHeight: 18,
+    },
+    routeText: {
+        fontSize: 14,
+        textAlign: 'center',
     },
 });
 

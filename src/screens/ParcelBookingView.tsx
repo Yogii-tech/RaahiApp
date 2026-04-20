@@ -11,6 +11,7 @@ import {
     Platform,
     Image,
     ActivityIndicator,
+    Modal,
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
@@ -30,12 +31,24 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
     const { token } = useAuth();
     
     // Step state
-    const [step, setStep] = useState<'search' | 'details'>('search');
+    const [step, setStep] = useState<'search' | 'rides' | 'details'>('search');
     const [loading, setLoading] = useState(false);
+    const [availableRides, setAvailableRides] = useState<any[]>([]);
+    const [selectedRide, setSelectedRide] = useState<any | null>(null);
 
     // Form state - Step 1
     const [pickup, setPickup] = useState('');
     const [dropoff, setDropoff] = useState('');
+    const [selectedDate, setSelectedDate] = useState(() => {
+        const today = new Date();
+        const dd = String(today.getDate()).padStart(2, '0');
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const yyyy = today.getFullYear();
+        return `${dd}/${mm}/${yyyy}`;
+    });
+    const [showCalendar, setShowCalendar] = useState(false);
+    const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
+    const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
     const [selectedSize, setSelectedSize] = useState<'small' | 'medium' | 'large'>('medium');
 
     // Form state - Step 2 (Recipient Details)
@@ -59,6 +72,81 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
 
     const pickupLabelColor = isDark ? '#00FFFF' : '#5B4FFF';
     const dropoffLabelColor = isDark ? '#FF4081' : '#5B4FFF';
+
+    const getTravelStats = (p: string, d: string, depTime: string) => {
+        // Mock travel stats based on common routes in Uttarakhand
+        // In a real app, this would come from a Maps API or precomputed table
+        const distanceMap: { [key: string]: number } = {
+            'Bageshwar-Haldwani': 155,
+            'Haldwani-Bageshwar': 155,
+            'Rishikesh-Tehri': 76,
+            'Tehri-Rishikesh': 76,
+            'Dehradun-Mussoorie': 35,
+            'Mussoorie-Dehradun': 35,
+            'Kanda-Kapkote': 42,
+            'Kapkote-Kanda': 42,
+        };
+
+        const key = `${p}-${d}`;
+        const distance = distanceMap[key] || Math.floor(Math.random() * 50) + 30; // Fallback
+        const durationHours = Math.ceil(distance / 30) + 1; // Hilly terrain avg 30km/h + buffer
+        
+        // Calculate Arrival Time
+        let arrivalTime = '—';
+        if (depTime) {
+            try {
+                // Parse "06:00 AM"
+                const [time, period] = depTime.split(' ');
+                let [hours, minutes] = time.split(':').map(Number);
+                if (period === 'PM' && hours !== 12) hours += 12;
+                if (period === 'AM' && hours === 12) hours = 0;
+                
+                const depDate = new Date();
+                depDate.setHours(hours, minutes, 0, 0);
+                const arrDate = new Date(depDate.getTime() + durationHours * 60 * 60 * 1000);
+                
+                let arrHours = arrDate.getHours();
+                const arrMinutes = String(arrDate.getMinutes()).padStart(2, '0');
+                const arrPeriod = arrHours >= 12 ? 'PM' : 'AM';
+                arrHours = arrHours % 12 || 12;
+                arrivalTime = `${String(arrHours).padStart(2, '0')}:${arrMinutes} ${arrPeriod}`;
+            } catch (e) {
+                arrivalTime = '—';
+            }
+        }
+
+        return {
+            distance: `${distance} KM`,
+            duration: `${durationHours}h`,
+            arrival: arrivalTime
+        };
+    };
+
+    const fetchAvailableRides = async () => {
+        if (!pickup.trim() || !dropoff.trim()) {
+            Alert.alert(t('common.error'), 'Please enter pickup and dropoff locations.');
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const url = `${API_BASE}/api/rides/available?pickup=${encodeURIComponent(pickup)}&dropoff=${encodeURIComponent(dropoff)}&date=${encodeURIComponent(selectedDate)}`;
+            const response = await fetch(url, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = await response.json();
+            if (response.ok) {
+                setAvailableRides(data);
+                setStep('rides');
+            } else {
+                Alert.alert(t('common.error'), data.error || 'Failed to fetch vehicles');
+            }
+        } catch (err) {
+            Alert.alert(t('common.error'), 'Connection error');
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const handlePhotoUpload = () => {
         if (Platform.OS === 'web') {
@@ -99,49 +187,74 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
         }
     };
 
-    const handleCompleteBooking = async () => {
+    const handleConfirmDetails = async () => {
         if (!recipientName.trim() || !contactNumber.trim() || !dropLocation.trim()) {
             Alert.alert(t('common.error'), 'Please fill in all required recipient details.');
             return;
         }
+        
+        // After filling details, we now search for vehicles
+        await fetchAvailableRides();
+    };
 
-        setLoading(true);
-        try {
-            // Hardcoded price as requested
-            const price = selectedSize === 'small' ? '150' : selectedSize === 'medium' ? '280' : '450';
+    const handleFinalBooking = async (ride: any) => {
+        const price = selectedSize === 'small' ? '150' : selectedSize === 'medium' ? '280' : '450';
+        
+        Alert.alert(
+            'Confirm Booking',
+            `Send parcel to ${recipientName}?\n\nRoute: ${pickup} → ${dropoff}\nTime: ${ride.departureTime}\nTotal: ₹${price}`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Confirm',
+                    onPress: async () => {
+                        setLoading(true);
+                        try {
+                            const response = await fetch(`${API_BASE}/api/rides/bookings`, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${token}`
+                                },
+                                body: JSON.stringify({
+                                    type: 'parcel',
+                                    pickup,
+                                    dropoff,
+                                    parcelSize: selectedSize,
+                                    recipientName,
+                                    contactNumber,
+                                    dropLocation,
+                                    notes,
+                                    date: selectedDate,
+                                    rideId: ride.id,
+                                    photoUrl: parcelPhoto,
+                                    price
+                                })
+                            });
 
-            const response = await fetch(`${API_BASE}/api/rides/bookings`, { // Currently using ride bookings as placeholder
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                    type: 'parcel',
-                    pickup,
-                    dropoff,
-                    parcelSize: selectedSize,
-                    recipientName,
-                    contactNumber,
-                    dropLocation,
-                    notes,
-                    photoUrl: parcelPhoto,
-                    price
-                })
-            });
-
-            if (response.ok) {
-                Alert.alert(t('common.success'), t('parcel.bookingSuccess'));
-                if (onBack) onBack(); // Return to Home screen
-            } else {
-                const data = await response.json();
-                Alert.alert(t('common.error'), data.error || 'Failed to schedule pickup');
-            }
-        } catch {
-            Alert.alert(t('common.error'), t('login.connectionError'));
-        } finally {
-            setLoading(false);
-        }
+                            if (response.ok) {
+                                const data = await response.json();
+                                // Using the generated unique ID from the backend
+                                const displayId = data.bookingId ? `RA-P-${data.bookingId.slice(-4).toUpperCase()}` : 'Booked';
+                                
+                                Alert.alert(
+                                    t('common.success'), 
+                                    `Your parcel was successfully scheduled!\n\nBooking ID: ${displayId}\n\nYou can track this in your notifications.`,
+                                    [{ text: 'OK', onPress: () => onBack && onBack() }]
+                                );
+                            } else {
+                                const data = await response.json();
+                                Alert.alert(t('common.error'), data.error || 'Failed to schedule pickup');
+                            }
+                        } catch {
+                            Alert.alert(t('common.error'), t('login.connectionError'));
+                        } finally {
+                            setLoading(false);
+                        }
+                    }
+                }
+            ]
+        );
     };
 
     const renderRecipientDetails = () => (
@@ -196,10 +309,14 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
             <TextInput
                 style={[styles.input, { color: colors.textColor, backgroundColor: colors.inputFillColor, borderColor: colors.inputBorderColor }]}
                 value={contactNumber}
-                onChangeText={setContactNumber}
+                onChangeText={(text) => {
+                    const numericValue = text.replace(/[^0-9]/g, '');
+                    setContactNumber(numericValue);
+                }}
                 placeholder={t('parcel.contactPlaceholder')}
                 placeholderTextColor={colors.subtextColor}
                 keyboardType="phone-pad"
+                maxLength={10}
             />
 
             <View style={styles.spacer16} />
@@ -254,7 +371,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
 
             <TouchableOpacity 
                 style={[styles.scheduleButton, { backgroundColor: colors.primary }, loading && { opacity: 0.7 }]}
-                onPress={handleCompleteBooking}
+                onPress={handleConfirmDetails}
                 disabled={loading}>
                 {loading ? (
                     <ActivityIndicator color="#FFF" />
@@ -269,9 +386,110 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
         </View>
     );
 
+    const renderRideSelection = () => (
+        <View style={styles.content}>
+            <TouchableOpacity onPress={() => setStep('search')} style={styles.backButton}>
+                <Text style={[styles.backText, { color: colors.primary }]}>
+                    ← {t('common.back')}
+                </Text>
+            </TouchableOpacity>
+
+            <Text style={[styles.title, { color: colors.textColor }]}>{t('available.title') || 'Select Vehicle'}</Text>
+            <View style={styles.spacer6} />
+            <Text style={[styles.routeSummary, { color: colors.subtextColor }]}>
+                {pickup} → {dropoff} · {selectedDate}
+            </Text>
+
+            <View style={styles.spacer24} />
+
+            {loading ? (
+                <ActivityIndicator color={colors.primary} size="large" style={{ marginTop: 40 }} />
+            ) : (availableRides || []).length === 0 ? (
+                <View style={{ alignItems: 'center', marginTop: 40 }}>
+                    <Icon name="car-outline" size={64} color={colors.borderColor} />
+                    <Text style={{ color: colors.subtextColor, marginTop: 16, fontSize: 16 }}>No vehicles available for this route.</Text>
+                    <TouchableOpacity 
+                        style={{ marginTop: 24, padding: 12 }}
+                        onPress={() => setStep('search')}>
+                        <Text style={{ color: colors.primary, fontWeight: 'bold' }}>GO BACK & CHANGE DETAILS</Text>
+                    </TouchableOpacity>
+                </View>
+            ) : (
+                <ScrollView showsVerticalScrollIndicator={false}>
+                    {(availableRides || []).map((ride) => {
+                        const price = selectedSize === 'small' ? '150' : selectedSize === 'medium' ? '280' : '450';
+                        const stats = getTravelStats(pickup, dropoff, ride.departureTime);
+
+                        return (
+                            <TouchableOpacity
+                                key={ride.id}
+                                style={[styles.rideCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}
+                                onPress={() => handleFinalBooking(ride)}>
+                                <View style={styles.rideHeader}>
+                                    <View style={styles.timeContainer}>
+                                        <Text style={[styles.label, { color: colors.subtextColor }]}>DEPARTS</Text>
+                                        <Text style={[styles.timeText, { color: colors.textColor }]}>{ride.departureTime}</Text>
+                                    </View>
+                                    <View style={styles.vehicleContainer}>
+                                        <Text style={[styles.vehicleModel, { color: colors.textColor }]}>{ride.vehicleModel}</Text>
+                                        <Text style={[styles.vehicleNumber, { color: colors.subtextColor }]}>{ride.vehicleNumber}</Text>
+                                    </View>
+                                    <View style={styles.priceContainer}>
+                                        <Text style={[styles.label, { color: colors.subtextColor }]}>FIXED FAIR</Text>
+                                        <Text style={[styles.priceText, { color: '#00C853' }]}>₹ {price}</Text>
+                                    </View>
+                                </View>
+
+                                <View style={styles.routeRow}>
+                                    <Text style={[styles.routePoint, { color: colors.textColor }]}>{pickup.toUpperCase()}</Text>
+                                    <Text style={[styles.routeArrow, { color: colors.subtextColor }]}>→</Text>
+                                    <Text style={[styles.routePoint, { color: colors.textColor }]}>{dropoff.toUpperCase()}</Text>
+                                </View>
+
+                                <View style={styles.dateTimeRow}>
+                                    <View style={styles.dateTimeChip}>
+                                        <Text style={styles.dateTimeChipIcon}>📅</Text>
+                                        <Text style={[styles.dateTimeChipText, { color: colors.textColor }]}>{selectedDate}</Text>
+                                    </View>
+                                    <View style={[styles.dateTimeChip, { marginLeft: 10 }]}>
+                                        <Text style={styles.dateTimeChipIcon}>🕒</Text>
+                                        <Text style={[styles.dateTimeChipText, { color: colors.textColor }]}>{ride.departureTime}</Text>
+                                    </View>
+                                    <View style={[styles.dateTimeChip, { marginLeft: 10, backgroundColor: 'rgba(31, 175, 99, 0.1)' }]}>
+                                        <Text style={styles.dateTimeChipIcon}>🏁</Text>
+                                        <Text style={[styles.dateTimeChipText, { color: colors.textColor }]}>{stats.arrival}</Text>
+                                    </View>
+                                </View>
+
+                                <View style={styles.rideFooter}>
+                                    <View style={styles.driverInfo}>
+                                        <View style={[styles.avatar, { backgroundColor: isDark ? '#37474F' : '#EEE' }]}>
+                                            <Text style={[styles.avatarText, { color: colors.textColor }]}>{(ride.driverName || 'V')[0].toUpperCase()}</Text>
+                                        </View>
+                                        <View>
+                                            <Text style={[styles.driverName, { color: colors.textColor }]}>{ride.driverName || 'Verified Driver'} ✅</Text>
+                                            <Text style={[styles.driverRole, { color: colors.subtextColor }]}>PARCEL PARTNER</Text>
+                                        </View>
+                                    </View>
+                                    <View style={styles.seatsInfo}>
+                                        <Text style={[styles.seatsLeft, { color: '#00C853' }]}>{stats.distance} • {stats.duration}</Text>
+                                        <View style={[styles.arrowBtn, { backgroundColor: colors.borderColor }]}>
+                                            <Text style={styles.arrowText}>›</Text>
+                                        </View>
+                                    </View>
+                                </View>
+                            </TouchableOpacity>
+                        );
+                    })}
+                    <View style={styles.spacer40} />
+                </ScrollView>
+            )}
+        </View>
+    );
+
     return (
-        <ScrollView style={[styles.container, { backgroundColor: colors.background }]} showsVerticalScrollIndicator={false}>
-            {step === 'details' ? renderRecipientDetails() : (
+        <ScrollView style={[styles.container, { backgroundColor: colors.background }]} showsVerticalScrollIndicator={false} scrollEnabled={step !== 'rides'}>
+            {step === 'details' ? renderRecipientDetails() : step === 'rides' ? renderRideSelection() : (
                 <View style={styles.content}>
                     {onBack && (
                         <TouchableOpacity onPress={onBack} style={styles.backButton}>
@@ -320,6 +538,29 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                             onChangeText={setDropoff}
                             placeholderTextColor={colors.subtextColor}
                         />
+
+                        <View style={styles.spacer14} />
+
+                        <Text style={[styles.fieldLabel, { color: colors.primary }]}>
+                            {t('parcel.pickupDate') || 'PICKUP DATE'}
+                        </Text>
+                        <View style={styles.spacer6} />
+                        <TouchableOpacity
+                            style={[
+                                styles.input,
+                                styles.row,
+                                {
+                                    backgroundColor: colors.inputFillColor,
+                                    borderColor: colors.inputBorderColor,
+                                    justifyContent: 'space-between',
+                                },
+                            ]}
+                            onPress={() => setShowCalendar(true)}>
+                            <Text style={{ color: colors.textColor, fontSize: 16, fontWeight: '500' }}>
+                                {selectedDate}
+                            </Text>
+                            <Icon name="calendar-outline" size={24} color={colors.primary} />
+                        </TouchableOpacity>
                     </View>
 
                     <View style={styles.spacer24} />
@@ -356,7 +597,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                         ))}
                     </View>
 
-                    <View style={styles.spacer32} />
+                    <View style={{ height: 40 }} />
 
                     <TouchableOpacity 
                         style={[styles.scheduleButton, { backgroundColor: colors.primary }]}
@@ -372,34 +613,134 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
 
                     <View style={styles.spacer40} />
 
-                    <Text style={[styles.sectionTitle, { color: colors.subtextColor }]}>{t('parcel.popularRoutes')}</Text>
-                    <View style={styles.spacer14} />
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.routesScroll}>
+                    <Text style={[styles.sectionTitle, { color: colors.subtextColor }]}>{t('parcel.popularRoutes') || 'POPULAR ROUTES'}</Text>
+                    <View style={{ height: 16 }} />
+                    <ScrollView 
+                        horizontal 
+                        showsHorizontalScrollIndicator={false} 
+                        style={styles.routesScroll}
+                        contentContainerStyle={{ paddingRight: 40 }}>
                         {popularRoutes.map((route, index) => (
                             <TouchableOpacity 
                                 key={index} 
                                 onPress={() => { setPickup(route.from); setDropoff(route.to); }}
                                 style={[
-                                    styles.routeCard, 
+                                    styles.miniRouteCard, 
                                     { 
                                         backgroundColor: colors.cardColor, 
                                         borderColor: colors.borderColor,
                                     }
                                 ]}>
-                                <View style={styles.routeHeader}>
+                                <View style={styles.miniRouteHeader}>
                                     <View style={[styles.smallDot, { backgroundColor: '#4CAF50' }]} />
                                     <Text style={[styles.routeName, { color: colors.textColor }]}>{route.from}</Text>
                                 </View>
-                                <View style={styles.routeFooter}>
-                                    <Text style={[styles.routeArrow, { color: colors.subtextColor }]}>→</Text>
-                                    <Text style={[styles.routeToName, { color: colors.subtextColor }]}>{route.to}</Text>
+                                <View style={styles.miniRouteFooter}>
+                                    <Text style={[styles.miniRouteArrow, { color: colors.subtextColor }]}>→</Text>
+                                    <Text style={[styles.miniRouteToName, { color: colors.subtextColor }]}>{route.to}</Text>
                                 </View>
-                                <Text style={[styles.routePrice, { color: '#00BFA5' }]}>₹{route.price}</Text>
+                                <Text style={[styles.miniRoutePrice, { color: '#00BFA5' }]}>₹{route.price}</Text>
                             </TouchableOpacity>
                         ))}
                     </ScrollView>
+                    <View style={styles.spacer40} />
                 </View>
             )}
+
+            {/* Calendar Modal */}
+            <Modal
+                visible={showCalendar}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setShowCalendar(false)}>
+                <View style={styles.modalOverlay}>
+                    <View style={[styles.calendarContent, { backgroundColor: colors.background, borderColor: colors.borderColor }]}>
+                        {/* Calendar Header */}
+                        <View style={styles.calendarHeader}>
+                            <TouchableOpacity onPress={() => {
+                                const now = new Date();
+                                if (calendarYear < now.getFullYear() || (calendarYear === now.getFullYear() && calendarMonth <= now.getMonth())) {
+                                    return; // Don't go back further than current month
+                                }
+
+                                if (calendarMonth === 0) {
+                                    setCalendarMonth(11);
+                                    setCalendarYear(calendarYear - 1);
+                                } else {
+                                    setCalendarMonth(calendarMonth - 1);
+                                }
+                            }}>
+                                <Text style={[styles.calendarNav, { color: (calendarYear < new Date().getFullYear() || (calendarYear === new Date().getFullYear() && calendarMonth <= new Date().getMonth())) ? colors.borderColor : colors.primary }]}>‹</Text>
+                            </TouchableOpacity>
+                            <Text style={[styles.calendarTitle, { color: colors.textColor }]}>
+                                {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][calendarMonth]} {calendarYear}
+                            </Text>
+                            <TouchableOpacity onPress={() => {
+                                if (calendarMonth === 11) {
+                                    setCalendarMonth(0);
+                                    setCalendarYear(calendarYear + 1);
+                                } else {
+                                    setCalendarMonth(calendarMonth + 1);
+                                }
+                            }}>
+                                <Text style={[styles.calendarNav, { color: colors.primary }]}>›</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Days Header */}
+                        <View style={styles.daysHeader}>
+                            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
+                                <Text key={i} style={[styles.dayLabel, { color: colors.subtextColor }]}>{d}</Text>
+                            ))}
+                        </View>
+
+                        {/* Calendar Grid */}
+                        <View style={styles.calendarGrid}>
+                            {Array.from({ length: new Date(calendarYear, calendarMonth, 1).getDay() }).map((_, i) => (
+                                <View key={`empty-${i}`} style={styles.calendarDay} />
+                            ))}
+                            {Array.from({ length: new Date(calendarYear, calendarMonth + 1, 0).getDate() }).map((_, i) => {
+                                const day = i + 1;
+                                const current = new Date();
+                                const isToday = day === current.getDate() && calendarMonth === current.getMonth() && calendarYear === current.getFullYear();
+                                const formattedDay = `${day < 10 ? '0' : ''}${day}/${calendarMonth + 1 < 10 ? '0' : ''}${calendarMonth + 1}/${calendarYear}`;
+                                const isSelected = selectedDate === formattedDay;
+                                
+                                const cellDate = new Date(calendarYear, calendarMonth, day);
+                                const todayDate = new Date(current.getFullYear(), current.getMonth(), current.getDate());
+                                const isPast = cellDate < todayDate;
+
+                                return (
+                                    <TouchableOpacity
+                                        key={`day-${day}`}
+                                        disabled={isPast}
+                                        style={[
+                                            styles.calendarDay,
+                                            isToday && { backgroundColor: 'rgba(31, 175, 99, 0.1)' },
+                                            isSelected && { backgroundColor: colors.primary, borderRadius: 8 },
+                                            isPast && { opacity: 0.2 }
+                                        ]}
+                                        onPress={() => {
+                                            setSelectedDate(formattedDay);
+                                            setShowCalendar(false);
+                                        }}>
+                                        <Text style={[
+                                            styles.dayText,
+                                            { color: isSelected ? '#FFFFFF' : colors.textColor },
+                                            isToday && !isSelected && { color: '#1FAF63', fontWeight: 'bold' }
+                                        ]}>
+                                            {day}
+                                        </Text>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </View>
+                        <TouchableOpacity onPress={() => setShowCalendar(false)} style={{ marginTop: 20, alignItems: 'center' }}>
+                            <Text style={{ color: colors.primary, fontWeight: 'bold' }}>CANCEL</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
         </ScrollView>
     );
 };
@@ -418,6 +759,65 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: 'bold',
         letterSpacing: 1,
+    },
+    row: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    calendarContent: {
+        width: width - 40,
+        padding: 20,
+        borderRadius: 20,
+        borderWidth: 1,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.3,
+        shadowRadius: 20,
+        elevation: 10,
+    },
+    calendarHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    calendarNav: {
+        fontSize: 32,
+        paddingHorizontal: 10,
+    },
+    calendarTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+    },
+    daysHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginBottom: 10,
+    },
+    dayLabel: {
+        width: (width - 80) / 7,
+        textAlign: 'center',
+        fontSize: 12,
+        fontWeight: 'bold',
+    },
+    calendarGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+    },
+    calendarDay: {
+        width: (width - 80) / 7,
+        height: 40,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    dayText: {
+        fontSize: 14,
     },
     inputCard: {
         padding: 18,
@@ -438,11 +838,9 @@ const styles = StyleSheet.create({
         fontWeight: '500',
         borderRadius: 12,
         borderWidth: 1,
-        paddingHorizontal: 16,
-        paddingVertical: 14,
-        minHeight: 56,
-        // @ts-ignore - web only property to remove the blue focus box
-        outlineStyle: 'none',
+        paddingHorizontal: 15,
+        paddingVertical: 12,
+        minHeight: 50,
     },
     spacer6: { height: 6 },
     spacer14: { height: 14 },
@@ -496,50 +894,53 @@ const styles = StyleSheet.create({
         marginHorizontal: -20,
         paddingHorizontal: 20,
     },
-    routeCard: {
-        width: 160,
+    miniRouteCard: {
+        width: 180,
         borderRadius: 16,
         padding: 16,
         borderWidth: 1,
-        marginRight: 12,
+        marginRight: 20,
+        elevation: 1,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
     },
-    routeHeader: {
+    miniRouteHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 4,
+        marginBottom: 6,
     },
     smallDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        marginRight: 8,
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+        marginRight: 10,
     },
     routeName: {
-        fontSize: 15,
+        fontSize: 16,
         fontWeight: 'bold',
     },
-    routeFooter: {
+    miniRouteFooter: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 10,
+        marginBottom: 12,
+        paddingLeft: 20,
     },
-    routeArrow: {
-        marginHorizontal: 8,
+    miniRouteArrow: {
+        marginHorizontal: 10,
+        fontSize: 15,
+        opacity: 0.6,
+    },
+    miniRouteToName: {
         fontSize: 14,
+        fontWeight: '500',
     },
-    routeToName: {
-        fontSize: 13,
-    },
-    routePrice: {
+    miniRoutePrice: {
         fontSize: 18,
         fontWeight: 'bold',
+        textAlign: 'right',
     },
-    spacer12: { height: 12 },
-    spacer14: { height: 14 },
-    spacer16: { height: 16 },
-    spacer24: { height: 24 },
-    spacer32: { height: 32 },
-    spacer40: { height: 40 },
     title: {
         fontSize: 28,
         fontWeight: 'bold',
@@ -597,9 +998,125 @@ const styles = StyleSheet.create({
         height: '100%',
         resizeMode: 'cover',
     },
-    row: {
+    rideCard: {
+        borderRadius: 20,
+        borderWidth: 1,
+        padding: 20,
+        marginBottom: 15,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 10,
+        elevation: 2,
+    },
+    rideHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginBottom: 20,
+    },
+    timeContainer: { flex: 1.2 },
+    vehicleContainer: { flex: 2, alignItems: 'center' },
+    priceContainer: { flex: 1.2, alignItems: 'flex-end' },
+    timeText: {
+        fontSize: 20,
+        fontWeight: 'bold',
+    },
+    vehicleModel: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        textAlign: 'center',
+    },
+    vehicleNumber: {
+        fontSize: 12,
+        textAlign: 'center',
+    },
+    priceText: {
+        fontSize: 22,
+        fontWeight: 'bold',
+    },
+    routeRow: {
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 14,
+    },
+    routePoint: {
+        fontWeight: 'bold',
+        fontSize: 15,
+        textAlign: 'center',
+    },
+    routeArrow: {
+        marginHorizontal: 8,
+        fontSize: 16,
+    },
+    dateTimeRow: {
+        flexDirection: 'row',
+        marginBottom: 16,
+    },
+    dateTimeChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(91, 79, 255, 0.08)',
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 20,
+    },
+    dateTimeChipIcon: {
+        fontSize: 12,
+        marginRight: 5,
+    },
+    dateTimeChipText: {
+        fontSize: 12,
+        fontWeight: 'bold',
+    },
+    rideFooter: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    driverInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    avatar: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 10,
+    },
+    avatarText: {
+        fontWeight: 'bold',
+        fontSize: 16,
+    },
+    driverName: {
+        fontSize: 14,
+        fontWeight: 'bold',
+    },
+    driverRole: {
+        fontSize: 11,
+    },
+    seatsInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    seatsLeft: {
+        fontSize: 11,
+        fontWeight: 'bold',
+        marginRight: 10,
+    },
+    arrowBtn: {
+        width: 24,
+        height: 24,
+        borderRadius: 8,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    arrowText: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#FFFFFF',
     },
 });
 

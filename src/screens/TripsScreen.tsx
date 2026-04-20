@@ -123,7 +123,7 @@ const TripsScreen: React.FC = () => {
                         </Text>
                     </View>
                     <Text style={{ fontSize: 11, color: colors.subtextColor, marginTop: 4, fontStyle: 'italic' }}>
-                        {isDriver ? 'Posted on: ' : 'Booked on: '} 
+                        {isDriver ? t('trips.postedOn') : t('trips.bookedOn')} 
                         {new Date(item.createdAt).toLocaleDateString()} at {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </Text>
                     <View style={{ height: 8 }} />
@@ -198,14 +198,14 @@ const TripsScreen: React.FC = () => {
 
                                     {/* Row 1: Header / Vehicle / Verification */}
                                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                        <View style={{ flex: 1 }}>
-                                            <Text style={{ color: ticketLabel, fontSize: 10, fontWeight: 'bold' }}>CONFIRMED E-TICKET</Text>
+                                        <View style={{ flex: 1.2 }}>
+                                            <Text style={{ color: ticketLabel, fontSize: 9, fontWeight: 'bold' }}>CONFIRMED E-TICKET</Text>
                                         </View>
-                                        <View style={{ flex: 1.5, alignItems: 'center' }}>
-                                            <Text style={{ color: ticketLabel, fontSize: 10, fontWeight: 'bold', textAlign: 'center' }}>VEHICLE NUMBER</Text>
-                                            <Text style={{ color: ticketText, fontSize: 13, marginTop: 2, textAlign: 'center' }}>{item.ride?.vehicleNumber || 'Pending'}</Text>
+                                        <View style={{ flex: 0.8, alignItems: 'center' }}>
+                                            <Text style={{ color: ticketLabel, fontSize: 9, fontWeight: 'bold', textAlign: 'center' }}>VEHICLE NO.</Text>
+                                            <Text style={{ color: ticketText, fontSize: 12, marginTop: 2, textAlign: 'center', fontWeight: '600' }}>{item.ride?.vehicleNumber || '—'}</Text>
                                         </View>
-                                        <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                                        <View style={{ flex: 1.2, alignItems: 'flex-end' }}>
                                             <View style={[styles.verifiedTag, { margin: 0 }]}>
                                                 <Text style={styles.verifiedTagText}>{t('trips.verifiedDriver')}</Text>
                                             </View>
@@ -222,59 +222,59 @@ const TripsScreen: React.FC = () => {
                                     </View>
 
                                     {/* Row 2: Booking Details */}
-                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <View style={{ flex: 1, paddingRight: 10 }}>
-                                            <Text style={{ color: ticketLabel, fontSize: 10, fontWeight: 'bold' }}>BOOKED ON</Text>
+                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                        <View style={{ flex: 1.2 }}>
+                                            <Text style={{ color: ticketLabel, fontSize: 9, fontWeight: 'bold' }}>BOOKED ON</Text>
                                             <Text style={{ color: ticketText, fontSize: 11, marginTop: 2 }}>{new Date(item.createdAt).toLocaleDateString()} at {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
                                         </View>
-                                        <View style={{ flex: 1.5, alignItems: 'center' }}>
-                                            <Text style={{ color: ticketLabel, fontSize: 10, fontWeight: 'bold' }}>BOOKING REF</Text>
-                                            <Text style={{ color: '#4CAF50', fontSize: 14, marginTop: 2, fontWeight: 'bold', letterSpacing: 1 }}>RA-{item.id.slice(-4).toUpperCase()}</Text>
+                                        <View style={{ flex: 0.8, alignItems: 'center' }}>
+                                            <Text style={{ color: ticketLabel, fontSize: 9, fontWeight: 'bold' }}>REF CODE</Text>
+                                            <Text style={{ color: '#4CAF50', fontSize: 13, marginTop: 2, fontWeight: 'bold', letterSpacing: 0.5 }}>RA-{item.id.slice(-4).toUpperCase()}</Text>
                                         </View>
-                                        <View style={{ flex: 1, alignItems: 'flex-end', paddingLeft: 10 }}>
-                                            <Text style={{ color: ticketLabel, fontSize: 10, fontWeight: 'bold' }}>JOURNEY DATE & TIME</Text>
+                                        <View style={{ flex: 1.2, alignItems: 'flex-end' }}>
+                                            <Text style={{ color: ticketLabel, fontSize: 9, fontWeight: 'bold', textAlign: 'right' }}>JOURNEY INFO</Text>
                                             <Text style={{ color: ticketText, fontSize: 11, marginTop: 2, textAlign: 'right' }}>{item.ride?.date} at {item.ride?.departureTime}</Text>
                                         </View>
                                     </View>
 
                                     {/* Row 3: Places and Arrow */}
-                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 15 }}>
-                                        <View style={{ flex: 1, paddingRight: 10 }}>
-                                            <Text style={{ color: ticketLabel, fontSize: 10, fontWeight: 'bold' }}>FROM</Text>
-                                            <Text style={{ color: ticketText, fontSize: 13, marginTop: 2 }} numberOfLines={2}>{item.ride?.pickup}</Text>
+                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 18 }}>
+                                        <View style={{ flex: 1.2 }}>
+                                            <Text style={{ color: ticketLabel, fontSize: 9, fontWeight: 'bold' }}>FROM</Text>
+                                            <Text style={{ color: ticketText, fontSize: 13, marginTop: 2, fontWeight: '500' }} numberOfLines={1}>{item.ride?.pickup}</Text>
                                         </View>
-                                        <View style={{ flex: 1.5, alignItems: 'center' }}>
-                                            <Text style={{ fontSize: 9, color: ticketLabel, marginBottom: 2 }}>~ 45 km</Text>
-                                            <Text style={{ color: '#4CAF50', fontSize: 16 }}>➔</Text>
+                                        <View style={{ flex: 0.8, alignItems: 'center', justifyContent: 'center' }}>
+                                            <Text style={{ fontSize: 8, color: ticketLabel, marginBottom: 2 }}>~ 45 km</Text>
+                                            <Text style={{ color: '#4CAF50', fontSize: 14 }}>➔</Text>
                                         </View>
-                                        <View style={{ flex: 1, alignItems: 'flex-end', paddingLeft: 10 }}>
-                                            <Text style={{ color: ticketLabel, fontSize: 10, fontWeight: 'bold' }}>TO</Text>
-                                            <Text style={{ color: ticketText, fontSize: 13, marginTop: 2, textAlign: 'right' }} numberOfLines={2}>{item.ride?.dropoff}</Text>
+                                        <View style={{ flex: 1.2, alignItems: 'flex-end' }}>
+                                            <Text style={{ color: ticketLabel, fontSize: 9, fontWeight: 'bold' }}>TO</Text>
+                                            <Text style={{ color: ticketText, fontSize: 13, marginTop: 2, textAlign: 'right', fontWeight: '500' }} numberOfLines={1}>{item.ride?.dropoff}</Text>
                                         </View>
                                     </View>
 
                                     {/* Row 4: Seat No */}
-                                    <View style={{ flexDirection: 'row', marginTop: 15 }}>
-                                        <View style={{ flex: 1 }} />
-                                        <View style={{ flex: 1.5, alignItems: 'center' }}>
-                                            <Text style={{ color: ticketLabel, fontSize: 10, fontWeight: 'bold' }}>SEAT NO(S)</Text>
-                                            <Text style={{ color: ticketText, fontSize: 13, marginTop: 2 }}>
+                                    <View style={{ flexDirection: 'row', marginTop: 18 }}>
+                                        <View style={{ flex: 1.2 }} />
+                                        <View style={{ flex: 0.8, alignItems: 'center' }}>
+                                            <Text style={{ color: ticketLabel, fontSize: 9, fontWeight: 'bold' }}>SEAT NO(S)</Text>
+                                            <Text style={{ color: ticketText, fontSize: 14, marginTop: 2, fontWeight: 'bold' }}>
                                                 {item.seatLayout && item.seatLayout.length > 0 ? item.seatLayout.join(', ') : item.seatsRequested}
                                             </Text>
                                         </View>
-                                        <View style={{ flex: 1 }} />
+                                        <View style={{ flex: 1.2 }} />
                                     </View>
 
                                     {/* Footer Dashed Line & Text Row */}
-                                    <View style={{ flexDirection: 'row', marginTop: 15 }}>
-                                        <View style={{ flex: 1 }} />
-                                        <View style={{ flex: 1.5, alignItems: 'center' }}>
-                                            <View style={{ width: '100%', height: 1, borderStyle: 'dashed', borderColor: ticketDash, borderWidth: 1, marginBottom: 15 }} />
-                                            <Text style={{ color: ticketFooter, fontSize: 9, fontWeight: 'bold', textAlign: 'center', letterSpacing: 1 }}>
+                                    <View style={{ flexDirection: 'row', marginTop: 18 }}>
+                                        <View style={{ flex: 0.5 }} />
+                                        <View style={{ flex: 2.2, alignItems: 'center' }}>
+                                            <View style={{ width: '100%', height: 1, borderStyle: 'dashed', borderColor: ticketDash, borderWidth: 1, marginBottom: 12 }} />
+                                            <Text style={{ color: ticketFooter, fontSize: 8.5, fontWeight: 'bold', textAlign: 'center', letterSpacing: 0.8 }}>
                                                 SHOW THIS E-TICKET TO YOUR DRIVER
                                             </Text>
                                         </View>
-                                        <View style={{ flex: 1 }} />
+                                        <View style={{ flex: 0.5 }} />
                                     </View>
 
                                 </View>

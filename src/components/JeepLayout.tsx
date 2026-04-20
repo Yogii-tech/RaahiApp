@@ -196,32 +196,32 @@ const JeepLayout: React.FC<JeepLayoutProps> = ({
         ]}>
             {isCompleted ? (
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 }}>
-                    <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#5B4FFF' }}>SUV / JEEP</Text>
-                        <Text style={{ fontSize: 10, color: '#7986A3', marginTop: 2 }}>BOOKING STATUS</Text>
+                    <View style={{ flex: 1.2 }}>
+                        <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#5B4FFF' }}>SUV / JEEP</Text>
+                        <Text style={{ fontSize: 9, color: '#7986A3', marginTop: 2 }}>BOOKING STATUS</Text>
                     </View>
-                    <View style={{ flex: 1, alignItems: 'center' }}>
-                        <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(76, 175, 80, 0.2)', justifyContent: 'center', alignItems: 'center' }}>
-                            <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: '#4CAF50', justifyContent: 'center', alignItems: 'center' }}>
-                                <Icon name="checkmark-done" size={20} color="#FFF" />
+                    <View style={{ flex: 0.6, alignItems: 'center', justifyContent: 'center' }}>
+                        <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(76, 175, 80, 0.2)', justifyContent: 'center', alignItems: 'center' }}>
+                            <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: '#4CAF50', justifyContent: 'center', alignItems: 'center' }}>
+                                <Icon name="checkmark-done" size={18} color="#FFF" />
                             </View>
                         </View>
                     </View>
-                    <View style={{ flex: 1, alignItems: 'flex-end', gap: 8 }}>
-                        <View style={{ flexDirection: 'row', gap: 10 }}>
-                            <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#7986A3' }}>REACHED AT</Text>
-                            <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#111822' }}>{dropoff}</Text>
+                    <View style={{ flex: 1.2, alignItems: 'flex-end', justifyContent: 'center' }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%', marginBottom: 4 }}>
+                            <Text style={{ fontSize: 8, fontWeight: 'bold', color: '#7986A3' }}>REACHED AT</Text>
+                            <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#111822' }}>{dropoff || '—'}</Text>
                         </View>
-                        <View style={{ flexDirection: 'row', gap: 10 }}>
-                            <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#7986A3' }}>COMPLETED ON</Text>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%', marginBottom: 4 }}>
+                            <Text style={{ fontSize: 8, fontWeight: 'bold', color: '#7986A3' }}>COMPLETED</Text>
                             <Text style={{ fontSize: 10, color: '#111822' }}>
-                                {completedAt ? new Date(completedAt).toLocaleDateString() : (date || new Date().toLocaleDateString())}
+                                {completedAt ? new Date(completedAt).toLocaleDateString() : (date || '—')}
                             </Text>
                         </View>
-                        <View style={{ flexDirection: 'row', gap: 10 }}>
-                            <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#7986A3' }}>FINAL TIME</Text>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
+                            <Text style={{ fontSize: 8, fontWeight: 'bold', color: '#7986A3' }}>FINAL TIME</Text>
                             <Text style={{ fontSize: 10, color: '#111822' }}>
-                                {completedAt ? new Date(completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                {completedAt ? new Date(completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
                             </Text>
                         </View>
                     </View>

@@ -268,12 +268,13 @@ const styles = StyleSheet.create({
     routeRow: {
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'center',
         marginBottom: 14,
     },
     routePoint: {
         fontWeight: 'bold',
         fontSize: 13,
-        flex: 1,
+        textAlign: 'center',
     },
     routeArrow: {
         marginHorizontal: 8,

@@ -163,11 +163,18 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 return;
             }
 
-            if (!data.user.name) {
-                setTempToken(data.token);
-                setTempRefreshToken(data.refresh_token);
+            if (!data.user.name || !data.user.role) {
+                setTempToken(data.token || null);
+                setTempRefreshToken(data.refresh_token || null);
                 setTempUser(data.user);
-                setStep('name');
+                
+                if (!data.user.name) {
+                    setStep('name');
+                } else {
+                    // Has name but no role
+                    setName(data.user.name);
+                    setStep('role');
+                }
             } else {
                 await setAuth(data.token, data.refresh_token, data.user);
                 onAuthenticated();
