@@ -9,6 +9,7 @@ import SlideToComplete from '../components/SlideToComplete';
 import { API_BASE } from '../apiConfig';
 import { apiRequest } from '../utils/api';
 import Icon from 'react-native-vector-icons/Ionicons';
+import TrackPackageView from '../components/TrackPackageView';
 
 interface Booking {
     id: string;
@@ -22,7 +23,11 @@ interface Booking {
     departureTime?: string;
 }
 
-const TripsScreen: React.FC = () => {
+interface TripsScreenProps {
+    isParcelMode?: boolean;
+}
+
+const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode }) => {
     const { colors, isDark } = useTheme();
     const { user, token, logout } = useAuth();
     const { t } = useLanguage();
@@ -350,6 +355,10 @@ const TripsScreen: React.FC = () => {
             </View>
         );
     };
+
+    if (isParcelMode) {
+        return <TrackPackageView />;
+    }
 
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>

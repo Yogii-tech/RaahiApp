@@ -308,7 +308,7 @@ function MainTabs() {
         </Tab.Screen>
         <Tab.Screen
           name="Trips"
-          component={TripsScreen}
+          children={(props) => <TripsScreen {...props} isParcelMode={user?.role === 'parceller' || parcelMode} />}
           options={{ title: (user?.role === 'parceller' || parcelMode) ? t('tab.trackPackage') : t('tab.trips') }}
         />
         <Tab.Screen
