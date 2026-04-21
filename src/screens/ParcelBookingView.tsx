@@ -382,6 +382,38 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                 )}
             </TouchableOpacity>
 
+            <View style={{ height: 32 }} /> {/* Added space between button and Popular Routes */}
+
+            <Text style={[styles.sectionTitle, { color: colors.subtextColor }]}>{t('parcel.popularRoutes') || 'POPULAR ROUTES'}</Text>
+            <View style={{ height: 25 }} />
+            <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false} 
+                style={styles.routesScroll}
+                contentContainerStyle={{ paddingRight: 60 }}>
+                {popularRoutes.map((route, index) => (
+                    <TouchableOpacity 
+                        key={index} 
+                        onPress={() => { setPickup(route.from); setDropoff(route.to); }}
+                        style={[
+                            styles.miniRouteCard, 
+                            { 
+                                backgroundColor: colors.cardColor, 
+                                borderColor: colors.borderColor,
+                            }
+                        ]}>
+                        <View style={styles.miniRouteHeader}>
+                            <View style={[styles.smallDot, { backgroundColor: '#4CAF50' }]} />
+                            <Text style={[styles.routeName, { color: colors.textColor }]}>{route.from}</Text>
+                        </View>
+                        <View style={styles.miniRouteFooter}>
+                            <Text style={[styles.miniRouteArrow, { color: colors.subtextColor }]}>→</Text>
+                            <Text style={[styles.miniRouteToName, { color: colors.subtextColor }]}>{route.to}</Text>
+                        </View>
+                        <Text style={[styles.miniRoutePrice, { color: '#00BFA5' }]}>₹{route.price}</Text>
+                    </TouchableOpacity>
+                ))}
+            </ScrollView>
             <View style={styles.spacer40} />
         </View>
     );
@@ -542,7 +574,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                         <View style={styles.spacer14} />
 
                         <Text style={[styles.fieldLabel, { color: colors.primary }]}>
-                            {t('parcel.pickupDate') || 'PICKUP DATE'}
+                            {t('PICKUP DATE') || 'PICKUP DATE'}
                         </Text>
                         <View style={styles.spacer6} />
                         <TouchableOpacity
@@ -611,15 +643,15 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                         </Text>
                     </TouchableOpacity>
 
-                    <View style={styles.spacer40} />
+                    <View style={{ height: 32 }} /> {/* Added space between button and Popular Routes */}
 
                     <Text style={[styles.sectionTitle, { color: colors.subtextColor }]}>{t('parcel.popularRoutes') || 'POPULAR ROUTES'}</Text>
-                    <View style={{ height: 16 }} />
+                    <View style={{ height: 25 }} />
                     <ScrollView 
                         horizontal 
                         showsHorizontalScrollIndicator={false} 
                         style={styles.routesScroll}
-                        contentContainerStyle={{ paddingRight: 40 }}>
+                        contentContainerStyle={{ paddingRight: 60 }}>
                         {popularRoutes.map((route, index) => (
                             <TouchableOpacity 
                                 key={index} 
