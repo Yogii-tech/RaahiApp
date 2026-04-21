@@ -518,7 +518,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                             <View style={styles.detailRow}>
                                 <Icon name="calendar-outline" size={14} color={colors.subtextColor} style={styles.detailIcon} />
                                 <Text style={[styles.detailText, { color: colors.subtextColor }]}>{ride.date || '—'}</Text>
-                                <View style={{ width: 12 }} />
+                                <View style={{ width: 8 }} />
                                 <Icon name="time-outline" size={14} color={colors.subtextColor} style={styles.detailIcon} />
                                 <Text style={[styles.detailText, { color: colors.subtextColor }]}>{ride.departureTime || '—'}</Text>
                             </View>
@@ -790,7 +790,7 @@ const styles = StyleSheet.create({
         padding: 14,
     },
     recentCardFirst: {
-        marginRight: 6,
+        // Redundant as gap is used
     },
     recentLabelRow: {
         flexDirection: 'row',
@@ -816,14 +816,16 @@ const styles = StyleSheet.create({
     detailRow: {
         flexDirection: 'row',
         alignItems: 'center',
+        flexWrap: 'wrap',
         marginTop: 8,
+        rowGap: 4,
     },
     detailIcon: {
         fontSize: 14,
         marginRight: 6,
     },
     detailText: {
-        fontSize: 14,
+        fontSize: 13,
         fontWeight: '500',
     },
     row: {

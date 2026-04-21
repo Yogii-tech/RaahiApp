@@ -12,14 +12,15 @@ import {
     Image,
     ActivityIndicator,
     Modal,
+    useWindowDimensions,
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { API_BASE } from '../apiConfig';
-
 const { width } = Dimensions.get('window');
+
 
 interface ParcelBookingViewProps {
     onBack?: () => void;
@@ -29,6 +30,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
     const { colors, isDark } = useTheme();
     const { t } = useLanguage();
     const { token } = useAuth();
+    const { width } = useWindowDimensions();
     
     // Step state
     const [step, setStep] = useState<'search' | 'rides' | 'details'>('search');
@@ -595,7 +597,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                         </TouchableOpacity>
                     </View>
 
-                    <View style={styles.spacer24} />
+                    <View style={styles.spacer32} />
 
                     {/* Parcel Size Section */}
                     <Text style={[styles.sectionTitle, { color: colors.subtextColor }]}>{t('parcel.sizeTitle')}</Text>
@@ -607,6 +609,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                                 style={[
                                     styles.sizeCard,
                                     {
+                                        width: width > 600 ? (width - 60) / 3 : width - 40,
                                         backgroundColor: colors.cardColor,
                                         borderColor: selectedSize === size.id ? colors.primary : colors.borderColor,
                                         borderWidth: selectedSize === size.id ? 2 : 1,
@@ -875,8 +878,10 @@ const styles = StyleSheet.create({
         minHeight: 50,
     },
     spacer6: { height: 6 },
-    spacer14: { height: 14 },
     spacer16: { height: 16 },
+    spacer24: { height: 24 },
+    spacer32: { height: 32 },
+    spacer40: { height: 40 },
     sectionTitle: {
         fontSize: 14,
         fontWeight: 'bold',
@@ -884,10 +889,12 @@ const styles = StyleSheet.create({
     },
     sizeRow: {
         flexDirection: 'row',
+        flexWrap: 'wrap',
         justifyContent: 'space-between',
     },
     sizeCard: {
-        width: (width - 64) / 3,
+        width: '100%', // Default for smallest screens
+        marginBottom: 10,
         paddingVertical: 20,
         borderRadius: 16,
         alignItems: 'center',
