@@ -21,7 +21,11 @@ import TrustedContactsScreen from './TrustedContactsScreen';
 import VehicleDetailsScreen from './VehicleDetailsScreen';
 
 
-const AccountScreen: React.FC = () => {
+interface AccountScreenProps {
+    isParcelMode?: boolean;
+}
+
+const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
     const { isDark, colors } = useTheme();
     const { user, token, logout, setAuth } = useAuth();
     const { t, language, setLanguage } = useLanguage();
@@ -83,9 +87,9 @@ const AccountScreen: React.FC = () => {
 
     const optionItems = [
         { icon: 'card-outline', title: t('account.paymentMethods') },
-        { icon: 'id-card-outline', title: t('account.trustedContacts'), action: () => setView('trusted') },
+        ...(!isParcelMode ? [{ icon: 'id-card-outline', title: t('account.trustedContacts'), action: () => setView('trusted') }] : []),
         { icon: 'globe-outline', title: t('account.language'), action: handleLanguagePress },
-        ...(user?.role === 'driver' ? [{ icon: 'car-sport-outline', title: t('account.vehicleDetails'), action: () => setView('vehicle') }] : []),
+        ...(user?.role === 'driver' && !isParcelMode ? [{ icon: 'car-sport-outline', title: t('account.vehicleDetails'), action: () => setView('vehicle') }] : []),
         { icon: 'headset-outline', title: t('account.support'), action: handleSupportPress },
         { icon: 'log-out-outline', title: t('account.logout'), action: handleLogoutPress, color: '#C62828' },
     ];

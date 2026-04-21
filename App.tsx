@@ -322,7 +322,11 @@ function MainTabs() {
             },
           }}
         />
-        <Tab.Screen name="Account" component={AccountScreen} options={{ title: t('tab.account') }} />
+        <Tab.Screen
+          name="Account"
+          children={(props) => <AccountScreen {...props} isParcelMode={user?.role === 'parceller' || parcelMode} />}
+          options={{ title: t('tab.account') }}
+        />
       </Tab.Navigator>
 
       {sosVisible && (
