@@ -89,6 +89,41 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
         }
     };
 
+    const handleTimeChange = (text: string) => {
+        // Remove non-numeric characters
+        let cleaned = text.replace(/[^0-9]/g, '');
+        
+        if (cleaned.length === 0) {
+            setDepartureTime('');
+            return;
+        }
+
+        // Extract hours and minutes
+        let hrs = cleaned.slice(0, 2);
+        let mins = cleaned.slice(2, 4);
+
+        if (hrs.length >= 1) {
+            let h = parseInt(hrs, 10);
+            if (h > 12) {
+                h = h - 12;
+                hrs = h.toString().padStart(2, '0');
+                setTimePeriod('PM');
+            } else if (h === 0 && hrs.length === 2) {
+                hrs = '12';
+                setTimePeriod('AM');
+            }
+        }
+
+        let result = hrs;
+        if (cleaned.length > 2) {
+            result += ':' + mins;
+        } else if (cleaned.length === 2 && text.length > departureTime.length) {
+            result += ':';
+        }
+        
+        setDepartureTime(result);
+    };
+
     const handleFindRides = async () => {
         if (!pickup.trim() || !dropoff.trim()) {
             return;
@@ -318,58 +353,100 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                         <>
                             <View style={{ width: 12 }} />
                             <View style={{ flex: 1, zIndex: 11, elevation: 11 }}>
-                                <Text style={[styles.fieldLabel, { color: colors.primary }]}>
+                                <Text style={[styles.fieldLabel, { color: colors.primary }]}> 
                                     {t('home.departureTime').toUpperCase()}
                                 </Text>
                                 <View style={styles.spacer6} />
-                                <View style={[styles.unifiedInput, { backgroundColor: colors.inputFillColor, borderColor: colors.inputBorderColor, position: 'relative', zIndex: 1000 }]}>
-                                    <TextInput
-                                        style={[styles.flexInput, { color: colors.textColor }]}
-                                        placeholder="08:00"
-                                        placeholderTextColor={isDark ? 'rgba(255,255,255,0.24)' : 'rgba(34,34,96,0.3)'}
-                                        value={departureTime}
-                                        onChangeText={setDepartureTime}
-                                        keyboardType="numbers-and-punctuation"
-                                    />
-                                    <View style={[styles.verticalSeparator, { backgroundColor: colors.borderColor }]} />
+                                <View style={{ 
+                                    flexDirection: 'row', 
+                                    alignItems: 'center', 
+                                    borderRadius: 12, 
+                                    borderWidth: 1, 
+                                    borderColor: departureTime ? colors.primary : colors.inputBorderColor, 
+                                    backgroundColor: colors.inputFillColor, 
+                                    height: 50,
+                                    width: '100%',
+                                    zIndex: 100,
+                                    overflow: 'visible',
+                                }}>
+                                    <View style={{ flex: 1, height: '100%', justifyContent: 'center' }}>
+                                        <TextInput
+                                            style={{ 
+                                                width: '100%',
+                                                height: '100%',
+                                                paddingHorizontal: 12, 
+                                                fontSize: 15, 
+                                                color: colors.textColor, 
+                                                backgroundColor: 'transparent',
+                                                borderWidth: 0,
+                                                // @ts-ignore
+                                                outlineStyle: 'none',
+                                            }}
+                                            value={departureTime}
+                                            onChangeText={handleTimeChange}
+                                            placeholder="10:00"
+                                            placeholderTextColor={colors.subtextColor}
+                                            keyboardType="numeric"
+                                            maxLength={5}
+                                        />
+                                    </View>
+                                    <View style={{ width: 1, height: '60%', backgroundColor: colors.inputBorderColor }} />
                                     <TouchableOpacity
+                                        style={{ 
+                                            width: 60, 
+                                            height: '100%', 
+                                            flexDirection: 'row', 
+                                            justifyContent: 'center', 
+                                            alignItems: 'center',
+                                            backgroundColor: 'transparent'
+                                        }}
                                         onPress={() => setShowTimePeriodDropdown(!showTimePeriodDropdown)}
-                                        activeOpacity={0.7}
-                                        style={styles.periodDropdownUnified}>
-                                        <Text style={{ fontSize: 13, fontWeight: 'bold', color: timePeriod ? colors.textColor : colors.subtextColor }}>
-                                            {timePeriod || '--'}
+                                        activeOpacity={0.8}
+                                    >
+                                        <Text style={{ color: colors.textColor, fontWeight: 'bold', fontSize: 14 }}>
+                                            {timePeriod || 'AM'}
                                         </Text>
-                                        <Icon name="chevron-down" size={14} color={colors.primary} style={{ marginLeft: 4 }} />
+                                        <Icon name="chevron-down" size={14} color={colors.textColor} style={{ marginLeft: 2 }} />
                                     </TouchableOpacity>
 
                                     {showTimePeriodDropdown && (
-                                        <View style={[
-                                            styles.dropdownMenu,
-                                            {
-                                                backgroundColor: colors.cardColor,
-                                                borderColor: colors.inputBorderColor,
-                                                shadowColor: isDark ? '#000' : colors.primary,
-                                            }
-                                        ]}>
-                                            {timePeriod !== 'AM' && (
-                                                <TouchableOpacity
-                                                    style={styles.dropdownItem}
-                                                    onPress={() => { setTimePeriod('AM'); setShowTimePeriodDropdown(false); }}>
-                                                    <Text style={[styles.dropdownItemText, { color: colors.textColor }]}>AM</Text>
-                                                </TouchableOpacity>
-                                            )}
-                                            {timePeriod === '' && <View style={[styles.dropdownSeparator, { backgroundColor: colors.borderColor }]} />}
-                                            {timePeriod !== 'PM' && (
-                                                <TouchableOpacity
-                                                    style={styles.dropdownItem}
-                                                    onPress={() => { setTimePeriod('PM'); setShowTimePeriodDropdown(false); }}>
-                                                    <Text style={[styles.dropdownItemText, { color: colors.textColor }]}>PM</Text>
-                                                </TouchableOpacity>
-                                            )}
+                                        <View style={{ 
+                                            position: 'absolute', 
+                                            top: 52, 
+                                            right: 0, 
+                                            width: 80, 
+                                            borderRadius: 12, 
+                                            borderWidth: 1, 
+                                            backgroundColor: colors.cardColor, 
+                                            borderColor: colors.borderColor, 
+                                            zIndex: 1000, 
+                                            elevation: 10, 
+                                            shadowColor: '#000',
+                                            shadowOffset: { width: 0, height: 4 }, 
+                                            shadowOpacity: 0.2, 
+                                            shadowRadius: 8, 
+                                            overflow: 'hidden' 
+                                        }}>
+                                            <TouchableOpacity
+                                                style={{ paddingVertical: 12, alignItems: 'center', backgroundColor: timePeriod === 'AM' ? (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(91,79,255,0.1)') : 'transparent' }}
+                                                onPress={() => { setTimePeriod('AM'); setShowTimePeriodDropdown(false); }}
+                                            >
+                                                <Text style={{ fontSize: 13, fontWeight: 'bold', color: colors.textColor }}>AM</Text>
+                                            </TouchableOpacity>
+                                            <View style={{ height: 1, width: '100%', backgroundColor: colors.inputBorderColor }} />
+                                            <TouchableOpacity
+                                                style={{ paddingVertical: 12, alignItems: 'center', backgroundColor: timePeriod === 'PM' ? (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(91,79,255,0.1)') : 'transparent' }}
+                                                onPress={() => { setTimePeriod('PM'); setShowTimePeriodDropdown(false); }}
+                                            >
+                                                <Text style={{ fontSize: 13, fontWeight: 'bold', color: colors.textColor }}>PM</Text>
+                                            </TouchableOpacity>
                                         </View>
                                     )}
                                 </View>
+
+
                             </View>
+
                         </>
                     )}
                 </View>
@@ -659,6 +736,7 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.15,
         shadowRadius: 12,
         elevation: 6,
+        // overflow: 'hidden', // Removed to prevent dropdown clipping
     },
     rideTypeRow: {
         flexDirection: 'row',
@@ -949,6 +1027,16 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.2,
         shadowRadius: 8,
         overflow: 'hidden',
+    },
+    dropdownMenuWrapper: {
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        top: 0,
+        bottom: 0,
+        zIndex: 2000,
+        elevation: 20,
+        // pointerEvents: 'box-none',
     },
     dropdownItem: {
         paddingVertical: 12,
