@@ -60,7 +60,6 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ searchPicku
             const response = await apiRequest(url.replace(API_BASE, ''), {}, logout);
             if (response.ok) {
                 const data = await response.json();
-                console.log('Fetched rides:', data); // Debug log
                 setRides(data);
             }
         } catch (err) {

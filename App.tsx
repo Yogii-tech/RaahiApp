@@ -223,10 +223,11 @@ function MainTabs() {
   const isDriver = user?.role === 'driver';
 
   useEffect(() => {
+    if (!token) return;
     fetchNotificationCount();
-    const interval = setInterval(fetchNotificationCount, 5000);
+    const interval = setInterval(fetchNotificationCount, 10000); // Poll every 10s
     return () => clearInterval(interval);
-  }, [user, token]);
+  }, [token]);
 
   const fetchNotificationCount = async () => {
     try {
@@ -274,7 +275,7 @@ function MainTabs() {
         }}
       />
 
-      <SosScreen visible={sosVisible} onClose={() => setSosVisible(false)} />
+
 
       <Tab.Navigator
         screenOptions={({ route }) => ({

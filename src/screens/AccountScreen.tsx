@@ -15,7 +15,7 @@ import { useAuth } from '../context/AuthContext';
 import { useLanguage, LanguageType } from '../context/LanguageContext';
 import Icon from 'react-native-vector-icons/Ionicons';
 
-import { API_BASE } from '../apiConfig';
+
 import { apiRequest } from '../utils/api';
 import TrustedContactsScreen from './TrustedContactsScreen';
 import VehicleDetailsScreen from './VehicleDetailsScreen';
@@ -144,9 +144,9 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
                         <>
                             <View style={styles.spacer8} />
                             <View style={styles.ratingRow}>
-                                <Icon name="star" size={16} color={ratingColor} style={styles.star} />
+                                <Icon name="star-outline" size={16} color={ratingColor} style={styles.star} />
                                 <Text style={[styles.ratingText, { color: ratingColor }]}>
-                                    4.8 {t('account.rating')}
+                                    {t('account.ratingComingSoon') || 'Rating coming soon'}
                                 </Text>
                             </View>
                         </>

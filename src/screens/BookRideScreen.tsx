@@ -14,7 +14,7 @@ import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import JeepLayout from '../components/JeepLayout';
 
-import { API_BASE } from '../apiConfig';
+
 import { apiRequest } from '../utils/api';
 
 interface BookRideScreenProps {
@@ -91,8 +91,9 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, onBa
             });
 
             if (response.ok) {
-                const randomId = Math.floor(1000 + Math.random() * 9000);
-                setBookingId(`RA-${randomId}`);
+                const data = await response.json().catch(() => ({}));
+                const realId = data.id || data.bookingId || '';
+                setBookingId(realId ? `RA-${realId.slice(-4).toUpperCase()}` : 'RA-CONFIRMED');
                 setShowSuccessModal(true);
             } else {
                 const errorData = await response.json().catch(() => ({}));

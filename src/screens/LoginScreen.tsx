@@ -87,7 +87,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
             }
 
             setStep(isAdmin ? 'admin_otp' : 'otp');
-            Alert.alert(t('login.otpSent'), `${t('login.testOtp')}${data.otp}`);
+            Alert.alert(t('login.otpSent'), t('login.otpSentMsg') || 'An OTP has been sent to your phone number.');
         } catch {
             Alert.alert(t('common.error'), t('login.connectionError'));
         } finally {
@@ -128,12 +128,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 Alert.alert('Access Denied', promoteData.error || 'Invalid secret key');
                 return;
             }
-            // Re-fetch user so role is updated
-            const verifyRes = await fetch(`${API_BASE}/api/auth/otp/send`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phone_number: phoneNumber.trim() }),
-            });
-            const verifyData = await verifyRes.json();
             // Set admin user with updated role
             await setAuth(adminTempToken, null, { ...adminTempUser, role: 'admin' });
             onAuthenticated();

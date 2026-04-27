@@ -249,7 +249,6 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode }) => {
                                             <Text style={{ color: ticketText, fontSize: 13, marginTop: 2, fontWeight: '500' }} numberOfLines={1}>{item.ride?.pickup}</Text>
                                         </View>
                                         <View style={{ flex: 0.8, alignItems: 'center', justifyContent: 'center' }}>
-                                            <Text style={{ fontSize: 8, color: ticketLabel, marginBottom: 2 }}>~ 45 km</Text>
                                             <Text style={{ color: '#4CAF50', fontSize: 14 }}>➔</Text>
                                         </View>
                                         <View style={{ flex: 1.2, alignItems: 'flex-end' }}>

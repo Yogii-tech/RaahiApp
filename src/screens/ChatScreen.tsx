@@ -72,8 +72,13 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
     };
 
     useEffect(() => {
+        const { AppState } = require('react-native');
         fetchMessages();
-        const interval = setInterval(fetchMessages, 3000); // Poll every 3s
+        const interval = setInterval(() => {
+            if (AppState.currentState === 'active') {
+                fetchMessages();
+            }
+        }, 3000);
         return () => clearInterval(interval);
     }, [bookingId]);
 
@@ -122,7 +127,7 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
                         {item.text}
                     </Text>
                     <View style={styles.messageFooter}>
-                        {isMe && <Text style={styles.readCheck}>✓✓</Text>}
+                        {isMe && (item as any).is_read && <Text style={styles.readCheck}>✓✓</Text>}
                         <Text style={[styles.timeText, { color: isMe ? 'rgba(255,255,255,0.7)' : colors.subtextColor }]}>
                             {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </Text>

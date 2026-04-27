@@ -148,6 +148,10 @@ const SosScreen: React.FC<SosScreenProps> = ({ visible, onClose }) => {
                         {/* Call Police */}
                         <TouchableOpacity
                             style={[styles.actionButton, styles.policeButton]}
+                            onPress={() => {
+                                const { Linking } = require('react-native');
+                                Linking.openURL('tel:112');
+                            }}
                             activeOpacity={0.85}>
                             <Text style={styles.actionIcon}>📞</Text>
                             <Text style={styles.actionText}>{t('sos.callPolice')}</Text>

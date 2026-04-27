@@ -38,7 +38,7 @@ interface Ride {
     pricePerSeat: number;
 }
 
-import { API_BASE } from '../apiConfig';
+
 
 const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) => {
     const { isDark, colors } = useTheme();
@@ -66,6 +66,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(false);
     const [showPostSuccess, setShowPostSuccess] = useState(false);
+    const [pricePerSeat, setPricePerSeat] = useState('350');
 
     useEffect(() => {
         fetchRecentRides();
@@ -196,7 +197,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                     vehicleNumber: user?.vehicle?.vehicle_number || "UK07-AX-4421",
                     seatsTotal: user?.vehicle?.seats || 5,
                     seatingLayout: user?.vehicle?.seating_layout || "suv",
-                    pricePerSeat: 350,
+                    pricePerSeat: parseInt(pricePerSeat) || 350,
                 }),
             });
 
@@ -450,6 +451,33 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                         </>
                     )}
                 </View>
+
+                <View style={styles.spacer14} />
+
+                {isDriver && (
+                    <>
+                        <Text style={[styles.fieldLabel, { color: colors.primary }]}>
+                            {t('home.pricePerSeat') || 'PRICE PER SEAT (₹)'}
+                        </Text>
+                        <View style={styles.spacer6} />
+                        <TextInput
+                            style={[
+                                styles.textInput,
+                                {
+                                    color: colors.textColor,
+                                    backgroundColor: colors.inputFillColor,
+                                    borderColor: colors.inputBorderColor,
+                                },
+                            ]}
+                            value={pricePerSeat}
+                            onChangeText={setPricePerSeat}
+                            placeholder="350"
+                            placeholderTextColor={colors.subtextColor}
+                            keyboardType="numeric"
+                        />
+                        <View style={styles.spacer14} />
+                    </>
+                )}
 
                 <View style={styles.spacer18} />
 

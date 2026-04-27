@@ -97,11 +97,20 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
         let arrivalTime = '—';
         if (depTime) {
             try {
-                // Parse "06:00 AM"
-                const [time, period] = depTime.split(' ');
-                let [hours, minutes] = time.split(':').map(Number);
+                // Robust parsing for various formats: "06:00 AM", "6:00 PM", or "18:00"
+                const parts = depTime.trim().split(/\s+/);
+                const timePart = parts[0];
+                const period = parts[1] ? parts[1].toUpperCase() : null;
+                
+                let [hours, minutes] = timePart.split(':').map(val => parseInt(val, 10));
+                
+                if (isNaN(hours) || isNaN(minutes)) {
+                    console.warn('Invalid time components:', timePart);
+                    return { distance: '—', duration: '—', arrival: '—' };
+                }
+
                 if (period === 'PM' && hours !== 12) hours += 12;
-                if (period === 'AM' && hours === 12) hours = 0;
+                else if (period === 'AM' && hours === 12) hours = 0;
                 
                 const depDate = new Date();
                 depDate.setHours(hours, minutes, 0, 0);
@@ -113,6 +122,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                 arrHours = arrHours % 12 || 12;
                 arrivalTime = `${String(arrHours).padStart(2, '0')}:${arrMinutes} ${arrPeriod}`;
             } catch (e) {
+                console.error('getTravelStats error:', e);
                 arrivalTime = '—';
             }
         }
@@ -132,16 +142,24 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
 
         setLoading(true);
         try {
-            const url = `${API_BASE}/api/rides/available?pickup=${encodeURIComponent(pickup)}&dropoff=${encodeURIComponent(dropoff)}&date=${encodeURIComponent(selectedDate)}`;
             const response = await fetch(url, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            const data = await response.json();
+            
+            const contentType = response.headers.get("content-type");
+            let data;
+            if (contentType && contentType.includes("application/json")) {
+                data = await response.json();
+            } else {
+                const text = await response.text();
+                throw new Error(text.slice(0, 100) || 'Server returned non-JSON response');
+            }
+
             if (response.ok) {
-                setAvailableRides(data);
+                setAvailableRides(Array.isArray(data) ? data : []);
                 setStep('rides');
             } else {
-                Alert.alert(t('common.error'), data.error || 'Failed to fetch vehicles');
+                Alert.alert(t('common.error'), data?.error || 'Failed to fetch vehicles');
             }
         } catch (err) {
             Alert.alert(t('common.error'), 'Connection error');
@@ -170,11 +188,18 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                             body: formData
                         });
 
-                        const data = await response.json();
+                        const contentType = response.headers.get("content-type");
+                        let data;
+                        if (contentType && contentType.includes("application/json")) {
+                            data = await response.json();
+                        } else {
+                            throw new Error('Server returned malformed response during upload');
+                        }
+
                         if (response.ok) {
                             setParcelPhoto(data.url);
                         } else {
-                            Alert.alert(t('common.error'), data.error || 'Upload failed');
+                            Alert.alert(t('common.error'), data?.error || 'Upload failed');
                         }
                     } catch (err) {
                         Alert.alert(t('common.error'), 'Upload failed');
@@ -212,42 +237,48 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                     onPress: async () => {
                         setLoading(true);
                         try {
-                            const response = await fetch(`${API_BASE}/api/rides/bookings`, {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    'Authorization': `Bearer ${token}`
-                                },
-                                body: JSON.stringify({
-                                    type: 'parcel',
-                                    pickup,
-                                    dropoff,
-                                    parcelSize: selectedSize,
-                                    recipientName,
-                                    contactNumber,
-                                    dropLocation,
-                                    notes,
-                                    date: selectedDate,
-                                    rideId: ride.id,
-                                    photoUrl: parcelPhoto,
-                                    price
-                                })
-                            });
+                                const response = await fetch(`${API_BASE}/api/rides/bookings`, {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'Authorization': `Bearer ${token}`
+                                    },
+                                    body: JSON.stringify({
+                                        type: 'parcel',
+                                        pickup,
+                                        dropoff,
+                                        parcelSize: selectedSize,
+                                        recipientName,
+                                        contactNumber,
+                                        dropLocation,
+                                        notes,
+                                        date: selectedDate,
+                                        rideId: ride.id,
+                                        photoUrl: parcelPhoto,
+                                        price
+                                    })
+                                });
 
-                            if (response.ok) {
-                                const data = await response.json();
-                                // Using the generated unique ID from the backend
-                                const displayId = data.bookingId ? `RA-P-${data.bookingId.slice(-4).toUpperCase()}` : 'Booked';
-                                
-                                Alert.alert(
-                                    t('common.success'), 
-                                    `Your parcel was successfully scheduled!\n\nBooking ID: ${displayId}\n\nYou can track this in your notifications.`,
-                                    [{ text: 'OK', onPress: () => onBack && onBack() }]
-                                );
-                            } else {
-                                const data = await response.json();
-                                Alert.alert(t('common.error'), data.error || 'Failed to schedule pickup');
-                            }
+                                const contentType = response.headers.get("content-type");
+                                let data;
+                                if (contentType && contentType.includes("application/json")) {
+                                    data = await response.json();
+                                } else {
+                                    throw new Error('Server error');
+                                }
+
+                                if (response.ok) {
+                                    // Using the generated unique ID from the backend
+                                    const displayId = data?.bookingId ? `RA-P-${data.bookingId.slice(-4).toUpperCase()}` : 'Booked';
+                                    
+                                    Alert.alert(
+                                        t('common.success'), 
+                                        `Your parcel was successfully scheduled!\n\nBooking ID: ${displayId}\n\nYou can track this in your notifications.`,
+                                        [{ text: 'OK', onPress: () => onBack && onBack() }]
+                                    );
+                                } else {
+                                    Alert.alert(t('common.error'), data?.error || 'Failed to schedule pickup');
+                                }
                         } catch {
                             Alert.alert(t('common.error'), t('login.connectionError'));
                         } finally {
@@ -498,10 +529,14 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                                 <View style={styles.rideFooter}>
                                     <View style={styles.driverInfo}>
                                         <View style={[styles.avatar, { backgroundColor: isDark ? '#37474F' : '#EEE' }]}>
-                                            <Text style={[styles.avatarText, { color: colors.textColor }]}>{(ride.driverName || 'V')[0].toUpperCase()}</Text>
+                                            <Text style={[styles.avatarText, { color: colors.textColor }]}>
+                                                {(ride?.driverName || 'V')[0]?.toUpperCase() || 'V'}
+                                            </Text>
                                         </View>
                                         <View>
-                                            <Text style={[styles.driverName, { color: colors.textColor }]}>{ride.driverName || 'Verified Driver'} ✅</Text>
+                                            <Text style={[styles.driverName, { color: colors.textColor }]}>
+                                                {ride?.driverName || 'Verified Driver'} ✅
+                                            </Text>
                                             <Text style={[styles.driverRole, { color: colors.subtextColor }]}>PARCEL PARTNER</Text>
                                         </View>
                                     </View>
