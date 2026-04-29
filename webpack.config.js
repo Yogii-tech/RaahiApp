@@ -57,6 +57,22 @@ module.exports = {
             },
             babelLoaderConfiguration,
             imageLoaderConfiguration,
+            {
+                test: /\.css$/,
+                use: [
+                    'style-loader',
+                    {
+                        loader: 'css-loader',
+                        options: {
+                            esModule: false,
+                            modules: {
+                                auto: true, // automatically enable CSS modules for .module.css
+                                localIdentName: '[name]__[local]--[hash:base64:5]',
+                            },
+                        },
+                    },
+                ],
+            },
         ],
     },
     resolve: {

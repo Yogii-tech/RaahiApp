@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -7,17 +7,60 @@ import {
     TouchableOpacity,
     ScrollView,
     Dimensions,
+    ActivityIndicator,
+    RefreshControl,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
+import { apiRequest } from '../utils/api';
 
 const { width } = Dimensions.get('window');
 
 const TrackPackageView: React.FC = () => {
     const { colors, isDark } = useTheme();
+    const { logout } = useAuth();
+    const [shipments, setShipments] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+
+    useEffect(() => {
+        fetchShipments();
+    }, []);
+
+    const fetchShipments = async () => {
+        try {
+            const response = await apiRequest('/api/rides/bookings', {}, logout);
+            if (response.ok) {
+                const data = await response.json();
+                // Filter for parcel types
+                const parcels = (data || []).filter((item: any) => item.type === 'parcel');
+                setShipments(parcels);
+            }
+        } catch (err) {
+            console.error('Fetch shipments error:', err);
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
+    };
+
+    const onRefresh = () => {
+        setRefreshing(true);
+        fetchShipments();
+    };
+
+    const currentShipment = shipments.find(s => s.status === 'accepted' || s.status === 'pending');
+    const recentShipments = shipments.filter(s => s !== currentShipment);
 
     return (
-        <ScrollView style={[styles.container, { backgroundColor: colors.background }]} showsVerticalScrollIndicator={false}>
+        <ScrollView 
+            style={[styles.container, { backgroundColor: colors.background }]} 
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
+            }
+        >
             {/* Header Section */}
             <View style={[styles.header, { backgroundColor: colors.primary }]}>
                 <View style={styles.headerContent}>
@@ -43,67 +86,91 @@ const TrackPackageView: React.FC = () => {
                 </View>
             </View>
 
-            {/* Current Shipment */}
-            <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                    <Text style={[styles.sectionTitle, { color: colors.textColor }]}>Current Shipment</Text>
-                    <TouchableOpacity>
-                        <Text style={{ color: colors.primary, fontWeight: '500' }}>View All</Text>
-                    </TouchableOpacity>
-                </View>
+            {loading && !refreshing ? (
+                <ActivityIndicator color={colors.primary} size="large" style={{ marginTop: 40 }} />
+            ) : (
+                <>
+                    {/* Current Shipment */}
+                    <View style={styles.section}>
+                        <View style={styles.sectionHeader}>
+                            <Text style={[styles.sectionTitle, { color: colors.textColor }]}>Current Shipment</Text>
+                            <TouchableOpacity>
+                                <Text style={{ color: colors.primary, fontWeight: '500' }}>View All</Text>
+                            </TouchableOpacity>
+                        </View>
 
-                <View style={[styles.shipmentCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}>
-                    <View style={styles.shipmentTop}>
-                        <View style={[styles.shipmentIconContainer, { backgroundColor: colors.primary + '10' }]}>
-                            <Icon name="cube-outline" size={24} color={colors.primary} />
-                        </View>
-                        <View style={styles.shipmentInfo}>
-                            <Text style={[styles.shipmentId, { color: colors.textColor }]}>#HWDSF776567DS</Text>
-                            <Text style={[styles.shipmentStatus, { color: colors.subtextColor }]}>On the way • 24 June</Text>
-                        </View>
-                        <Icon name="chevron-forward" size={20} color={colors.subtextColor} />
+                        {currentShipment ? (
+                            <View style={[styles.shipmentCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}>
+                                <View style={styles.shipmentTop}>
+                                    <View style={[styles.shipmentIconContainer, { backgroundColor: colors.primary + '10' }]}>
+                                        <Icon name="cube-outline" size={24} color={colors.primary} />
+                                    </View>
+                                    <View style={styles.shipmentInfo}>
+                                        <Text style={[styles.shipmentId, { color: colors.textColor }]}>
+                                            RA-P-{currentShipment.id.slice(-6).toUpperCase()}
+                                        </Text>
+                                        <Text style={[styles.shipmentStatus, { color: colors.subtextColor }]}>
+                                            {currentShipment.status === 'pending' ? 'Waiting for Driver' : 'On the way'} • {new Date(currentShipment.createdAt).toLocaleDateString()}
+                                        </Text>
+                                    </View>
+                                    <Icon name="chevron-forward" size={20} color={colors.subtextColor} />
+                                </View>
+
+                                {/* Progress Bar */}
+                                <View style={styles.stepperContainer}>
+                                    <View style={styles.stepperIcons}>
+                                        <StepperDot active={true} completed={true} colors={colors} />
+                                        <StepperLine active={true} colors={colors} />
+                                        <StepperDot active={currentShipment.status === 'accepted'} completed={currentShipment.status === 'accepted'} colors={colors} />
+                                        <StepperLine active={false} dashed={currentShipment.status === 'pending'} colors={colors} />
+                                        <StepperDot active={false} completed={false} colors={colors} />
+                                        <StepperLine active={false} dashed={true} colors={colors} />
+                                        <StepperDot active={false} completed={false} colors={colors} />
+                                    </View>
+                                </View>
+
+                                <View style={styles.pathInfo}>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={[styles.pathLabel, { color: colors.primary }]}>From</Text>
+                                        <Text style={[styles.pathValue, { color: colors.textColor }]} numberOfLines={1}>{currentShipment.pickup}</Text>
+                                    </View>
+                                    <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                                        <Text style={[styles.pathLabel, { color: colors.primary }]}>To</Text>
+                                        <Text style={[styles.pathValue, { color: colors.textColor }]} numberOfLines={1}>{currentShipment.dropoff}</Text>
+                                    </View>
+                                </View>
+                            </View>
+                        ) : (
+                            <View style={[styles.shipmentCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor, alignItems: 'center', padding: 30 }]}>
+                                <Icon name="cube-outline" size={48} color={colors.borderColor} />
+                                <Text style={{ color: colors.subtextColor, marginTop: 10 }}>No active shipments</Text>
+                            </View>
+                        )}
                     </View>
 
-                    {/* Progress Bar */}
-                    <View style={styles.stepperContainer}>
-                        <View style={styles.stepperIcons}>
-                            <StepperDot active={true} completed={true} colors={colors} />
-                            <StepperLine active={true} colors={colors} />
-                            <StepperDot active={true} completed={true} colors={colors} />
-                            <StepperLine active={true} colors={colors} />
-                            <StepperDot active={true} completed={true} colors={colors} />
-                            <StepperLine active={false} dashed={true} colors={colors} />
-                            <StepperDot active={true} completed={false} colors={colors} />
-                            <StepperLine active={false} colors={colors} />
-                            <StepperDot active={false} completed={false} colors={colors} />
+                    {/* Recent Shipment */}
+                    <View style={styles.section}>
+                        <View style={styles.sectionHeader}>
+                            <Text style={[styles.sectionTitle, { color: colors.textColor }]}>Recent Shipment</Text>
                         </View>
+
+                        {recentShipments.length > 0 ? (
+                            recentShipments.map((item) => (
+                                <RecentShipmentItem 
+                                    key={item.id}
+                                    id={`RA-P-${item.id.slice(-6).toUpperCase()}`} 
+                                    status={`${item.status.toUpperCase()} • ${new Date(item.createdAt).toLocaleDateString()}`} 
+                                    colors={colors} 
+                                    completed={item.status === 'completed'}
+                                    primaryColor={colors.primary} 
+                                />
+                            ))
+                        ) : (
+                            <Text style={{ color: colors.subtextColor, textAlign: 'center', marginTop: 10 }}>No recent history</Text>
+                        )}
                     </View>
-
-                    <View style={styles.pathInfo}>
-                        <View>
-                            <Text style={[styles.pathLabel, { color: colors.primary }]}>From</Text>
-                            <Text style={[styles.pathValue, { color: colors.textColor }]}>Delhi, India</Text>
-                        </View>
-                        <View style={{ alignItems: 'flex-end' }}>
-                            <Text style={[styles.pathLabel, { color: colors.primary }]}>To</Text>
-                            <Text style={[styles.pathValue, { color: colors.textColor }]}>California, US</Text>
-                        </View>
-                    </View>
-                </View>
-            </View>
-
-            {/* Recent Shipment */}
-            <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                    <Text style={[styles.sectionTitle, { color: colors.textColor }]}>Recent Shipment</Text>
-                    <TouchableOpacity>
-                        <Text style={{ color: colors.primary, fontWeight: '500' }}>View All</Text>
-                    </TouchableOpacity>
-                </View>
-
-                <RecentShipmentItem id="#HWDSF776567DS" status="On the way • 24 June" colors={colors} primaryColor={colors.primary} />
-                <RecentShipmentItem id="#7XZ6V87Z6XCSA7" status="Delivered • 24 May" colors={colors} completed={true} primaryColor={colors.primary} />
-            </View>
+                </>
+            )}
 
             <View style={{ height: 100 }} />
         </ScrollView>
@@ -184,8 +251,9 @@ const styles = StyleSheet.create({
     },
     searchInput: {
         flex: 1,
-        color: '#333',
         fontSize: 14,
+        borderWidth: 0,
+        outlineWidth: 0,
     },
     quickActionsContainer: {
         marginTop: -30,

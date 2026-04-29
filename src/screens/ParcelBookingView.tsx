@@ -19,6 +19,8 @@ import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { API_BASE } from '../apiConfig';
+import LocationInput from '../components/LocationInput';
+import { apiRequest } from '../utils/api';
 const { width } = Dimensions.get('window');
 
 
@@ -33,7 +35,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
     const { width } = useWindowDimensions();
     
     // Step state
-    const [step, setStep] = useState<'search' | 'rides' | 'details'>('search');
+    const [step, setStep] = useState<'search' | 'rides' | 'details' | 'calculator'>('search');
     const [loading, setLoading] = useState(false);
     const [availableRides, setAvailableRides] = useState<any[]>([]);
     const [selectedRide, setSelectedRide] = useState<any | null>(null);
@@ -41,6 +43,10 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
     // Form state - Step 1
     const [pickup, setPickup] = useState('');
     const [dropoff, setDropoff] = useState('');
+    const [pickupCoords, setPickupCoords] = useState<[number, number] | null>(null);
+    const [dropoffCoords, setDropoffCoords] = useState<[number, number] | null>(null);
+    const [roadDistance, setRoadDistance] = useState<number | null>(null);
+    const [roadDuration, setRoadDuration] = useState<number | null>(null);
     const [selectedDate, setSelectedDate] = useState(() => {
         const today = new Date();
         const dd = String(today.getDate()).padStart(2, '0');
@@ -75,23 +81,25 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
     const pickupLabelColor = isDark ? '#00FFFF' : '#5B4FFF';
     const dropoffLabelColor = isDark ? '#FF4081' : '#5B4FFF';
 
-    const getTravelStats = (p: string, d: string, depTime: string) => {
-        // Mock travel stats based on common routes in Uttarakhand
-        // In a real app, this would come from a Maps API or precomputed table
-        const distanceMap: { [key: string]: number } = {
-            'Bageshwar-Haldwani': 155,
-            'Haldwani-Bageshwar': 155,
-            'Rishikesh-Tehri': 76,
-            'Tehri-Rishikesh': 76,
-            'Dehradun-Mussoorie': 35,
-            'Mussoorie-Dehradun': 35,
-            'Kanda-Kapkote': 42,
-            'Kapkote-Kanda': 42,
-        };
+    const fetchRoadMetrics = async (from: [number, number], to: [number, number]) => {
+        try {
+            const url = `https://router.project-osrm.org/route/v1/driving/${from[1]},${from[0]};${to[1]},${to[0]}?overview=false`;
+            const res = await fetch(url);
+            const data = await res.json();
+            if (data.routes && data.routes.length > 0) {
+                const route = data.routes[0];
+                setRoadDistance(Math.round(route.distance / 1000)); // KM
+                setRoadDuration(Math.round(route.duration / 3600) || 1); // Hours (min 1)
+            }
+        } catch (e) {
+            console.error("Failed to fetch road metrics", e);
+        }
+    };
 
-        const key = `${p}-${d}`;
-        const distance = distanceMap[key] || Math.floor(Math.random() * 50) + 30; // Fallback
-        const durationHours = Math.ceil(distance / 30) + 1; // Hilly terrain avg 30km/h + buffer
+    const getTravelStats = (p: string, d: string, depTime: string) => {
+        // Use real road distance if fetched, otherwise fallback to estimates
+        const distance = roadDistance !== null ? roadDistance : 35;
+        const durationHours = roadDuration !== null ? roadDuration : Math.ceil(distance / 30) + 1;
         
         // Calculate Arrival Time
         let arrivalTime = '—';
@@ -199,65 +207,165 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
         await fetchAvailableRides();
     };
 
-    const handleFinalBooking = async (ride: any) => {
-        const price = selectedSize === 'small' ? '150' : selectedSize === 'medium' ? '280' : '450';
-        
-        Alert.alert(
-            'Confirm Booking',
-            `Send parcel to ${recipientName}?\n\nRoute: ${pickup} → ${dropoff}\nTime: ${ride.departureTime}\nTotal: ₹${price}`,
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Confirm',
-                    onPress: async () => {
-                        setLoading(true);
-                        try {
-                            const response = await fetch(`${API_BASE}/api/rides/bookings`, {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    'Authorization': `Bearer ${token}`
-                                },
-                                body: JSON.stringify({
-                                    type: 'parcel',
-                                    pickup,
-                                    dropoff,
-                                    parcelSize: selectedSize,
-                                    recipientName,
-                                    contactNumber,
-                                    dropLocation,
-                                    notes,
-                                    date: selectedDate,
-                                    rideId: ride.id,
-                                    photoUrl: parcelPhoto,
-                                    price
-                                })
-                            });
+    const handleFinalBooking = (ride: any) => {
+        setSelectedRide(ride);
+        setStep('calculator');
+    };
 
-                            if (response.ok) {
-                                const data = await response.json();
-                                // Using the generated unique ID from the backend
-                                const displayId = data.bookingId ? `RA-P-${data.bookingId.slice(-4).toUpperCase()}` : 'Booked';
-                                
-                                Alert.alert(
-                                    t('common.success'), 
-                                    `Your parcel was successfully scheduled!\n\nBooking ID: ${displayId}\n\nYou can track this in your notifications.`,
-                                    [{ text: 'OK', onPress: () => onBack && onBack() }]
-                                );
-                            } else {
-                                const data = await response.json();
-                                Alert.alert(t('common.error'), data.error || 'Failed to schedule pickup');
-                            }
-                        } catch {
-                            Alert.alert(t('common.error'), t('login.connectionError'));
-                        } finally {
-                            setLoading(false);
-                        }
-                    }
-                }
-            ]
+    const confirmBooking = async () => {
+        if (!selectedRide) {
+            console.error("No ride selected for booking");
+            return;
+        }
+        
+        const stats = getTravelStats(pickup, dropoff, selectedRide.departureTime);
+        const distNum = parseInt(stats.distance) || 0;
+        const rate = selectedSize === 'small' ? 2 : selectedSize === 'medium' ? 2.5 : 3;
+        const price = Math.ceil(distNum * rate);
+
+        console.log("Confirming booking:", {
+            rideId: selectedRide.id || selectedRide._id,
+            price,
+            pickup,
+            dropoff
+        });
+
+        setLoading(true);
+        try {
+            const rideId = selectedRide.id || selectedRide._id;
+            const fullUrl = `${API_BASE}/api/rides/${rideId}/book`;
+            const stats = getTravelStats(pickup, dropoff, selectedRide.departureTime);
+            const distNum = parseInt(stats.distance) || 0;
+            const rate = selectedSize === 'small' ? 2 : selectedSize === 'medium' ? 2.5 : 3;
+            const calculatedPrice = Math.ceil(distNum * rate);
+
+            const response = await fetch(fullUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    type: 'parcel',
+                    pickup,
+                    dropoff,
+                    parcelSize: selectedSize,
+                    recipientName,
+                    contactNumber,
+                    dropLocation,
+                    notes,
+                    date: selectedDate,
+                    photoUrl: parcelPhoto,
+                    price: calculatedPrice.toString()
+                })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                const displayId = data.bookingId ? `RA-P-${data.bookingId.slice(-4).toUpperCase()}` : 'Booked';
+                
+                Alert.alert(
+                    t('common.success'), 
+                    `Your parcel was successfully scheduled!\n\nBooking ID: ${displayId}\n\nYou can track this in your notifications.`,
+                    [{ text: 'OK', onPress: () => onBack && onBack() }]
+                );
+            } else {
+                const errorData = await response.json().catch(() => ({}));
+                console.error("Booking failed:", errorData);
+                Alert.alert(t('common.error'), errorData.error || 'Failed to schedule pickup. Please try again.');
+            }
+        } catch (err) {
+            console.error("Booking catch error:", err);
+            Alert.alert(t('common.error'), t('login.connectionError'));
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const renderPriceCalculator = () => {
+        if (!selectedRide) return null;
+        const stats = getTravelStats(pickup, dropoff, selectedRide.departureTime);
+        const distNum = parseInt(stats.distance);
+        const rate = selectedSize === 'small' ? 2 : selectedSize === 'medium' ? 2.5 : 3;
+        const baseCharge = distNum * 2;
+        const weightPremium = selectedSize === 'small' ? 0 : selectedSize === 'medium' ? distNum * 0.5 : distNum * 1;
+        const totalPrice = Math.ceil(distNum * rate);
+
+        return (
+            <View style={styles.content}>
+                <TouchableOpacity onPress={() => setStep('rides')} style={styles.backButton}>
+                    <Text style={[styles.backText, { color: colors.primary }]}>← {t('common.back')}</Text>
+                </TouchableOpacity>
+
+                <Text style={[styles.title, { color: colors.textColor }]}>Price Calculator</Text>
+                <Text style={[styles.routeSummary, { color: colors.subtextColor }]}>
+                    Freight calculation for your shipment
+                </Text>
+
+                <View style={styles.spacer32} />
+
+                {/* Calculation Card */}
+                <View style={[styles.summaryCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor, padding: 24 }]}>
+                    <View style={styles.calcRow}>
+                        <Text style={[styles.calcLabel, { color: colors.subtextColor }]}>Distance</Text>
+                        <Text style={[styles.calcValue, { color: colors.textColor }]}>{stats.distance}</Text>
+                    </View>
+                    <View style={styles.calcDivider} />
+                    <View style={styles.calcRow}>
+                        <Text style={[styles.calcLabel, { color: colors.subtextColor }]}>Weight Category</Text>
+                        <Text style={[styles.calcValue, { color: colors.primary, fontWeight: 'bold' }]}>
+                            {selectedSize.toUpperCase()}
+                        </Text>
+                    </View>
+                    <View style={styles.calcRow}>
+                        <Text style={[styles.calcLabel, { color: colors.subtextColor }]}>Rate per KM</Text>
+                        <Text style={[styles.calcValue, { color: colors.textColor }]}>₹{rate}/km</Text>
+                    </View>
+
+                    <View style={[styles.hr, { marginVertical: 20, opacity: 0.1 }]} />
+
+                    <View style={styles.calcRow}>
+                        <Text style={[styles.totalLabel, { color: colors.textColor }]}>Total Freight</Text>
+                        <Text style={[styles.totalValue, { color: '#00C853' }]}>₹{totalPrice}</Text>
+                    </View>
+                </View>
+
+                <View style={styles.spacer40} />
+
+                <View style={[styles.infoBox, { backgroundColor: 'rgba(0, 191, 165, 0.05)', borderColor: 'rgba(0, 191, 165, 0.2)' }]}>
+                    <Icon name="information-circle-outline" size={20} color="#00BFA5" />
+                    <Text style={[styles.infoText, { color: colors.subtextColor }]}>
+                        Price is calculated based on hilly terrain distance and parcel volume/weight.
+                    </Text>
+                </View>
+
+                <View style={styles.spacer40} />
+
+                <TouchableOpacity 
+                    style={[styles.scheduleButton, { backgroundColor: colors.primary, zIndex: 9999 }, loading && { opacity: 0.7 }]}
+                    onPress={() => {
+                        console.log("OnPress Fired!");
+                        confirmBooking();
+                    }}
+                    disabled={loading}>
+                    {loading ? (
+                        <ActivityIndicator color="#FFF" />
+                    ) : (
+                        <Text style={styles.scheduleButtonText}>
+                            💳 CONFIRM & BOOK FOR ₹{totalPrice}
+                        </Text>
+                    )}
+                </TouchableOpacity>
+            </View>
         );
     };
+
+    // Auto-fetch road metrics when coords change
+    React.useEffect(() => {
+        if (pickupCoords && dropoffCoords) {
+            fetchRoadMetrics(pickupCoords, dropoffCoords);
+        }
+    }, [pickupCoords, dropoffCoords]);
 
     const renderRecipientDetails = () => (
         <View style={styles.content}>
@@ -323,14 +431,12 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
 
             <View style={styles.spacer16} />
 
-            <Text style={[styles.fieldLabel, { color: colors.subtextColor }]}>{t('parcel.dropLocation')}</Text>
-            <View style={styles.spacer6} />
-            <TextInput
-                style={[styles.input, { color: colors.textColor, backgroundColor: colors.inputFillColor, borderColor: colors.inputBorderColor }]}
+            <LocationInput
+                label={t('parcel.dropLocation')}
                 value={dropLocation}
                 onChangeText={setDropLocation}
-                placeholder={t('parcel.dropPlaceholder')}
-                placeholderTextColor={colors.subtextColor}
+                onSelect={(res) => setDropLocation(res.display_name)}
+                labelColor={colors.subtextColor}
             />
 
             <View style={styles.spacer16} />
@@ -383,39 +489,6 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                     </Text>
                 )}
             </TouchableOpacity>
-
-            <View style={{ height: 32 }} /> {/* Added space between button and Popular Routes */}
-
-            <Text style={[styles.sectionTitle, { color: colors.subtextColor }]}>{t('parcel.popularRoutes') || 'POPULAR ROUTES'}</Text>
-            <View style={{ height: 25 }} />
-            <ScrollView 
-                horizontal 
-                showsHorizontalScrollIndicator={false} 
-                style={styles.routesScroll}
-                contentContainerStyle={{ paddingRight: 60 }}>
-                {popularRoutes.map((route, index) => (
-                    <TouchableOpacity 
-                        key={index} 
-                        onPress={() => { setPickup(route.from); setDropoff(route.to); }}
-                        style={[
-                            styles.miniRouteCard, 
-                            { 
-                                backgroundColor: colors.cardColor, 
-                                borderColor: colors.borderColor,
-                            }
-                        ]}>
-                        <View style={styles.miniRouteHeader}>
-                            <View style={[styles.smallDot, { backgroundColor: '#4CAF50' }]} />
-                            <Text style={[styles.routeName, { color: colors.textColor }]}>{route.from}</Text>
-                        </View>
-                        <View style={styles.miniRouteFooter}>
-                            <Text style={[styles.miniRouteArrow, { color: colors.subtextColor }]}>→</Text>
-                            <Text style={[styles.miniRouteToName, { color: colors.subtextColor }]}>{route.to}</Text>
-                        </View>
-                        <Text style={[styles.miniRoutePrice, { color: '#00BFA5' }]}>₹{route.price}</Text>
-                    </TouchableOpacity>
-                ))}
-            </ScrollView>
             <View style={styles.spacer40} />
         </View>
     );
@@ -523,7 +596,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
 
     return (
         <ScrollView style={[styles.container, { backgroundColor: colors.background }]} showsVerticalScrollIndicator={false} scrollEnabled={step !== 'rides'}>
-            {step === 'details' ? renderRecipientDetails() : step === 'rides' ? renderRideSelection() : (
+            {step === 'details' ? renderRecipientDetails() : step === 'rides' ? renderRideSelection() : step === 'calculator' ? renderPriceCalculator() : (
                 <View style={styles.content}>
                     {onBack && (
                         <TouchableOpacity onPress={onBack} style={styles.backButton}>
@@ -532,46 +605,43 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                             </Text>
                         </TouchableOpacity>
                     )}
+
+                    {/* Greeting */}
+                    <Text style={{ fontSize: 28, fontWeight: 'bold', color: colors.textColor }}>
+                        {t('home.greetingParceller' as any) || 'Namaste, Sender 🙏'}
+                    </Text>
+                    <View style={styles.spacer6} />
+                    <Text style={{ fontSize: 16, color: colors.subtextColor }}>
+                        {t('home.subGreetingParceller' as any) || 'Ready to ship something today?'}
+                    </Text>
+
+                    <View style={styles.spacer24} />
                     
                     {/* Step 1 Search UI - Existing */}
                     <View style={[styles.inputCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}>
-                        <Text style={[styles.fieldLabel, { color: pickupLabelColor }]}>
-                            {t('parcel.pickupLabel')}
-                        </Text>
-                        <View style={styles.spacer6} />
-                        <TextInput
-                            style={[
-                                styles.input,
-                                {
-                                    color: colors.textColor,
-                                    backgroundColor: colors.inputFillColor,
-                                    borderColor: colors.inputBorderColor,
-                                },
-                            ]}
-                            value={pickup}
-                            onChangeText={setPickup}
-                            placeholderTextColor={colors.subtextColor}
-                        />
-                        
-                        <View style={styles.spacer14} />
-                        
-                        <Text style={[styles.fieldLabel, { color: dropoffLabelColor }]}>
-                            {t('parcel.dropoffLabel')}
-                        </Text>
-                        <View style={styles.spacer6} />
-                        <TextInput
-                            style={[
-                                styles.input,
-                                {
-                                    color: colors.textColor,
-                                    backgroundColor: colors.inputFillColor,
-                                    borderColor: colors.inputBorderColor,
-                                },
-                            ]}
-                            value={dropoff}
-                            onChangeText={setDropoff}
-                            placeholderTextColor={colors.subtextColor}
-                        />
+                    <LocationInput
+                        label={t('parcel.pickupLabel')}
+                        value={pickup}
+                        onChangeText={setPickup}
+                        onSelect={(res) => {
+                            setPickup(res.display_name);
+                            setPickupCoords([parseFloat(res.lat), parseFloat(res.lon)]);
+                        }}
+                        labelColor={pickupLabelColor}
+                    />
+                    
+                    <View style={styles.spacer14} />
+                    
+                    <LocationInput
+                        label={t('parcel.dropoffLabel')}
+                        value={dropoff}
+                        onChangeText={setDropoff}
+                        onSelect={(res) => {
+                            setDropoff(res.display_name);
+                            setDropoffCoords([parseFloat(res.lat), parseFloat(res.lon)]);
+                        }}
+                        labelColor={dropoffLabelColor}
+                    />
 
                         <View style={styles.spacer14} />
 
@@ -637,47 +707,53 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                     <TouchableOpacity 
                         style={[styles.scheduleButton, { backgroundColor: colors.primary }]}
                         activeOpacity={0.8}
-                        onPress={() => {
-                            if (pickup && dropoff) setStep('details');
-                            else Alert.alert(t('common.error'), 'Please enter pickup and dropoff locations.');
+                        onPress={async () => {
+                            if (pickup && dropoff) {
+                                setLoading(true);
+                                let pCoords = pickupCoords;
+                                let dCoords = dropoffCoords;
+
+                                try {
+                                    if (!pCoords) {
+                                        const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(pickup)}&format=json&limit=1`);
+                                        const data = await res.json();
+                                        if (data && data.length > 0) {
+                                            pCoords = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+                                            setPickupCoords(pCoords);
+                                        }
+                                    }
+                                    if (!dCoords) {
+                                        const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(dropoff)}&format=json&limit=1`);
+                                        const data = await res.json();
+                                        if (data && data.length > 0) {
+                                            dCoords = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+                                            setDropoffCoords(dCoords);
+                                        }
+                                    }
+
+                                    if (pCoords && dCoords) {
+                                        const url = `https://router.project-osrm.org/route/v1/driving/${pCoords[1]},${pCoords[0]};${dCoords[1]},${dCoords[0]}?overview=false`;
+                                        const res = await fetch(url);
+                                        const data = await res.json();
+                                        if (data.routes && data.routes.length > 0) {
+                                            setRoadDistance(Math.round(data.routes[0].distance / 1000));
+                                            setRoadDuration(Math.round(data.routes[0].duration / 3600) || 1);
+                                        }
+                                    }
+                                } catch (e) {
+                                    console.error('Failed to geocode or fetch route:', e);
+                                }
+                                
+                                setLoading(false);
+                                setStep('details');
+                            } else {
+                                Alert.alert(t('common.error'), 'Please enter pickup and dropoff locations.');
+                            }
                         }}>
                         <Text style={styles.scheduleButtonText}>
                             🚀 {t('parcel.schedulePickup').toUpperCase()}
                         </Text>
                     </TouchableOpacity>
-
-                    <View style={{ height: 32 }} /> {/* Added space between button and Popular Routes */}
-
-                    <Text style={[styles.sectionTitle, { color: colors.subtextColor }]}>{t('parcel.popularRoutes') || 'POPULAR ROUTES'}</Text>
-                    <View style={{ height: 25 }} />
-                    <ScrollView 
-                        horizontal 
-                        showsHorizontalScrollIndicator={false} 
-                        style={styles.routesScroll}
-                        contentContainerStyle={{ paddingRight: 60 }}>
-                        {popularRoutes.map((route, index) => (
-                            <TouchableOpacity 
-                                key={index} 
-                                onPress={() => { setPickup(route.from); setDropoff(route.to); }}
-                                style={[
-                                    styles.miniRouteCard, 
-                                    { 
-                                        backgroundColor: colors.cardColor, 
-                                        borderColor: colors.borderColor,
-                                    }
-                                ]}>
-                                <View style={styles.miniRouteHeader}>
-                                    <View style={[styles.smallDot, { backgroundColor: '#4CAF50' }]} />
-                                    <Text style={[styles.routeName, { color: colors.textColor }]}>{route.from}</Text>
-                                </View>
-                                <View style={styles.miniRouteFooter}>
-                                    <Text style={[styles.miniRouteArrow, { color: colors.subtextColor }]}>→</Text>
-                                    <Text style={[styles.miniRouteToName, { color: colors.subtextColor }]}>{route.to}</Text>
-                                </View>
-                                <Text style={[styles.miniRoutePrice, { color: '#00BFA5' }]}>₹{route.price}</Text>
-                            </TouchableOpacity>
-                        ))}
-                    </ScrollView>
                     <View style={styles.spacer40} />
                 </View>
             )}
@@ -1156,6 +1232,59 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: 'bold',
         color: '#FFFFFF',
+    },
+    calcRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    calcLabel: {
+        fontSize: 14,
+    },
+    calcValue: {
+        fontSize: 16,
+    },
+    calcDivider: {
+        height: 1,
+        backgroundColor: 'rgba(0,0,0,0.05)',
+        marginVertical: 8,
+    },
+    totalLabel: {
+        fontSize: 18,
+        fontWeight: 'bold',
+    },
+    totalValue: {
+        fontSize: 24,
+        fontWeight: 'bold',
+    },
+    infoBox: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 16,
+        borderRadius: 12,
+        borderWidth: 1,
+        gap: 12,
+    },
+    infoText: {
+        flex: 1,
+        fontSize: 13,
+        lineHeight: 18,
+    },
+    hr: {
+        height: 1,
+        backgroundColor: 'rgba(0,0,0,0.1)',
+    },
+    spacer12: {
+        height: 12,
+    },
+    spacer14: {
+        height: 14,
+    },
+    label: {
+        fontSize: 10,
+        fontWeight: 'bold',
+        letterSpacing: 0.5,
     },
 });
 

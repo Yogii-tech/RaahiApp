@@ -75,31 +75,46 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
                         <View style={styles.details}>
                             <View style={styles.dateTimeRow}>
                                 <Text style={styles.dateTimeIcon}>📅</Text>
-                                <Text style={[styles.dateTimeText, { color: colors.textColor }]}>{item.ride?.date}</Text>
+                                <Text style={[styles.dateTimeText, { color: colors.textColor }]}>{item.ride?.date || item.date}</Text>
                                 <View style={{ width: 12 }} />
                                 <Text style={styles.dateTimeIcon}>🕒</Text>
                                 <Text style={[styles.dateTimeText, { color: colors.textColor }]}>{item.ride?.departureTime}</Text>
                             </View>
                             <View style={{ height: 4 }} />
-                            <Text style={[styles.detailText, { color: colors.subtextColor }]}>{t('requests.seatsTitle')}{item.seatsRequested}</Text>
-                            {item.roofCarrier && <Text style={[styles.detailText, { color: colors.subtextColor }]}>• {t('trips.needsRoofCarrier')}</Text>}
+                            
+                            {item.type === 'parcel' ? (
+                                <View style={{ marginTop: 8 }}>
+                                    <Text style={[styles.detailText, { color: colors.primary, fontWeight: 'bold' }]}>📦 PARCEL DELIVERY</Text>
+                                    <Text style={[styles.detailText, { color: colors.textColor }]}>Route: {item.pickup} → {item.dropoff}</Text>
+                                    <Text style={[styles.detailText, { color: colors.subtextColor }]}>Recipient: {item.recipientName} ({item.contactNumber})</Text>
+                                    <Text style={[styles.detailText, { color: colors.subtextColor }]}>Size: {item.parcelSize?.toUpperCase()}</Text>
+                                </View>
+                            ) : (
+                                <>
+                                    <Text style={[styles.detailText, { color: colors.subtextColor }]}>{t('requests.seatsTitle')}{item.seatsRequested}</Text>
+                                    {item.roofCarrier && <Text style={[styles.detailText, { color: colors.subtextColor }]}>• {t('trips.needsRoofCarrier')}</Text>}
+                                </>
+                            )}
+
                             <Text style={{ fontSize: 11, color: colors.subtextColor, marginTop: 4, fontStyle: 'italic' }}>
                                 {t('trips.bookedOn') || 'Booked on: '}
                                 {new Date(item.createdAt).toLocaleDateString()} at {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </Text>
                         </View>
 
-                        {/* Layout for Driver to see requested seats */}
-                        <View style={{ marginBottom: 20 }}>
-                            <JeepLayout
-                                interactive={false}
-                                takenSeats={item.status === 'accepted' ? (item.seatLayout || []) : []}
-                                pendingSeats={item.status === 'pending' ? (item.seatLayout || []) : []}
-                                numSeatsRequested={item.seatsRequested}
-                                totalSeats={item.ride?.seatsTotal}
-                                layoutType={item.ride?.seatingLayout || 'suv'}
-                            />
-                        </View>
+                        {/* Layout for Driver to see requested seats (Hide for parcels) */}
+                        {item.type !== 'parcel' && (
+                            <View style={{ marginBottom: 20 }}>
+                                <JeepLayout
+                                    interactive={false}
+                                    takenSeats={item.status === 'accepted' ? (item.seatLayout || []) : []}
+                                    pendingSeats={item.status === 'pending' ? (item.seatLayout || []) : []}
+                                    numSeatsRequested={item.seatsRequested}
+                                    totalSeats={item.ride?.seatsTotal}
+                                    layoutType={item.ride?.seatingLayout || 'suv'}
+                                />
+                            </View>
+                        )}
 
                         {item.status === 'pending' ? (
                             <View style={styles.actions}>

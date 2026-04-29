@@ -31,7 +31,7 @@ import HomeScreen from './src/screens/HomeScreen';
 import TripsScreen from './src/screens/TripsScreen';
 import RequestsOverlay from './src/screens/RequestsOverlay';
 import AccountScreen from './src/screens/AccountScreen';
-import SosScreen from './src/screens/SosScreen';
+import MapScreen from './src/screens/MapScreen';
 import ChatScreen from './src/screens/ChatScreen';
 import Icon from 'react-native-vector-icons/Ionicons';
 
@@ -41,7 +41,7 @@ const linking = {
     screens: {
       Home: 'Home',
       Trips: 'Trips',
-      SOS: 'SOS',
+      Map: 'Map',
       Account: 'Account',
     },
   },
@@ -73,7 +73,7 @@ function AppHeader({ onToggleNotifications, notificationCount = 0 }: { onToggleN
         />
       </View>
       <Text style={[headerStyles.title, { color: colors.primary }]}>
-        Raahi
+        Go Raahi
       </Text>
 
       <View style={headerStyles.spacer} />
@@ -204,7 +204,7 @@ const tabIcons: Record<string, { default: string; focused: string }> = {
   Home: { default: 'home-outline', focused: 'home' },
   Trips: { default: 'car-sport-outline', focused: 'car-sport' },
   ParcelTrips: { default: 'cube-outline', focused: 'cube' },
-  SOS: { default: 'warning-outline', focused: 'warning' },
+  Map: { default: 'map-outline', focused: 'map' },
   Account: { default: 'person-outline', focused: 'person' },
 };
 
@@ -213,7 +213,6 @@ function MainTabs() {
   const { colors, isDark } = useTheme();
   const { user, token, logout } = useAuth();
   const { t } = useLanguage();
-  const [sosVisible, setSosVisible] = useState(false);
   const [notificationsVisible, setNotificationsVisible] = useState(false);
   const [notificationCount, setNotificationCount] = useState(0);
   const [activeChat, setActiveChat] = useState<any>(null);
@@ -274,8 +273,6 @@ function MainTabs() {
         }}
       />
 
-      <SosScreen visible={sosVisible} onClose={() => setSosVisible(false)} />
-
       <Tab.Navigator
         screenOptions={({ route }) => ({
           headerShown: false,
@@ -283,11 +280,11 @@ function MainTabs() {
             const isParcel = route.name === 'Trips' && (user?.role === 'parceller' || parcelMode);
             const icon = isParcel ? tabIcons.ParcelTrips : tabIcons[route.name];
             return (
-              <View style={route.name === 'SOS' ? tabStyles.sosIconContainer : null}>
+              <View>
                 <Icon
                   name={focused ? icon.focused : icon.default}
-                  size={route.name === 'SOS' ? 22 : 24}
-                  color={route.name === 'SOS' ? '#FFFFFF' : (focused ? colors.primary : colors.subtextColor)}
+                  size={24}
+                  color={focused ? colors.primary : colors.subtextColor}
                 />
               </View>
             );
@@ -299,7 +296,7 @@ function MainTabs() {
             paddingBottom: 8,
             backgroundColor: colors.background,
             borderTopColor: colors.borderColor,
-            display: sosVisible || notificationsVisible || activeChat ? 'none' : 'flex'
+            display: notificationsVisible || activeChat ? 'none' : 'flex'
           },
         })}
       >
@@ -312,15 +309,9 @@ function MainTabs() {
           options={{ title: (user?.role === 'parceller' || parcelMode) ? t('tab.trackPackage') : t('tab.trips') }}
         />
         <Tab.Screen
-          name="SOS"
-          component={SosScreenTab}
-          options={{ title: t('tab.sos') }}
-          listeners={{
-            tabPress: (e) => {
-              e.preventDefault();
-              setSosVisible(true);
-            },
-          }}
+          name="Map"
+          component={MapScreen}
+          options={{ title: t('tab.map') }}
         />
         <Tab.Screen
           name="Account"
@@ -328,10 +319,6 @@ function MainTabs() {
           options={{ title: t('tab.account') }}
         />
       </Tab.Navigator>
-
-      {sosVisible && (
-        <SosScreen visible={sosVisible} onClose={() => setSosVisible(false)} />
-      )}
 
       {notificationsVisible && (
         <View style={[StyleSheet.absoluteFill, { top: insets.top + 64, bottom: 0, backgroundColor: colors.background, zIndex: 100, elevation: 10 }]}>
@@ -350,8 +337,13 @@ function MainTabs() {
           <ChatScreen
             bookingId={activeChat.id}
             recipientName={isDriver ? activeChat.passengerName || "Passenger" : activeChat.ride?.driverName || "Driver"}
+            recipientPhone={activeChat.type === 'parcel' ? activeChat.contactNumber : (isDriver ? activeChat.passengerPhone : activeChat.driverPhone)}
             pickup={activeChat.ride?.pickup}
             dropoff={activeChat.ride?.dropoff}
+            pickupLat={activeChat.ride?.pickupLat}
+            pickupLng={activeChat.ride?.pickupLng}
+            dropoffLat={activeChat.ride?.dropoffLat}
+            dropoffLng={activeChat.ride?.dropoffLng}
             departureTime={activeChat.ride?.departureTime}
             onBack={() => setActiveChat(null)}
           />
@@ -375,16 +367,6 @@ function SosScreenTab() {
 const tabStyles = StyleSheet.create({
   tabIcon: { fontSize: 22 },
   tabIconFocused: { fontSize: 24 },
-  sosIconContainer: {
-    backgroundColor: '#C62828',
-    borderRadius: 17,
-    width: 34,
-    height: 34,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  sosIcon: { fontSize: 18, color: '#FFFFFF' },
-  sosPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 });
 
 function RootApp() {
@@ -394,7 +376,7 @@ function RootApp() {
   if (isInitialLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <Text style={{ color: '#fff' }}>Loading Raahi...</Text>
+        <Text style={{ color: '#fff' }}>Loading Go Raahi...</Text>
       </View>
     );
   }

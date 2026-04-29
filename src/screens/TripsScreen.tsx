@@ -10,6 +10,7 @@ import { API_BASE } from '../apiConfig';
 import { apiRequest } from '../utils/api';
 import Icon from 'react-native-vector-icons/Ionicons';
 import TrackPackageView from '../components/TrackPackageView';
+import { startDriverTracking } from '../modern_map/services/socket';
 
 interface Booking {
     id: string;
@@ -22,6 +23,39 @@ interface Booking {
     date?: string;
     departureTime?: string;
 }
+
+const DistanceDisplay = ({ pickup, dropoff, color }: { pickup?: string, dropoff?: string, color: string }) => {
+    const [distance, setDistance] = useState<string>('...');
+    useEffect(() => {
+        if (!pickup || !dropoff) return;
+        let mounted = true;
+        const fetchDist = async () => {
+            try {
+                const pRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(pickup)}&format=json&limit=1`);
+                const pData = await pRes.json();
+                if (!pData || pData.length === 0) return;
+                
+                const dRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(dropoff)}&format=json&limit=1`);
+                const dData = await dRes.json();
+                if (!dData || dData.length === 0) return;
+                
+                const url = `https://router.project-osrm.org/route/v1/driving/${pData[0].lon},${pData[0].lat};${dData[0].lon},${dData[0].lat}?overview=false`;
+                const rRes = await fetch(url);
+                const rData = await rRes.json();
+                
+                if (rData.routes && rData.routes.length > 0 && mounted) {
+                    setDistance(`~ ${Math.round(rData.routes[0].distance / 1000)} km`);
+                }
+            } catch (e) {
+                console.log(e);
+            }
+        };
+        fetchDist();
+        return () => { mounted = false; };
+    }, [pickup, dropoff]);
+
+    return <Text style={{ fontSize: 8, color: color, marginBottom: 2 }}>{distance}</Text>;
+};
 
 interface TripsScreenProps {
     isParcelMode?: boolean;
@@ -42,6 +76,18 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode }) => {
         const interval = setInterval(fetchData, 5000); // Polling for real-time updates
         return () => clearInterval(interval);
     }, [isDriver]);
+
+    // Start GPS tracking for driver
+    useEffect(() => {
+        if (isDriver && user?.id && bookings.length > 0) {
+            // Find the most relevant active ride (available and has bookings)
+            const activeRide = bookings.find(b => b.status === 'available');
+            if (activeRide) {
+                const stopTracking = startDriverTracking(activeRide.id, user.id);
+                return () => stopTracking();
+            }
+        }
+    }, [isDriver, bookings, user?.id]);
 
     const fetchData = async () => {
         try {
@@ -249,7 +295,7 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode }) => {
                                             <Text style={{ color: ticketText, fontSize: 13, marginTop: 2, fontWeight: '500' }} numberOfLines={1}>{item.ride?.pickup}</Text>
                                         </View>
                                         <View style={{ flex: 0.8, alignItems: 'center', justifyContent: 'center' }}>
-                                            <Text style={{ fontSize: 8, color: ticketLabel, marginBottom: 2 }}>~ 45 km</Text>
+                                            <DistanceDisplay pickup={item.ride?.pickup} dropoff={item.ride?.dropoff} color={ticketLabel} />
                                             <Text style={{ color: '#4CAF50', fontSize: 14 }}>➔</Text>
                                         </View>
                                         <View style={{ flex: 1.2, alignItems: 'flex-end' }}>
@@ -307,8 +353,15 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode }) => {
                         {/* List of active bookings for completion */}
                         {!isCompleted && item.bookings && item.bookings.length > 0 && (
                             <View style={{ marginTop: 20 }}>
-                                <Text style={{ color: colors.textColor, fontSize: 14, fontWeight: 'bold', marginBottom: 12 }}>MANAGE PASSENGERS</Text>
-                                {item.bookings.map((booking: any) => (
+                                {(() => {
+                                    const hasParcels = item.bookings.some((b: any) => b.type === 'parcel');
+                                    const hasPassengers = item.bookings.some((b: any) => b.type === 'passenger' || !b.type);
+                                    const heading = hasParcels && !hasPassengers ? 'MANAGE PARCELS' : (hasPassengers && !hasParcels ? 'MANAGE PASSENGERS' : 'MANAGE PASSENGERS & PARCELS');
+                                    return <Text style={{ color: colors.textColor, fontSize: 14, fontWeight: 'bold', marginBottom: 12 }}>{heading}</Text>;
+                                })()}
+                                {item.bookings.map((booking: any) => {
+                                    const isParcel = booking.type === 'parcel';
+                                    return (
                                     <View key={booking.id} style={{ 
                                         backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
                                         borderRadius: 12,
@@ -321,8 +374,12 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode }) => {
                                         borderColor: booking.status === 'completed' ? '#4CAF50' : colors.borderColor
                                     }}>
                                         <View style={{ flex: 1 }}>
-                                            <Text style={{ color: colors.textColor, fontWeight: 'bold', fontSize: 13 }}>Pass. RA-{booking.id.slice(-4).toUpperCase()}</Text>
-                                            <Text style={{ color: colors.subtextColor, fontSize: 11 }}>Seats: {booking.seatLayout?.join(', ')}</Text>
+                                            <Text style={{ color: colors.textColor, fontWeight: 'bold', fontSize: 13 }}>
+                                                {isParcel ? 'Parcel' : 'Pass.'} RA-{booking.id.slice(-4).toUpperCase()}
+                                            </Text>
+                                            <Text style={{ color: colors.subtextColor, fontSize: 11 }}>
+                                                {isParcel ? `Size: ${booking.parcelSize || 'Standard'}` : `Seats: ${booking.seatLayout?.join(', ') || booking.seatsRequested || 0}`}
+                                            </Text>
                                         </View>
                                         {booking.status === 'accepted' ? (
                                             <TouchableOpacity 
@@ -338,7 +395,8 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode }) => {
                                             </View>
                                         ) : null}
                                     </View>
-                                ))}
+                                    );
+                                })}
                             </View>
                         )}
 

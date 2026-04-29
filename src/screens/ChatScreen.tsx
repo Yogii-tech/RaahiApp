@@ -11,11 +11,13 @@ import {
     Image,
     ActivityIndicator,
     Alert,
+    Linking,
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { apiRequest } from '../utils/api';
+import { useRoute, useNavigation } from '@react-navigation/native';
 
 interface Message {
     id: string;
@@ -28,9 +30,14 @@ interface Message {
 interface ChatScreenProps {
     bookingId: string;
     recipientName: string;
+    recipientPhone?: string;
     pickup: string;
     dropoff: string;
     departureTime: string;
+    pickupLat?: number;
+    pickupLng?: number;
+    dropoffLat?: number;
+    dropoffLng?: number;
     seatInfo?: string;
     onBack: () => void;
 }
@@ -38,15 +45,22 @@ interface ChatScreenProps {
 const ChatScreen: React.FC<ChatScreenProps> = ({
     bookingId,
     recipientName,
+    recipientPhone,
     pickup,
     dropoff,
     departureTime,
+    pickupLat,
+    pickupLng,
+    dropoffLat,
+    dropoffLng,
     seatInfo,
     onBack,
 }) => {
     const { colors, isDark } = useTheme();
     const { user, logout } = useAuth();
     const { t } = useLanguage();
+    const navigation = useNavigation<any>();
+    
     const [messages, setMessages] = useState<Message[]>([]);
     const [inputText, setInputText] = useState('');
     const [isLoading, setIsLoading] = useState(true);
@@ -163,8 +177,35 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
                 </View>
 
                 <View style={styles.headerActions}>
-                    <TouchableOpacity style={styles.actionCircle}><Text>📞</Text></TouchableOpacity>
-                    <TouchableOpacity style={styles.actionCircle}><Text>📍</Text></TouchableOpacity>
+                    <TouchableOpacity 
+                        style={styles.actionCircle}
+                        onPress={() => {
+                            if (recipientPhone) {
+                                Linking.openURL(`tel:${recipientPhone}`).catch(() => {
+                                    Alert.alert(t('common.error') || 'Error', 'Could not open phone dialer');
+                                });
+                            } else {
+                                Alert.alert(t('common.error') || 'Error', 'Phone number not available');
+                            }
+                        }}
+                    >
+                        <Text>📞</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                        style={styles.actionCircle} 
+                        onPress={() => {
+                            onBack(); // Close chat overlay
+                            navigation.navigate('Map', {
+                                rideId: bookingId,
+                                // Pass coordinates if available, else null to let map handle it
+                                pickupCoords: (pickupLat && pickupLng) ? [pickupLat, pickupLng] : null,
+                                dropCoords: (dropoffLat && dropoffLng) ? [dropoffLat, dropoffLng] : null,
+                                pickupLabel: pickup,
+                                dropLabel: dropoff
+                            });
+                        }}>
+                        <Text>📍</Text>
+                    </TouchableOpacity>
                 </View>
             </View>
 

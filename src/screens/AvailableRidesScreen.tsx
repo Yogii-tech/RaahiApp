@@ -11,6 +11,39 @@ import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 
+const DistanceDisplay = ({ pickup, dropoff, color }: { pickup?: string, dropoff?: string, color: string }) => {
+    const [distance, setDistance] = useState<string>('...');
+    useEffect(() => {
+        if (!pickup || !dropoff) return;
+        let mounted = true;
+        const fetchDist = async () => {
+            try {
+                const pRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(pickup)}&format=json&limit=1`);
+                const pData = await pRes.json();
+                if (!pData || pData.length === 0) return;
+                
+                const dRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(dropoff)}&format=json&limit=1`);
+                const dData = await dRes.json();
+                if (!dData || dData.length === 0) return;
+                
+                const url = `https://router.project-osrm.org/route/v1/driving/${pData[0].lon},${pData[0].lat};${dData[0].lon},${dData[0].lat}?overview=false`;
+                const rRes = await fetch(url);
+                const rData = await rRes.json();
+                
+                if (rData.routes && rData.routes.length > 0 && mounted) {
+                    setDistance(`~ ${Math.round(rData.routes[0].distance / 1000)} km`);
+                }
+            } catch (e) {
+                console.log(e);
+            }
+        };
+        fetchDist();
+        return () => { mounted = false; };
+    }, [pickup, dropoff]);
+
+    return <Text style={{ fontSize: 12, fontWeight: 'bold', color: color, marginTop: 4 }}>{distance}</Text>;
+};
+
 import { API_BASE } from '../apiConfig';
 import { apiRequest } from '../utils/api';
 
@@ -118,7 +151,8 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ searchPicku
                 </View>
                 <View style={styles.seatsInfo}>
                     <Text style={[styles.seatsLeft, { color: '#00C853' }]}>{item.seatsTotal - item.seatsBooked} {t('available.seatsLeft')}</Text>
-                    <View style={[styles.arrowBtn, { backgroundColor: colors.borderColor }]}>
+                    <DistanceDisplay pickup={item.pickup} dropoff={item.dropoff} color={'#00C853'} />
+                    <View style={[styles.arrowBtn, { backgroundColor: colors.borderColor, marginTop: 4 }]}>
                         <Text style={styles.arrowText}>›</Text>
                     </View>
                 </View>

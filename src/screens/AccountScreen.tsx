@@ -79,7 +79,7 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
 
     const handleSupportWhatsApp = () => {
         setSupportVisible(false);
-        const message = encodeURIComponent("Hello Raahi Support, I need help with...");
+        const message = encodeURIComponent("Hello Go Raahi Support, I need help with...");
         Linking.openURL(`https://wa.me/91${supportNumber}?text=${message}`);
     };
 

@@ -1,0 +1,39 @@
+/* ======================================================
+   Raahi – Global Styles
+   Design: Dark glassmorphism, hilly-terrain palette
+   ====================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --bg: #0d1117;
+  --surface: rgba(22, 27, 37, 0.92);
+  --surface-hover: rgba(30, 38, 52, 0.95);
+  --border: rgba(255, 255, 255, 0.08);
+  --border-active: rgba(99, 179, 255, 0.4);
+  --primary: #3b82f6;
+  --primary-glow: rgba(59, 130, 246, 0.35);
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --text: #e2e8f0;
+  --text-muted: #64748b;
+  --text-soft: #94a3b8;
+  --radius: 16px;
+  --radius-sm: 10px;
+  --shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  --glass: blur(20px) saturate(1.8);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ── MapLibre override: hide logo ── */
+.maplibregl-ctrl-logo { display: none !important; }
+.maplibregl-ctrl-attrib { font-size: 10px !important; opacity: 0.5; }

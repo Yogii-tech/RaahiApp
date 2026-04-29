@@ -2,11 +2,11 @@
 export const translations = {
   en: {
     // App Header & Tabs
-    'app.title': 'Raahi',
+    'app.title': 'Go Raahi',
     'tab.home': 'Home',
     'tab.trips': 'Trips',
     'tab.trackPackage': 'Track Package',
-    'tab.sos': 'SOS',
+    'tab.map': 'Map',
     'tab.account': 'Account',
 
     // Shared
@@ -22,7 +22,7 @@ export const translations = {
 
     // Login Screen
     'login.welcome': 'Welcome. Log in to continue.',
-    'login.title': 'Raahi',
+    'login.title': 'Go Raahi',
     'login.subtitle': 'Sharing rides, building trust.',
     'login.phoneLabel': 'PHONE NUMBER',
     'login.phonePlaceholder': '+91 99999 99999',
@@ -38,7 +38,7 @@ export const translations = {
     'login.chooseRole': "Choose your\nrole",
     'login.moveFreely': "Move freely\nin the hills.",
     'login.helpDrivers': 'Help drivers recognize you when they arrive.',
-    'login.howUseRaahi': 'How would you like to use Raahi?',
+    'login.howUseRaahi': 'How would you like to use Go Raahi?',
     'login.localTrusted': 'Local, trusted rides.\nLogin to start your journey.',
     'login.sendOtp': 'Send OTP',
     'login.enterOtp': 'Enter 6-digit OTP',
@@ -89,6 +89,8 @@ export const translations = {
     'home.subGreetingPassenger': 'Ready for your next adventure?',
     'home.greetingDriver': 'Namaste, Driver 🙏',
     'home.subGreetingDriver': 'Provide a safe ride today.',
+    'home.greetingParceller': 'Namaste, Sender 🙏',
+    'home.subGreetingParceller': 'Ready to ship something today?',
     'home.pickupLabel': 'PICKUP LOCATION',
     'home.dropoffLabel': 'DROPOFF LOCATION',
     'home.departureTime': 'Departure Time',
@@ -123,7 +125,7 @@ export const translations = {
     'home.from': 'From',
     'home.availableSeats': 'Available',
     'home.takenSeats': 'Taken',
-    'home.whyChoose': 'WHY CHOOSE RAAHI?',
+    'home.whyChoose': 'WHY CHOOSE GO RAAHI?',
     'home.safeTravel': 'Safe Travel',
     'home.verifiedExperts': 'Verified experts.',
     'home.shareSave': 'Share & Save',
@@ -218,14 +220,14 @@ export const translations = {
 
     // Trusted Contacts
     'trusted.title': 'Trusted Contacts',
-    'trusted.subtitle': 'These contacts will be notified during SOS emergencies.',
+    'trusted.subtitle': 'These contacts will be kept for safety and shared with verified authorities if needed.',
     'trusted.addContact': 'ADD NEW CONTACT',
     'trusted.namePlaceholder': 'Contact Name',
     'trusted.phonePlaceholder': '+91 98765 43210',
     'trusted.saveBtn': 'Save Contact',
     'trusted.cancelBtn': 'Cancel',
     'trusted.noContacts': 'No trusted contacts yet.',
-    'trusted.description': 'Add up to 2 trusted contacts who will be notified in case of an emergency (SOS).',
+    'trusted.description': 'Add up to 2 trusted contacts for emergency safety and route sharing.',
     'trusted.contactLabel': 'CONTACT ',
     'trusted.phoneLabel': 'Phone Number',
     'trusted.phonePlaceholderSmall': 'e.g. 9876543210',
@@ -261,7 +263,7 @@ export const translations = {
     'sos.locationUnavailable': 'Location unavailable',
     'sos.geoNotSupported': 'Geolocation not supported',
     'sos.messagePrefix': 'EMERGENCY SOS: I need help! My current location is: ',
-    'sos.messageSuffix': '. Please check on me immediately. - Raahi App',
+    'sos.messageSuffix': '. Please check on me immediately. - Go Raahi App',
     'sos.sentToPrefix': 'The following message has been sent to ',
 
     // Requests Overlay
@@ -338,11 +340,11 @@ export const translations = {
   },
   hi: {
     // App Header & Tabs
-    'app.title': 'Raahi',
+    'app.title': 'Go Raahi',
     'tab.home': 'होम',
     'tab.trips': 'यात्राएँ',
     'tab.trackPackage': 'पैकेज ट्रैक करें',
-    'tab.sos': 'SOS',
+    'tab.map': 'मैप',
     'tab.account': 'अकाउंट',
 
     // Shared
@@ -358,7 +360,7 @@ export const translations = {
 
     // Login Screen
     'login.welcome': 'नमस्ते। जारी रखने के लिए लॉग इन करें।',
-    'login.title': 'Raahi',
+    'login.title': 'Go Raahi',
     'login.subtitle': 'यात्रा साझा करें, विश्वास बनाएं।',
     'login.phoneLabel': 'फ़ोन नंबर',
     'login.phonePlaceholder': '+91 99999 99999',
@@ -374,7 +376,7 @@ export const translations = {
     'login.chooseRole': 'अपनी भूमिका\nचुनें',
     'login.moveFreely': 'पहाड़ियों में\nबेझिझक घूमें।',
     'login.helpDrivers': 'जब ड्राइवर आएं तो उन्हें आपको पहचानने में मदद करें।',
-    'login.howUseRaahi': 'आप Raahi का उपयोग कैसे करना चाहेंगे?',
+    'login.howUseRaahi': 'आप Go Raahi का उपयोग कैसे करना चाहेंगे?',
     'login.localTrusted': 'स्थानीय, विश्वसनीय सवारी।\nअपनी यात्रा शुरू करने के लिए लॉगिन करें।',
     'login.sendOtp': 'OTP भेजें',
     'login.enterOtp': '6-अंकीय OTP दर्ज करें',
@@ -425,6 +427,8 @@ export const translations = {
     'home.subGreetingPassenger': 'क्या आप अपने अगले साहसिक कार्य के लिए तैयार हैं?',
     'home.greetingDriver': 'नमस्ते, ड्राइवर 🚕',
     'home.subGreetingDriver': 'आज एक सुरक्षित सवारी प्रदान करें।',
+    'home.greetingParceller': 'नमस्ते, प्रेषक 🙏',
+    'home.subGreetingParceller': 'क्या आप आज कुछ भेजने के लिए तैयार हैं?',
     'home.pickupLabel': 'पिकअप स्थान',
     'home.dropoffLabel': 'ड्रॉपऑफ़ स्थान',
     'home.departureTime': 'प्रस्थान का समय',
@@ -459,7 +463,7 @@ export const translations = {
     'home.from': 'से',
     'home.availableSeats': 'उपलब्ध',
     'home.takenSeats': 'बुक की गई',
-    'home.whyChoose': 'Raahi क्यों चुनें?',
+    'home.whyChoose': 'Go Raahi क्यों चुनें?',
     'home.safeTravel': 'सुरक्षित यात्रा',
     'home.verifiedExperts': 'सत्यापित विशेषज्ञ।',
     'home.shareSave': 'साझा करें और बचाएं',
@@ -553,14 +557,14 @@ export const translations = {
 
     // Trusted Contacts
     'trusted.title': 'विश्वसनीय संपर्क',
-    'trusted.subtitle': 'इन संपर्कों को SOS आपातकाल के दौरान सूचित किया जाएगा।',
+    'trusted.subtitle': 'इन संपर्कों को सुरक्षा और आपात स्थिति के दौरान सूचित किया जा सकता है।',
     'trusted.addContact': 'नया संपर्क जोड़ें',
     'trusted.namePlaceholder': 'संपर्क नाम',
     'trusted.phonePlaceholder': '+91 98765 43210',
     'trusted.saveBtn': 'संपर्क सहेजें',
     'trusted.cancelBtn': 'रद्द करें',
     'trusted.noContacts': 'अभी तक कोई विश्वसनीय संपर्क नहीं।',
-    'trusted.description': 'आपातकालीन स्थिति (SOS) के मामले में सूचित किए जाने वाले अधिकतम 2 विश्वसनीय संपर्क जोड़ें।',
+    'trusted.description': 'आपातकालीन सुरक्षा के मामले में सूचित किए जाने वाले अधिकतम 2 विश्वसनीय संपर्क जोड़ें।',
     'trusted.contactLabel': 'संपर्क ',
     'trusted.phoneLabel': 'फ़ोन नंबर',
     'trusted.phonePlaceholderSmall': 'उदा. 9876543210',
@@ -596,7 +600,7 @@ export const translations = {
     'sos.locationUnavailable': 'स्थान अनुपलब्ध',
     'sos.geoNotSupported': 'जियोलोकेशन समर्थित नहीं है',
     'sos.messagePrefix': 'आपातकालीन SOS: मुझे मदद चाहिए! मेरा वर्तमान स्थान है: ',
-    'sos.messageSuffix': '। कृपया तुरंत मेरी जाँच करें। - Raahi App',
+    'sos.messageSuffix': '। कृपया तुरंत मेरी जाँच करें। - Go Raahi App',
     'sos.sentToPrefix': 'निम्नलिखित संदेश इन संपर्कों को भेजा गया है: ',
 
     // Requests Overlay

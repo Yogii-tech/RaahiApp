@@ -87,7 +87,7 @@ export default function AdminDashboardScreen() {
                         <Text style={styles.logoIconText}>⛰</Text>
                     </View>
                     <View style={{ marginLeft: 10 }}>
-                        <Text style={[styles.logoTitle, { color: T.text }]}>GoRaahi Admin</Text>
+                        <Text style={[styles.logoTitle, { color: T.text }]}>Go Raahi Admin</Text>
                         <Text style={[styles.logoSubtitle, { color: T.subtext }]}>
                             जहाँ से पहाड़ शुरू, वहाँ से हम शुरू
                         </Text>

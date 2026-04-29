@@ -19,6 +19,7 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import AvailableRidesScreen from './AvailableRidesScreen';
 import BookRideScreen from './BookRideScreen';
 import ParcelBookingView from './ParcelBookingView';
+import LocationInput from '../components/LocationInput';
 
 interface HomeScreenProps {
     onSosPressed?: () => void;
@@ -57,7 +58,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
         return `${dd}/${mm}/${yyyy}`;
     });
     const [departureTime, setDepartureTime] = useState('');
-    const [timePeriod, setTimePeriod] = useState<'AM' | 'PM' | ''>('');
+    const [timePeriod, setTimePeriod] = useState<'AM' | 'PM'>('AM');
     const [showCalendar, setShowCalendar] = useState(false);
     const [showTimePeriodDropdown, setShowTimePeriodDropdown] = useState(false);
     const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
@@ -293,42 +294,22 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                     },
                 ]}>
 
-                <Text style={[styles.fieldLabel, { color: pickupLabelColor }]}>
-                    {t('home.pickupLabel')}
-                </Text>
-                <View style={styles.spacer6} />
-                <TextInput
-                    style={[
-                        styles.textInput,
-                        {
-                            color: colors.textColor,
-                            backgroundColor: colors.inputFillColor,
-                            borderColor: colors.inputBorderColor,
-                        },
-                    ]}
+                <LocationInput
+                    label={t('home.pickupLabel')}
                     value={pickup}
                     onChangeText={setPickup}
-                    placeholderTextColor={colors.subtextColor}
+                    onSelect={(res) => setPickup(res.display_name)}
+                    labelColor={pickupLabelColor}
                 />
 
                 <View style={styles.spacer14} />
 
-                <Text style={[styles.fieldLabel, { color: dropoffLabelColor }]}>
-                    {t('home.dropoffLabel')}
-                </Text>
-                <View style={styles.spacer6} />
-                <TextInput
-                    style={[
-                        styles.textInput,
-                        {
-                            color: colors.textColor,
-                            backgroundColor: colors.inputFillColor,
-                            borderColor: colors.inputBorderColor,
-                        },
-                    ]}
+                <LocationInput
+                    label={t('home.dropoffLabel')}
                     value={dropoff}
                     onChangeText={setDropoff}
-                    placeholderTextColor={colors.subtextColor}
+                    onSelect={(res) => setDropoff(res.display_name)}
+                    labelColor={dropoffLabelColor}
                 />
 
                 <View style={styles.spacer14} />
@@ -404,7 +385,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                                         activeOpacity={0.8}
                                     >
                                         <Text style={{ color: colors.textColor, fontWeight: 'bold', fontSize: 14 }}>
-                                            {timePeriod || 'AM'}
+                                            {timePeriod}
                                         </Text>
                                         <Icon name="chevron-down" size={14} color={colors.textColor} style={{ marginLeft: 2 }} />
                                     </TouchableOpacity>
