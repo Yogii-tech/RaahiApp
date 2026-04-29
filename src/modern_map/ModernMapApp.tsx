@@ -20,11 +20,18 @@ import { useUserLocation } from './hooks/useUserLocation';
 import { fetchRoute, reverseGeocode, GeoResult } from './services/geocoding';
 import type { DriverLocation } from './services/socket';
 import styles from './ModernMapApp.module.css';
+import { useTheme } from '../context/ThemeContext';
 
 const DEMO_ORDER_ID = 'raahi_order_demo_001';
 
 export default function ModernMapApp({ initialParams }: { initialParams?: any }) {
-  const [theme, setTheme]               = useState<'dark' | 'light'>('dark');
+  const { isDark } = useTheme();
+  const [theme, setTheme]               = useState<'dark' | 'light'>(isDark ? 'dark' : 'light');
+
+  // Sync theme with global theme
+  useEffect(() => {
+    setTheme(isDark ? 'dark' : 'light');
+  }, [isDark]);
   const [role, setRole]                 = useState<'passenger' | 'driver'>('passenger');
   const [pickupLabel, setPickupLabel]   = useState(initialParams?.pickupLabel || '');
   const [dropLabel, setDropLabel]       = useState(initialParams?.dropLabel || '');
@@ -197,67 +204,6 @@ export default function ModernMapApp({ initialParams }: { initialParams?: any })
         </div>
       )}
 
-      {/* Floating Map Controls */}
-      <div style={{
-        position: 'absolute',
-        bottom: 80,
-        right: 20,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 12,
-        zIndex: 1000
-      }}>
-        {/* Locate Me Button */}
-        <button
-          onClick={() => {
-            if (gpsLocation) {
-              mapRef.current?.flyTo(gpsLocation.lat, gpsLocation.lng, 15);
-            }
-            relocate();
-          }}
-          style={{
-            width: 50,
-            height: 50,
-            borderRadius: '25px',
-            backgroundColor: '#007AFF',
-            color: '#fff',
-            border: 'none',
-            fontSize: 24,
-            boxShadow: '0 4px 12px rgba(0,122,255,0.4)',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            transition: 'transform 0.2s'
-          }}
-          className={isLocating ? styles.spinning : ''}
-          title="Locate Me"
-        >
-          {isLocating ? '⟳' : '◎'}
-        </button>
-
-        {/* Manual Pin Button */}
-        <button
-          onClick={() => setPinMode(!pinMode)}
-          style={{
-            width: 50,
-            height: 50,
-            borderRadius: '25px',
-            backgroundColor: pinMode ? '#ef4444' : '#fff',
-            color: pinMode ? '#fff' : '#333',
-            border: 'none',
-            fontSize: 20,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}
-          title="Manual Pin"
-        >
-          📍
-        </button>
-      </div>
 
       {/* Accuracy indicator (Floating small) */}
       {location && (
