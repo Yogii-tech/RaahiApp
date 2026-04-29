@@ -61,18 +61,18 @@ const TrackPackageView: React.FC = () => {
                 <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
             }
         >
-            {/* Header Section */}
-            <View style={[styles.header, { backgroundColor: colors.primary }]}>
-                <View style={styles.headerContent}>
-                    <Text style={styles.headerTitle}>Let's Track Your Package</Text>
-                    <View style={[styles.searchContainer, { backgroundColor: colors.cardColor }]}>
-                        <Icon name="search-outline" size={20} color={colors.subtextColor} style={styles.searchIcon} />
-                        <TextInput
-                            style={[styles.searchInput, { color: colors.textColor }]}
-                            placeholder="Enter your tracking number"
-                            placeholderTextColor={colors.subtextColor}
-                        />
-                    </View>
+            {/* Search Section */}
+            <View style={{ paddingHorizontal: 20, paddingTop: 20 }}>
+                <Text style={{ fontSize: 24, fontWeight: 'bold', color: colors.textColor, marginBottom: 20 }}>
+                    Let's Track Your Package
+                </Text>
+                <View style={[styles.searchContainer, { backgroundColor: colors.cardColor, borderWidth: 1, borderColor: colors.borderColor, marginTop: 0 }]}>
+                    <Icon name="search-outline" size={20} color={colors.subtextColor} style={styles.searchIcon} />
+                    <TextInput
+                        style={[styles.searchInput, { color: colors.textColor }]}
+                        placeholder="Enter your tracking number"
+                        placeholderTextColor={colors.subtextColor}
+                    />
                 </View>
             </View>
 
@@ -226,9 +226,6 @@ const styles = StyleSheet.create({
     header: {
         paddingTop: 20,
         paddingHorizontal: 20,
-        paddingBottom: 40,
-        borderBottomLeftRadius: 30,
-        borderBottomRightRadius: 30,
     },
     headerContent: {
     },
@@ -256,7 +253,7 @@ const styles = StyleSheet.create({
         outlineWidth: 0,
     },
     quickActionsContainer: {
-        marginTop: -30,
+        marginTop: 15,
         paddingHorizontal: 20,
     },
     quickActionsCard: {
