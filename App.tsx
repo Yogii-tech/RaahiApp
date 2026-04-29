@@ -131,6 +131,7 @@ const headerStyles = StyleSheet.create({
     backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
+    marginTop: 8, // Nudge down to align with text baseline
   },
   logo: {
     width: 100,

@@ -216,22 +216,36 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
           .addTo(map);
         driverPosRef.current = driverLocation;
       } else {
-        // Smooth interpolation over 800ms
+        // ── 70-80% Animation Logic ──
+        // Smoothly interpolate over 5000ms (to create illusion of constant movement)
         const from = driverPosRef.current ?? driverLocation;
         const to   = driverLocation;
         const start = performance.now();
-        const DURATION = 800;
+        const DURATION = 5000; // Increased to 5s for smoother, continuous animation
 
         cancelAnimationFrame(animFrameRef.current);
 
         function animate(now: number) {
           const t = Math.min((now - start) / DURATION, 1);
-          const easedT = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t; // ease-in-out
+          // Ease-out so it slows down near the end if no new data arrives
+          const easedT = 1 - Math.pow(1 - t, 3); 
+          
           const lat = lerp(from.lat, to.lat, easedT);
           const lng = lerp(from.lng, to.lng, easedT);
+          
+          // Apply heading rotation if provided
+          if (to.heading !== undefined) {
+             const markerEl = driverMarkerRef.current?.getElement();
+             if (markerEl) markerEl.style.transform = `rotate(${to.heading}deg)`;
+          }
+
           driverMarkerRef.current?.setLngLat([lng, lat]);
-          if (t < 1) animFrameRef.current = requestAnimationFrame(animate);
-          else driverPosRef.current = to;
+          
+          if (t < 1) {
+            animFrameRef.current = requestAnimationFrame(animate);
+          } else {
+            driverPosRef.current = to;
+          }
         }
 
         animFrameRef.current = requestAnimationFrame(animate);

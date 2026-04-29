@@ -26,27 +26,28 @@ const DEMO_ORDER_ID = 'raahi_order_demo_001';
 
 export default function ModernMapApp({ initialParams }: { initialParams?: any }) {
   const { isDark } = useTheme();
-  const [theme, setTheme]               = useState<'dark' | 'light'>(isDark ? 'dark' : 'light');
+  const [theme, setTheme] = useState<'dark' | 'light'>(isDark ? 'dark' : 'light');
 
   // Sync theme with global theme
   useEffect(() => {
     setTheme(isDark ? 'dark' : 'light');
   }, [isDark]);
-  const [role, setRole]                 = useState<'passenger' | 'driver'>('passenger');
-  const [pickupLabel, setPickupLabel]   = useState(initialParams?.pickupLabel || '');
-  const [dropLabel, setDropLabel]       = useState(initialParams?.dropLabel || '');
+  const [role, setRole] = useState<'passenger' | 'driver'>('passenger');
+  const [pickupLabel, setPickupLabel] = useState(initialParams?.pickupLabel || '');
+  const [dropLabel, setDropLabel] = useState(initialParams?.dropLabel || '');
   const [pickupCoords, setPickupCoords] = useState<[number, number] | null>(initialParams?.pickupCoords || null);
-  const [dropCoords, setDropCoords]     = useState<[number, number] | null>(initialParams?.dropCoords || null);
-  const [routeCoords, setRouteCoords]   = useState<[number, number][] | null>(null);
-  const [routeDist, setRouteDist]       = useState<number | null>(null);
-  const [routeEta, setRouteEta]         = useState<number | null>(null);
-  const [driverLoc, setDriverLoc]       = useState<DriverLocation | null>(null);
-  const [isRouting, setIsRouting]       = useState(false);
-  const [sidebarOpen, setSidebarOpen]   = useState(!initialParams);
-  const [pinMode, setPinMode]           = useState(false);
+  const [dropCoords, setDropCoords] = useState<[number, number] | null>(initialParams?.dropCoords || null);
+  const [routeCoords, setRouteCoords] = useState<[number, number][] | null>(null);
+  const [routeDist, setRouteDist] = useState<number | null>(null);
+  const [routeEta, setRouteEta] = useState<number | null>(null);
+  const [driverLoc, setDriverLoc] = useState<DriverLocation | null>(null);
+  const [isRouting, setIsRouting] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(!initialParams);
+  const [pinMode, setPinMode] = useState(false);
   const [pinnedLocation, setPinnedLocation] = useState<{ lat: number; lng: number } | null>(null);
 
   const mapRef = useRef<MapViewHandle>(null);
+  const lastRouteUpdateRef = useRef<number>(0);
   const { location: gpsLocation, error: gpsError, isLocating, relocate } = useUserLocation();
 
   // ── Auto-initialize route if params provided ──
@@ -176,6 +177,19 @@ export default function ModernMapApp({ initialParams }: { initialParams?: any })
     setDriverLoc(loc);
   }, []);
 
+  // ── Live dynamic routing for tracking ──
+  // Automatically recalculate route from driver's current position to the destination.
+  useEffect(() => {
+    if (!driverLoc || !dropCoords) return;
+
+    const now = Date.now();
+    // Throttle: Only update every 15 seconds to focus on animation and reduce API load
+    if (now - lastRouteUpdateRef.current > 15000) {
+      lastRouteUpdateRef.current = now;
+      buildRoute([driverLoc.lat, driverLoc.lng], dropCoords);
+    }
+  }, [driverLoc, dropCoords, buildRoute]);
+
   return (
     <div className={`${styles.app} ${styles[theme]}`}>
       {/* ── Full-screen map ── */}
@@ -223,10 +237,10 @@ export default function ModernMapApp({ initialParams }: { initialParams?: any })
           border: '1px solid rgba(255,255,255,0.1)'
         }}>
           <span style={{ fontSize: 10, color: '#aaa', fontWeight: 'bold', letterSpacing: 0.5 }}>GPS ACCURACY</span>
-          <span style={{ 
-            fontSize: 11, 
+          <span style={{
+            fontSize: 11,
             fontWeight: 'bold',
-            color: location.accuracy <= 50 ? '#22c55e' : location.accuracy <= 200 ? '#f59e0b' : '#ef4444' 
+            color: location.accuracy <= 50 ? '#22c55e' : location.accuracy <= 200 ? '#f59e0b' : '#ef4444'
           }}>
             ±{Math.round(location.accuracy)}m
           </span>
