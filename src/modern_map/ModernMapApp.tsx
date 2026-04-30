@@ -42,7 +42,7 @@ export default function ModernMapApp({ initialParams }: { initialParams?: any })
   const [routeEta, setRouteEta] = useState<number | null>(null);
   const [driverLoc, setDriverLoc] = useState<DriverLocation | null>(null);
   const [isRouting, setIsRouting] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(!initialParams);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [pinMode, setPinMode] = useState(false);
   const [pinnedLocation, setPinnedLocation] = useState<{ lat: number; lng: number } | null>(null);
 
@@ -53,20 +53,30 @@ export default function ModernMapApp({ initialParams }: { initialParams?: any })
   // ── Auto-initialize route if params provided ──
   useEffect(() => {
     const initFromParams = async () => {
-      let pCoords = initialParams?.pickupCoords;
-      let dCoords = initialParams?.dropCoords;
+      // Helper for cleaning stringified "null" from URL params
+      const cleanParam = (val: any) => (val === 'null' || val === null || val === undefined) ? null : val;
+
+      let pCoords = cleanParam(initialParams?.pickupCoords);
+      let dCoords = cleanParam(initialParams?.dropCoords);
+
+      // Ensure they are arrays if they exist
+      if (typeof pCoords === 'string' && pCoords.startsWith('[')) {
+        try { pCoords = JSON.parse(pCoords); } catch (e) { pCoords = null; }
+      }
+      if (typeof dCoords === 'string' && dCoords.startsWith('[')) {
+        try { dCoords = JSON.parse(dCoords); } catch (e) { dCoords = null; }
+      }
 
       // If coordinates are missing but labels exist, try to geocode
-      if (!pCoords && initialParams?.pickupLabel) {
+      if (!pCoords && cleanParam(initialParams?.pickupLabel)) {
         try {
-          // Use public Nominatim if backend geocode not ready
           const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(initialParams.pickupLabel)}&format=json&limit=1`);
           const data = await res.json();
           if (data && data[0]) pCoords = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
         } catch (e) { console.error("Geocoding pickup failed", e); }
       }
 
-      if (!dCoords && initialParams?.dropLabel) {
+      if (!dCoords && cleanParam(initialParams?.dropLabel)) {
         try {
           const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(initialParams.dropLabel)}&format=json&limit=1`);
           const data = await res.json();
@@ -74,17 +84,21 @@ export default function ModernMapApp({ initialParams }: { initialParams?: any })
         } catch (e) { console.error("Geocoding dropoff failed", e); }
       }
 
-      if (pCoords && dCoords) {
+      // Final validation: only use if they are actually arrays [lat, lng]
+      const isValid = (c: any) => Array.isArray(c) && c.length === 2 && !isNaN(c[0]) && !isNaN(c[1]);
+
+      if (isValid(pCoords) && isValid(dCoords)) {
         setPickupCoords(pCoords);
         setDropCoords(dCoords);
         buildRoute(pCoords, dCoords);
-      } else if (pCoords) {
+      } else if (isValid(pCoords)) {
         setPickupCoords(pCoords);
         mapRef.current?.flyTo(pCoords[0], pCoords[1]);
-      } else if (dCoords) {
+      } else if (isValid(dCoords)) {
         setDropCoords(dCoords);
         mapRef.current?.flyTo(dCoords[0], dCoords[1]);
       }
+
     };
 
     initFromParams();
@@ -206,6 +220,40 @@ export default function ModernMapApp({ initialParams }: { initialParams?: any })
           onMapClick={handleMapClick}
         />
       </div>
+
+      {/* ── Sidebar ── */}
+      {/* 
+      <div className={`${styles.sidebar} ${sidebarOpen ? styles.open : styles.closed}`}>
+        <div className={styles.section}>
+          <p className={styles.sectionLabel}>Plan your journey</p>
+          <LocationSearch
+            icon="pickup"
+            placeholder="From: Pickup location"
+            value={pickupLabel}
+            onSelect={handlePickupSelect}
+            onUseCurrentLocation={handleUseCurrentLocation}
+          />
+          <div className={styles.dividerDot}><span></span><span></span><span></span></div>
+          <LocationSearch
+            icon="drop"
+            placeholder="To: Destination"
+            value={dropLabel}
+            onSelect={handleDropSelect}
+          />
+        </div>
+
+        <div className={styles.section}>
+          <p className={styles.sectionLabel}>Live Tracking Status</p>
+          <LiveTrackingPanel
+            orderId={initialParams?.orderId || DEMO_ORDER_ID}
+            role={role}
+            distance={routeDist}
+            duration={routeEta}
+            onDriverMoved={handleDriverMoved}
+          />
+        </div>
+      </div>
+      */}
 
       {/* Pin mode overlay */}
       {pinMode && (

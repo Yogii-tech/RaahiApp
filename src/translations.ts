@@ -2,7 +2,7 @@
 export const translations = {
   en: {
     // App Header & Tabs
-    'app.title': 'Go Raahi',
+    'app.title': 'GoRaahi',
     'tab.home': 'Home',
     'tab.trips': 'Trips',
     'tab.trackPackage': 'Track Package',
@@ -23,7 +23,7 @@ export const translations = {
 
     // Login Screen
     'login.welcome': 'Welcome. Log in to continue.',
-    'login.title': 'Go Raahi',
+    'login.title': 'GoRaahi',
     'login.subtitle': 'Sharing rides, building trust.',
     'login.phoneLabel': 'PHONE NUMBER',
     'login.phonePlaceholder': '+91 99999 99999',
@@ -39,7 +39,7 @@ export const translations = {
     'login.chooseRole': "Choose your\nrole",
     'login.moveFreely': "Move freely\nin the hills.",
     'login.helpDrivers': 'Help drivers recognize you when they arrive.',
-    'login.howUseRaahi': 'How would you like to use Go Raahi?',
+    'login.howUseRaahi': 'How would you like to use GoRaahi?',
     'login.localTrusted': 'Local, trusted rides.\nLogin to start your journey.',
     'login.sendOtp': 'Send OTP',
     'login.enterOtp': 'Enter 6-digit OTP',
@@ -126,7 +126,7 @@ export const translations = {
     'home.from': 'From',
     'home.availableSeats': 'Available',
     'home.takenSeats': 'Taken',
-    'home.whyChoose': 'WHY CHOOSE GO RAAHI?',
+    'home.whyChoose': 'WHY CHOOSE GoRaahi?',
     'home.safeTravel': 'Safe Travel',
     'home.verifiedExperts': 'Verified experts.',
     'home.shareSave': 'Share & Save',
@@ -264,7 +264,7 @@ export const translations = {
     'sos.locationUnavailable': 'Location unavailable',
     'sos.geoNotSupported': 'Geolocation not supported',
     'sos.messagePrefix': 'EMERGENCY SOS: I need help! My current location is: ',
-    'sos.messageSuffix': '. Please check on me immediately. - Go Raahi App',
+    'sos.messageSuffix': '. Please check on me immediately. - GoRaahi App',
     'sos.sentToPrefix': 'The following message has been sent to ',
 
     // Requests Overlay
@@ -356,7 +356,7 @@ export const translations = {
   },
   hi: {
     // App Header & Tabs
-    'app.title': 'Go Raahi',
+    'app.title': 'GoRaahi',
     'tab.home': 'होम',
     'tab.trips': 'यात्राएँ',
     'tab.trackPackage': 'पैकेज ट्रैक करें',
@@ -377,7 +377,7 @@ export const translations = {
 
     // Login Screen
     'login.welcome': 'नमस्ते। जारी रखने के लिए लॉग इन करें।',
-    'login.title': 'Go Raahi',
+    'login.title': 'GoRaahi',
     'login.subtitle': 'यात्रा साझा करें, विश्वास बनाएं।',
     'login.phoneLabel': 'फ़ोन नंबर',
     'login.phonePlaceholder': '+91 99999 99999',
@@ -393,7 +393,7 @@ export const translations = {
     'login.chooseRole': 'अपनी भूमिका\nचुनें',
     'login.moveFreely': 'पहाड़ियों में\nबेझिझक घूमें।',
     'login.helpDrivers': 'जब ड्राइवर आएं तो उन्हें आपको पहचानने में मदद करें।',
-    'login.howUseRaahi': 'आप Go Raahi का उपयोग कैसे करना चाहेंगे?',
+    'login.howUseRaahi': 'आप GoRaahi का उपयोग कैसे करना चाहेंगे?',
     'login.localTrusted': 'स्थानीय, विश्वसनीय सवारी।\nअपनी यात्रा शुरू करने के लिए लॉगिन करें।',
     'login.sendOtp': 'OTP भेजें',
     'login.enterOtp': '6-अंकीय OTP दर्ज करें',
@@ -480,7 +480,7 @@ export const translations = {
     'home.from': 'से',
     'home.availableSeats': 'उपलब्ध',
     'home.takenSeats': 'बुक की गई',
-    'home.whyChoose': 'Go Raahi क्यों चुनें?',
+    'home.whyChoose': 'GoRaahi क्यों चुनें?',
     'home.safeTravel': 'सुरक्षित यात्रा',
     'home.verifiedExperts': 'सत्यापित विशेषज्ञ।',
     'home.shareSave': 'साझा करें और बचाएं',
@@ -617,7 +617,7 @@ export const translations = {
     'sos.locationUnavailable': 'स्थान अनुपलब्ध',
     'sos.geoNotSupported': 'जियोलोकेशन समर्थित नहीं है',
     'sos.messagePrefix': 'आपातकालीन SOS: मुझे मदद चाहिए! मेरा वर्तमान स्थान है: ',
-    'sos.messageSuffix': '। कृपया तुरंत मेरी जाँच करें। - Go Raahi App',
+    'sos.messageSuffix': '। कृपया तुरंत मेरी जाँच करें। - GoRaahi App',
     'sos.sentToPrefix': 'निम्नलिखित संदेश इन संपर्कों को भेजा गया है: ',
 
     // Requests Overlay

@@ -105,5 +105,8 @@ module.exports = {
     },
     cache: false,
     devtool: 'source-map',
+    watchOptions: {
+        ignored: ['**/node_modules', '**/android', '**/ios', '**/dist'],
+    },
     mode: 'development',
 };

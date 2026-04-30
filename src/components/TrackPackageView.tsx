@@ -18,8 +18,6 @@ import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { apiRequest } from '../utils/api';
 
-const { width } = Dimensions.get('window');
-
 interface TrackPackageViewProps {
     isHistoryMode?: boolean;
 }
@@ -330,7 +328,6 @@ const TrackPackageView: React.FC<TrackPackageViewProps> = ({ isHistoryMode }) =>
                                 <Text style={{ color: colors.subtextColor, marginTop: 10 }}>{t('parcel.noActiveShipments')}</Text>
                             </View>
                         )}
-
                         {/* History List - Only show in dedicated History tab */}
                         {isHistoryMode && (
                             <View style={{ marginTop: 0 }}>

@@ -34,6 +34,7 @@ import AccountScreen from './src/screens/AccountScreen';
 import MapScreen from './src/screens/MapScreen';
 import ChatScreen from './src/screens/ChatScreen';
 import Icon from 'react-native-vector-icons/Ionicons';
+import TrackPackageView from './src/components/TrackPackageView';
 
 const linking = {
   prefixes: ['http://localhost:3000', 'raahi://'],
@@ -42,6 +43,7 @@ const linking = {
       Home: 'Home',
       Trips: 'Trips',
       Map: 'Map',
+      History: 'History',
       Account: 'Account',
     },
   },
@@ -73,7 +75,7 @@ function AppHeader({ onToggleNotifications, notificationCount = 0 }: { onToggleN
         />
       </View>
       <Text style={[headerStyles.title, { color: colors.primary }]}>
-        Go Raahi
+        GoRaahi
       </Text>
 
       <View style={headerStyles.spacer} />
@@ -131,7 +133,6 @@ const headerStyles = StyleSheet.create({
     backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 8, // Nudge down to align with text baseline
   },
   logo: {
     width: 100,
@@ -225,7 +226,7 @@ function MainTabs() {
 
   useEffect(() => {
     fetchNotificationCount();
-    const interval = setInterval(fetchNotificationCount, 5000);
+    const interval = setInterval(fetchNotificationCount, 10000);
     return () => clearInterval(interval);
   }, [user, token]);
 
@@ -386,7 +387,7 @@ function RootApp() {
   if (isInitialLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <Text style={{ color: '#fff' }}>Loading Go Raahi...</Text>
+        <Text style={{ color: '#fff' }}>Loading GoRaahi...</Text>
       </View>
     );
   }
