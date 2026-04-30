@@ -73,7 +73,7 @@ function AppHeader({ onToggleNotifications, notificationCount = 0 }: { onToggleN
         />
       </View>
       <Text style={[headerStyles.title, { color: colors.primary }]}>
-        Go Raahi
+        GoRaahi
       </Text>
 
       <View style={headerStyles.spacer} />
@@ -376,7 +376,7 @@ function RootApp() {
   if (isInitialLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <Text style={{ color: '#fff' }}>Loading Go Raahi...</Text>
+        <Text style={{ color: '#fff' }}>Loading GoRaahi...</Text>
       </View>
     );
   }

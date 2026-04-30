@@ -71,82 +71,82 @@ export default function AdminDashboardScreen() {
     return (
         <View style={[styles.wrapper, { backgroundColor: T.bg }]}>
             {isMobile && isSidebarOpen && (
-                <TouchableOpacity 
-                    style={styles.overlay} 
-                    activeOpacity={1} 
-                    onPress={() => setIsSidebarOpen(false)} 
+                <TouchableOpacity
+                    style={styles.overlay}
+                    activeOpacity={1}
+                    onPress={() => setIsSidebarOpen(false)}
                 />
             )}
 
             {/* Sidebar */}
             {(!isMobile || isSidebarOpen) && (
-            <View style={[styles.sidebar, isMobile && styles.sidebarMobile, { backgroundColor: T.sidebar, borderRightColor: T.border }]}>
-                {/* Logo */}
-                <View style={styles.logoArea}>
-                    <View style={styles.logoIcon}>
-                        <Text style={styles.logoIconText}>⛰</Text>
+                <View style={[styles.sidebar, isMobile && styles.sidebarMobile, { backgroundColor: T.sidebar, borderRightColor: T.border }]}>
+                    {/* Logo */}
+                    <View style={styles.logoArea}>
+                        <View style={styles.logoIcon}>
+                            <Text style={styles.logoIconText}>⛰</Text>
+                        </View>
+                        <View style={{ marginLeft: 10 }}>
+                            <Text style={[styles.logoTitle, { color: T.text }]}>GoRaahi Admin</Text>
+                            <Text style={[styles.logoSubtitle, { color: T.subtext }]}>
+                                जहाँ से पहाड़ शुरू, वहाँ से हम शुरू
+                            </Text>
+                        </View>
                     </View>
-                    <View style={{ marginLeft: 10 }}>
-                        <Text style={[styles.logoTitle, { color: T.text }]}>Go Raahi Admin</Text>
-                        <Text style={[styles.logoSubtitle, { color: T.subtext }]}>
-                            जहाँ से पहाड़ शुरू, वहाँ से हम शुरू
+
+                    <View style={[styles.divider, { backgroundColor: T.border }]} />
+
+                    {/* Nav Items */}
+                    <ScrollView style={styles.navList} showsVerticalScrollIndicator={false}>
+                        {NAV_ITEMS.map(item => {
+                            const isActive = activeView === item.id;
+                            return (
+                                <TouchableOpacity
+                                    key={item.id}
+                                    style={[
+                                        styles.navItem,
+                                        isActive && { backgroundColor: T.accent },
+                                        !isActive && { backgroundColor: isDark ? '#1F2937' : '#F3F4F6' },
+                                    ]}
+                                    onPress={() => {
+                                        setActiveView(item.id);
+                                        if (isMobile) setIsSidebarOpen(false);
+                                    }}
+                                    activeOpacity={0.8}>
+                                    <Text style={[styles.navIcon, { color: isActive ? '#FFFFFF' : T.subtext }]}>
+                                        {item.icon}
+                                    </Text>
+                                    <Text style={[styles.navLabel, { color: isActive ? '#FFFFFF' : T.text }]}>
+                                        {item.label}
+                                    </Text>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </ScrollView>
+
+                    <View style={[styles.divider, { backgroundColor: T.border }]} />
+
+                    {/* Bottom: Theme Toggle + Logout */}
+                    <TouchableOpacity
+                        style={[styles.themeToggle, { backgroundColor: isDark ? '#1F2937' : '#F3F4F6' }]}
+                        onPress={() => setIsDark(!isDark)}
+                        activeOpacity={0.8}>
+                        <Text style={{ fontSize: 18 }}>{isDark ? '☀️' : '🌙'}</Text>
+                        <Text style={[styles.themeLabel, { color: T.subtext }]}>
+                            {isDark ? 'Light Mode' : 'Dark Mode'}
                         </Text>
-                    </View>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={styles.passengerViewBtn}
+                        onPress={handleLogout}
+                        activeOpacity={0.8}>
+                        <Text style={styles.passengerViewIcon}>→</Text>
+                        <Text style={[styles.passengerViewLabel, { color: T.subtext }]}>
+                            SIGN OUT
+                        </Text>
+                    </TouchableOpacity>
                 </View>
-
-                <View style={[styles.divider, { backgroundColor: T.border }]} />
-
-                {/* Nav Items */}
-                <ScrollView style={styles.navList} showsVerticalScrollIndicator={false}>
-                    {NAV_ITEMS.map(item => {
-                        const isActive = activeView === item.id;
-                        return (
-                            <TouchableOpacity
-                                key={item.id}
-                                style={[
-                                    styles.navItem,
-                                    isActive && { backgroundColor: T.accent },
-                                    !isActive && { backgroundColor: isDark ? '#1F2937' : '#F3F4F6' },
-                                ]}
-                                onPress={() => {
-                                    setActiveView(item.id);
-                                    if (isMobile) setIsSidebarOpen(false);
-                                }}
-                                activeOpacity={0.8}>
-                                <Text style={[styles.navIcon, { color: isActive ? '#FFFFFF' : T.subtext }]}>
-                                    {item.icon}
-                                </Text>
-                                <Text style={[styles.navLabel, { color: isActive ? '#FFFFFF' : T.text }]}>
-                                    {item.label}
-                                </Text>
-                            </TouchableOpacity>
-                        );
-                    })}
-                </ScrollView>
-
-                <View style={[styles.divider, { backgroundColor: T.border }]} />
-
-                {/* Bottom: Theme Toggle + Logout */}
-                <TouchableOpacity
-                    style={[styles.themeToggle, { backgroundColor: isDark ? '#1F2937' : '#F3F4F6' }]}
-                    onPress={() => setIsDark(!isDark)}
-                    activeOpacity={0.8}>
-                    <Text style={{ fontSize: 18 }}>{isDark ? '☀️' : '🌙'}</Text>
-                    <Text style={[styles.themeLabel, { color: T.subtext }]}>
-                        {isDark ? 'Light Mode' : 'Dark Mode'}
-                    </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                    style={styles.passengerViewBtn}
-                    onPress={handleLogout}
-                    activeOpacity={0.8}>
-                    <Text style={styles.passengerViewIcon}>→</Text>
-                    <Text style={[styles.passengerViewLabel, { color: T.subtext }]}>
-                        SIGN OUT
-                    </Text>
-                </TouchableOpacity>
-            </View>
             )}
 
             {/* Main Content */}
