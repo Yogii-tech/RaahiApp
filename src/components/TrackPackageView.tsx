@@ -15,9 +15,11 @@ import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { apiRequest } from '../utils/api';
 
-const { width } = Dimensions.get('window');
+interface TrackPackageViewProps {
+    historyOnly?: boolean;
+}
 
-const TrackPackageView: React.FC = () => {
+const TrackPackageView: React.FC<TrackPackageViewProps> = ({ historyOnly }) => {
     const { colors, isDark } = useTheme();
     const { logout } = useAuth();
     const [shipments, setShipments] = useState<any[]>([]);
@@ -61,33 +63,58 @@ const TrackPackageView: React.FC = () => {
                 <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
             }
         >
-            {/* Search Section */}
-            <View style={{ paddingHorizontal: 20, paddingTop: 20 }}>
-                <Text style={{ fontSize: 24, fontWeight: 'bold', color: colors.textColor, marginBottom: 20 }}>
-                    Let's Track Your Package
-                </Text>
-                <View style={[styles.searchContainer, { backgroundColor: colors.cardColor, borderWidth: 1, borderColor: colors.borderColor, marginTop: 0 }]}>
-                    <Icon name="search-outline" size={20} color={colors.subtextColor} style={styles.searchIcon} />
-                    <TextInput
-                        style={[styles.searchInput, { color: colors.textColor }]}
-                        placeholder="Enter your tracking number"
-                        placeholderTextColor={colors.subtextColor}
-                    />
-                </View>
-            </View>
+            {!historyOnly && (
+                <>
+                    {/* Search Section */}
+                    <View style={{ paddingHorizontal: 20, paddingTop: 20 }}>
+                        <Text style={{ fontSize: 24, fontWeight: 'bold', color: colors.textColor, marginBottom: 20 }}>
+                            Let's Track Your Package
+                        </Text>
+                        <View style={[styles.searchContainer, { backgroundColor: colors.cardColor, borderWidth: 1, borderColor: colors.borderColor, marginTop: 0 }]}>
+                            <Icon name="search-outline" size={20} color={colors.subtextColor} style={styles.searchIcon} />
+                            <TextInput
+                                style={[styles.searchInput, { color: colors.textColor }]}
+                                placeholder="Enter your tracking number"
+                                placeholderTextColor={colors.subtextColor}
+                            />
+                        </View>
+                    </View>
 
-            {/* Quick Actions */}
-            <View style={styles.quickActionsContainer}>
-                <View style={[styles.quickActionsCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor, borderWidth: 1 }]}>
-                    <QuickActionItem icon="receipt-outline" label="Check Rate" color="#4CAF50" isDark={isDark} colors={colors} />
-                    <QuickActionItem icon="cube-outline" label="Pick Up" color="#FF9800" isDark={isDark} colors={colors} />
-                    <QuickActionItem icon="location-outline" label="Drop Off" color="#2196F3" isDark={isDark} colors={colors} />
-                    <QuickActionItem icon="time-outline" label="History" color="#9C27B0" isDark={isDark} colors={colors} />
-                </View>
-            </View>
+                    {/* Quick Actions */}
+                    <View style={styles.quickActionsContainer}>
+                        <View style={[styles.quickActionsCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor, borderWidth: 1 }]}>
+                            <QuickActionItem icon="receipt-outline" label="Check Rate" color="#4CAF50" isDark={isDark} colors={colors} />
+                            <QuickActionItem icon="cube-outline" label="Pick Up" color="#FF9800" isDark={isDark} colors={colors} />
+                            <QuickActionItem icon="location-outline" label="Drop Off" color="#2196F3" isDark={isDark} colors={colors} />
+                            <QuickActionItem icon="time-outline" label="History" color="#9C27B0" isDark={isDark} colors={colors} />
+                        </View>
+                    </View>
+                </>
+            )}
 
             {loading && !refreshing ? (
                 <ActivityIndicator color={colors.primary} size="large" style={{ marginTop: 40 }} />
+            ) : historyOnly ? (
+                <View style={[styles.section, { marginTop: 20 }]}>
+                    <View style={styles.sectionHeader}>
+                        <Text style={[styles.sectionTitle, { color: colors.textColor }]}>Recent Shipment</Text>
+                    </View>
+
+                    {shipments.length > 0 ? (
+                        shipments.map((item) => (
+                            <RecentShipmentItem 
+                                key={item.id}
+                                id={`RA-P-${item.id.slice(-6).toUpperCase()}`} 
+                                status={`${item.status.toUpperCase()} • ${new Date(item.createdAt).toLocaleDateString()}`} 
+                                colors={colors} 
+                                completed={item.status === 'completed'}
+                                primaryColor={colors.primary} 
+                            />
+                        ))
+                    ) : (
+                        <Text style={{ color: colors.subtextColor, textAlign: 'center', marginTop: 10 }}>No recent history</Text>
+                    )}
+                </View>
             ) : (
                 <>
                     {/* Current Shipment */}
@@ -145,28 +172,6 @@ const TrackPackageView: React.FC = () => {
                                 <Icon name="cube-outline" size={48} color={colors.borderColor} />
                                 <Text style={{ color: colors.subtextColor, marginTop: 10 }}>No active shipments</Text>
                             </View>
-                        )}
-                    </View>
-
-                    {/* Recent Shipment */}
-                    <View style={styles.section}>
-                        <View style={styles.sectionHeader}>
-                            <Text style={[styles.sectionTitle, { color: colors.textColor }]}>Recent Shipment</Text>
-                        </View>
-
-                        {recentShipments.length > 0 ? (
-                            recentShipments.map((item) => (
-                                <RecentShipmentItem 
-                                    key={item.id}
-                                    id={`RA-P-${item.id.slice(-6).toUpperCase()}`} 
-                                    status={`${item.status.toUpperCase()} • ${new Date(item.createdAt).toLocaleDateString()}`} 
-                                    colors={colors} 
-                                    completed={item.status === 'completed'}
-                                    primaryColor={colors.primary} 
-                                />
-                            ))
-                        ) : (
-                            <Text style={{ color: colors.subtextColor, textAlign: 'center', marginTop: 10 }}>No recent history</Text>
                         )}
                     </View>
                 </>
