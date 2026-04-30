@@ -9,8 +9,43 @@ import {
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 
-const API_BASE = 'http://localhost:8081';
+const DistanceDisplay = ({ pickup, dropoff, color }: { pickup?: string, dropoff?: string, color: string }) => {
+    const [distance, setDistance] = useState<string>('...');
+    useEffect(() => {
+        if (!pickup || !dropoff) return;
+        let mounted = true;
+        const fetchDist = async () => {
+            try {
+                const pRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(pickup)}&format=json&limit=1`);
+                const pData = await pRes.json();
+                if (!pData || pData.length === 0) return;
+                
+                const dRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(dropoff)}&format=json&limit=1`);
+                const dData = await dRes.json();
+                if (!dData || dData.length === 0) return;
+                
+                const url = `https://router.project-osrm.org/route/v1/driving/${pData[0].lon},${pData[0].lat};${dData[0].lon},${dData[0].lat}?overview=false`;
+                const rRes = await fetch(url);
+                const rData = await rRes.json();
+                
+                if (rData.routes && rData.routes.length > 0 && mounted) {
+                    setDistance(`~ ${Math.round(rData.routes[0].distance / 1000)} km`);
+                }
+            } catch (e) {
+                console.log(e);
+            }
+        };
+        fetchDist();
+        return () => { mounted = false; };
+    }, [pickup, dropoff]);
+
+    return <Text style={{ fontSize: 12, fontWeight: 'bold', color: color, marginTop: 4 }}>{distance}</Text>;
+};
+
+import { API_BASE } from '../apiConfig';
+import { apiRequest } from '../utils/api';
 
 interface Ride {
     id: string;
@@ -19,6 +54,7 @@ interface Ride {
     pickup: string;
     dropoff: string;
     departureTime: string;
+    date?: string;
     seatsTotal: number;
     seatsBooked: number;
     takenSeats?: number[];
@@ -27,13 +63,16 @@ interface Ride {
 }
 
 interface AvailableRidesScreenProps {
+    searchPickup?: string;
+    searchDropoff?: string;
     onBack: () => void;
     onSelectRide: (ride: Ride) => void;
 }
 
-const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ onBack, onSelectRide }) => {
+const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ searchPickup, searchDropoff, onBack, onSelectRide }) => {
     const { colors, isDark } = useTheme();
-    const { token } = useAuth();
+    const { token, logout } = useAuth();
+    const { t } = useLanguage();
     const [rides, setRides] = useState<Ride[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -43,11 +82,18 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ onBack, onS
 
     const fetchRides = async () => {
         try {
-            const response = await fetch(`${API_BASE}/api/rides/available`, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
+            let url = `${API_BASE}/api/rides/available`;
+            const queryParams = [];
+            if (searchPickup) queryParams.push(`pickup=${encodeURIComponent(searchPickup)}`);
+            if (searchDropoff) queryParams.push(`dropoff=${encodeURIComponent(searchDropoff)}`);
+            if (queryParams.length > 0) {
+                url += `?${queryParams.join('&')}`;
+            }
+
+            const response = await apiRequest(url.replace(API_BASE, ''), {}, logout);
             if (response.ok) {
                 const data = await response.json();
+                console.log('Fetched rides:', data); // Debug log
                 setRides(data);
             }
         } catch (err) {
@@ -63,7 +109,7 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ onBack, onS
             onPress={() => onSelectRide(item)}>
             <View style={styles.rideHeader}>
                 <View style={styles.timeContainer}>
-                    <Text style={[styles.label, { color: colors.subtextColor }]}>DEPARTS</Text>
+                    <Text style={[styles.label, { color: colors.subtextColor }]}>{t('available.departs')}</Text>
                     <Text style={[styles.timeText, { color: colors.textColor }]}>{item.departureTime}</Text>
                 </View>
                 <View style={styles.vehicleContainer}>
@@ -71,14 +117,26 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ onBack, onS
                     <Text style={[styles.vehicleNumber, { color: colors.subtextColor }]}>{item.vehicleNumber}</Text>
                 </View>
                 <View style={styles.priceContainer}>
-                    <Text style={[styles.label, { color: colors.subtextColor }]}>PER SEAT PRICE</Text>
+                    <Text style={[styles.label, { color: colors.subtextColor }]}>{t('available.perSeatPrice')}</Text>
                     <Text style={[styles.priceText, { color: '#00C853' }]}>₹ {item.pricePerSeat}</Text>
                 </View>
             </View>
-            <View style={{ marginBottom: 15, flexDirection: 'row', alignItems: 'center' }}>
-                <Text style={{ color: colors.textColor, fontWeight: 'bold', fontSize: 13 }}>{item.pickup.toUpperCase()}</Text>
-                <Text style={{ color: colors.subtextColor, marginHorizontal: 8 }}>•</Text>
-                <Text style={{ color: colors.textColor, fontWeight: 'bold', fontSize: 13 }}>{item.dropoff.toUpperCase()}</Text>
+            <View style={styles.routeRow}>
+                <Text style={[styles.routePoint, { color: colors.textColor }]}>{item.pickup.toUpperCase()}</Text>
+                <Text style={[styles.routeArrow, { color: colors.subtextColor }]}>→</Text>
+                <Text style={[styles.routePoint, { color: colors.textColor }]}>{item.dropoff.toUpperCase()}</Text>
+            </View>
+
+            {/* Date & Time Row */}
+            <View style={styles.dateTimeRow}>
+                <View style={styles.dateTimeChip}>
+                    <Text style={styles.dateTimeChipIcon}>📅</Text>
+                    <Text style={[styles.dateTimeChipText, { color: colors.textColor }]}>{item.date || t('available.noDate')}</Text>
+                </View>
+                <View style={[styles.dateTimeChip, { marginLeft: 10 }]}>
+                    <Text style={styles.dateTimeChipIcon}>🕒</Text>
+                    <Text style={[styles.dateTimeChipText, { color: colors.textColor }]}>{item.departureTime || '—'}</Text>
+                </View>
             </View>
 
             <View style={styles.rideFooter}>
@@ -87,13 +145,14 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ onBack, onS
                         <Text style={styles.avatarText}>{(item.driverName || 'V')[0].toUpperCase()}</Text>
                     </View>
                     <View>
-                        <Text style={[styles.driverName, { color: colors.textColor }]}>{item.driverName || 'Community Driver'} ✅</Text>
-                        <Text style={[styles.driverRole, { color: colors.subtextColor }]}>COMMUNITY DRIVER</Text>
+                        <Text style={[styles.driverName, { color: colors.textColor }]}>{item.driverName || t('available.communityDriver')} ✅</Text>
+                        <Text style={[styles.driverRole, { color: colors.subtextColor }]}>{t('available.communityDriver').toUpperCase()}</Text>
                     </View>
                 </View>
                 <View style={styles.seatsInfo}>
-                    <Text style={[styles.seatsLeft, { color: '#00C853' }]}>{item.seatsTotal - item.seatsBooked} SEATS LEFT</Text>
-                    <View style={[styles.arrowBtn, { backgroundColor: colors.borderColor }]}>
+                    <Text style={[styles.seatsLeft, { color: '#00C853' }]}>{item.seatsTotal - item.seatsBooked} {t('available.seatsLeft')}</Text>
+                    <DistanceDisplay pickup={item.pickup} dropoff={item.dropoff} color={'#00C853'} />
+                    <View style={[styles.arrowBtn, { backgroundColor: colors.borderColor, marginTop: 4 }]}>
                         <Text style={styles.arrowText}>›</Text>
                     </View>
                 </View>
@@ -105,12 +164,11 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ onBack, onS
         <View style={[styles.container, { backgroundColor: colors.background }]}>
             <View style={styles.header}>
                 <TouchableOpacity onPress={onBack}>
-                    <Text style={[styles.backText, { color: colors.textColor }]}>‹ BACK</Text>
+                    <Text style={[styles.backText, { color: colors.textColor }]}>{t('common.back')}</Text>
                 </TouchableOpacity>
-                <Text style={[styles.routeDetails, { color: colors.subtextColor }]}>ROUTE DETAILS</Text>
+                <Text style={[styles.routeDetails, { color: colors.subtextColor }]}>{t('available.routeDetails')}</Text>
             </View>
-
-            <Text style={[styles.title, { color: colors.textColor }]}>Available Cabs</Text>
+            <Text style={[styles.title, { color: colors.textColor }]}>{t('available.title')}</Text>
 
             {loading ? (
                 <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
@@ -120,7 +178,7 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ onBack, onS
                     keyExtractor={(item) => item.id}
                     renderItem={renderRideItem}
                     contentContainerStyle={styles.listContent}
-                    ListEmptyComponent={<Text style={{ color: colors.textColor, textAlign: 'center', marginTop: 20 }}>No rides available</Text>}
+                    ListEmptyComponent={<Text style={{ color: colors.textColor, textAlign: 'center', marginTop: 20 }}>{t('available.noRides')}</Text>}
                 />
             )}
         </View>
@@ -241,6 +299,41 @@ const styles = StyleSheet.create({
     timeContainer: { flex: 1 },
     vehicleContainer: { flex: 2 },
     priceContainer: { flex: 1, alignItems: 'flex-end' },
+    routeRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 14,
+    },
+    routePoint: {
+        fontWeight: 'bold',
+        fontSize: 13,
+        textAlign: 'center',
+    },
+    routeArrow: {
+        marginHorizontal: 8,
+        fontSize: 16,
+    },
+    dateTimeRow: {
+        flexDirection: 'row',
+        marginBottom: 16,
+    },
+    dateTimeChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(91, 79, 255, 0.1)',
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 20,
+    },
+    dateTimeChipIcon: {
+        fontSize: 12,
+        marginRight: 5,
+    },
+    dateTimeChipText: {
+        fontSize: 12,
+        fontWeight: 'bold',
+    },
 });
 
 export default AvailableRidesScreen;

@@ -12,12 +12,18 @@ import {
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
+import { apiRequest } from '../utils/api';
+import Icon from 'react-native-vector-icons/Ionicons';
 
 import AvailableRidesScreen from './AvailableRidesScreen';
 import BookRideScreen from './BookRideScreen';
+import ParcelBookingView from './ParcelBookingView';
+import LocationInput from '../components/LocationInput';
 
 interface HomeScreenProps {
     onSosPressed?: () => void;
+    setParcelMode?: (mode: boolean) => void;
 }
 
 interface Ride {
@@ -33,16 +39,30 @@ interface Ride {
     pricePerSeat: number;
 }
 
-const API_BASE = 'http://localhost:8081';
+import { API_BASE } from '../apiConfig';
 
-const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
+const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) => {
     const { isDark, colors } = useTheme();
-    const { token, user } = useAuth();
+    const { token, user, logout } = useAuth();
+    const { t } = useLanguage();
     const [view, setView] = useState<string>('home');
     const [selectedRide, setSelectedRide] = useState<Ride | null>(null);
     const [rideType, setRideType] = useState<0 | 1>(0);
     const [pickup, setPickup] = useState('');
     const [dropoff, setDropoff] = useState('');
+    const [date, setDate] = useState(() => {
+        const today = new Date();
+        const dd = String(today.getDate()).padStart(2, '0');
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const yyyy = today.getFullYear();
+        return `${dd}/${mm}/${yyyy}`;
+    });
+    const [departureTime, setDepartureTime] = useState('');
+    const [timePeriod, setTimePeriod] = useState<'AM' | 'PM'>('AM');
+    const [showCalendar, setShowCalendar] = useState(false);
+    const [showTimePeriodDropdown, setShowTimePeriodDropdown] = useState(false);
+    const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
+    const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
     const [recentRides, setRecentRides] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(false);
@@ -56,12 +76,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
         try {
             setLoading(true);
             setError(false);
-            const response = await fetch(`${API_BASE}/api/rides/recent`, {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
-            });
+            const response = await apiRequest('/api/rides/recent', {}, logout);
             if (response.ok) {
                 const data = await response.json();
                 setRecentRides(data);
@@ -75,18 +90,49 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
         }
     };
 
+    const handleTimeChange = (text: string) => {
+        // Remove non-numeric characters
+        let cleaned = text.replace(/[^0-9]/g, '');
+        
+        if (cleaned.length === 0) {
+            setDepartureTime('');
+            return;
+        }
+
+        // Extract hours and minutes
+        let hrs = cleaned.slice(0, 2);
+        let mins = cleaned.slice(2, 4);
+
+        if (hrs.length >= 1) {
+            let h = parseInt(hrs, 10);
+            if (h > 12) {
+                h = h - 12;
+                hrs = h.toString().padStart(2, '0');
+                setTimePeriod('PM');
+            } else if (h === 0 && hrs.length === 2) {
+                hrs = '12';
+                setTimePeriod('AM');
+            }
+        }
+
+        let result = hrs;
+        if (cleaned.length > 2) {
+            result += ':' + mins;
+        } else if (cleaned.length === 2 && text.length > departureTime.length) {
+            result += ':';
+        }
+        
+        setDepartureTime(result);
+    };
+
     const handleFindRides = async () => {
         if (!pickup.trim() || !dropoff.trim()) {
             return;
         }
 
         try {
-            await fetch(`${API_BASE}/api/rides/recent`, {
+            await apiRequest('/api/rides/recent', {
                 method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
                 body: JSON.stringify({
                     pickup: pickup.trim(),
                     dropoff: dropoff.trim(),
@@ -104,21 +150,53 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
 
     const handlePostRide = async () => {
         if (!pickup.trim() || !dropoff.trim()) return;
+        if (!timePeriod) {
+            Alert.alert(t('common.error'), 'Please select AM or PM for your departure time.');
+            return;
+        }
 
         try {
-            const response = await fetch(`${API_BASE}/api/rides/create`, {
+            const finalTime = departureTime.trim().toUpperCase().includes('AM') || departureTime.trim().toUpperCase().includes('PM')
+                ? departureTime.trim()
+                : `${departureTime.trim()} ${timePeriod}`;
+
+            // Time Validation
+            const today = new Date();
+            const dd = String(today.getDate()).padStart(2, '0');
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const yyyy = today.getFullYear();
+            const currentDateStr = `${dd}/${mm}/${yyyy}`;
+
+            if (date.trim() === currentDateStr) {
+                // Parse time
+                const timeParts = finalTime.split(' ');
+                const timePart = timeParts[0];
+                const period = timeParts[1] || timePeriod;
+
+                let [hours, minutes] = timePart.split(':').map(Number);
+                if (period.toUpperCase() === 'PM' && hours !== 12) hours += 12;
+                if (period.toUpperCase() === 'AM' && hours === 12) hours = 0;
+
+                const selectedTotalMinutes = hours * 60 + (minutes || 0);
+                const currentTotalMinutes = today.getHours() * 60 + today.getMinutes();
+
+                if (selectedTotalMinutes < currentTotalMinutes) {
+                    Alert.alert(t('common.error'), 'Cannot post a ride for a past time today.');
+                    return;
+                }
+            }
+
+            const response = await apiRequest('/api/rides/create', {
                 method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
                 body: JSON.stringify({
                     pickup: pickup.trim(),
                     dropoff: dropoff.trim(),
-                    vehicleModel: "Mountain SUV", // Mocked for now or add input
-                    vehicleNumber: "UK07-AX-4421", // Mocked for now or add input
-                    departureTime: "08:00 AM", // Mocked for now or add input
-                    seatsTotal: 5,
+                    date: date.trim(),
+                    departureTime: finalTime,
+                    vehicleModel: user?.vehicle?.vehicle_name || "Mountain SUV",
+                    vehicleNumber: user?.vehicle?.vehicle_number || "UK07-AX-4421",
+                    seatsTotal: user?.vehicle?.seats || 5,
+                    seatingLayout: user?.vehicle?.seating_layout || "suv",
                     pricePerSeat: 350,
                 }),
             });
@@ -126,19 +204,46 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
             if (response.ok) {
                 setPickup('');
                 setDropoff('');
+                const today = new Date();
+                const dd = String(today.getDate()).padStart(2, '0');
+                const mm = String(today.getMonth() + 1).padStart(2, '0');
+                const yyyy = today.getFullYear();
+                setDate(`${dd}/${mm}/${yyyy}`);
+                setDepartureTime('');
                 setShowPostSuccess(true);
                 fetchRecentRides(); // Refresh recent list
+            } else {
+                const data = await response.json();
+                Alert.alert(t('common.error'), data.error || 'Failed to post ride');
             }
         } catch (err) {
             console.error('Post ride error:', err);
+            Alert.alert(t('common.error'), t('login.connectionError'));
         }
     };
 
     const isDriver = user?.role === 'driver';
+    const isParceller = user?.role === 'parceller';
+
+    if (isParceller || view === 'parcel') {
+        return <ParcelBookingView onBack={() => {
+            if (isParceller) {
+                // If they are a parceller role, maybe logout or switch role? 
+                // But for now, just stay on home if they are parceller role.
+                setView('home');
+                if (setParcelMode) setParcelMode(false);
+            } else {
+                setView('home');
+                if (setParcelMode) setParcelMode(false);
+            }
+        }} />;
+    }
 
     if (view === 'available') {
         return (
             <AvailableRidesScreen
+                searchPickup={pickup.trim()}
+                searchDropoff={dropoff.trim()}
                 onBack={() => setView('home')}
                 onSelectRide={(ride) => {
                     setSelectedRide(ride);
@@ -169,11 +274,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
             showsVerticalScrollIndicator={false}>
             {/* Greeting */}
             <Text style={[styles.greeting, { color: colors.textColor }]}>
-                {isDriver ? 'Hello, Driver 🚕' : 'Namaste, Traveler 🙏'}
+                {isDriver ? t('home.greetingDriver') : t('home.greetingPassenger')}
             </Text>
             <View style={styles.spacer6} />
             <Text style={[styles.subGreeting, { color: colors.subtextColor }]}>
-                {isDriver ? 'Provide a safe ride today.' : 'Ready for your next adventure?'}
+                {isDriver ? t('home.subGreetingDriver') : t('home.subGreetingPassenger')}
             </Text>
 
             <View style={styles.spacer24} />
@@ -189,43 +294,143 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
                     },
                 ]}>
 
-                <Text style={[styles.fieldLabel, { color: pickupLabelColor }]}>
-                    PICKUP LOCATION
-                </Text>
-                <View style={styles.spacer6} />
-                <TextInput
-                    style={[
-                        styles.textInput,
-                        {
-                            color: colors.textColor,
-                            backgroundColor: colors.inputFillColor,
-                            borderColor: colors.inputBorderColor,
-                        },
-                    ]}
+                <LocationInput
+                    label={t('home.pickupLabel')}
                     value={pickup}
                     onChangeText={setPickup}
-                    placeholderTextColor={colors.subtextColor}
+                    onSelect={(res) => setPickup(res.display_name)}
+                    labelColor={pickupLabelColor}
                 />
 
                 <View style={styles.spacer14} />
 
-                <Text style={[styles.fieldLabel, { color: dropoffLabelColor }]}>
-                    DROPOFF LOCATION
-                </Text>
-                <View style={styles.spacer6} />
-                <TextInput
-                    style={[
-                        styles.textInput,
-                        {
-                            color: colors.textColor,
-                            backgroundColor: colors.inputFillColor,
-                            borderColor: colors.inputBorderColor,
-                        },
-                    ]}
+                <LocationInput
+                    label={t('home.dropoffLabel')}
                     value={dropoff}
                     onChangeText={setDropoff}
-                    placeholderTextColor={colors.subtextColor}
+                    onSelect={(res) => setDropoff(res.display_name)}
+                    labelColor={dropoffLabelColor}
                 />
+
+                <View style={styles.spacer14} />
+                <View style={{ flexDirection: 'row', zIndex: 10, elevation: 10 }}>
+                    <View style={{ flex: 1 }}>
+                        <Text style={[styles.fieldLabel, { color: colors.primary }]}>
+                            {t('home.rideDate').toUpperCase()}
+                        </Text>
+                        <View style={styles.spacer6} />
+                        <TouchableOpacity
+                            onPress={() => setShowCalendar(true)}
+                            activeOpacity={0.8}
+                            style={[styles.textInput, styles.datePickerButton, { backgroundColor: colors.inputFillColor, borderColor: date ? colors.primary : colors.inputBorderColor }]}>
+                            <Text style={[styles.datePickerText, { color: date ? colors.textColor : (isDark ? 'rgba(255,255,255,0.3)' : 'rgba(34,34,96,0.35)') }]}>
+                                {date || t('home.datePlaceholder')}
+                            </Text>
+                            <Icon name="calendar-outline" size={20} color={colors.primary} />
+                        </TouchableOpacity>
+                    </View>
+
+                    {isDriver && (
+                        <>
+                            <View style={{ width: 12 }} />
+                            <View style={{ flex: 1, zIndex: 11, elevation: 11 }}>
+                                <Text style={[styles.fieldLabel, { color: colors.primary }]}> 
+                                    {t('home.departureTime').toUpperCase()}
+                                </Text>
+                                <View style={styles.spacer6} />
+                                <View style={{ 
+                                    flexDirection: 'row', 
+                                    alignItems: 'center', 
+                                    borderRadius: 12, 
+                                    borderWidth: 1, 
+                                    borderColor: departureTime ? colors.primary : colors.inputBorderColor, 
+                                    backgroundColor: colors.inputFillColor, 
+                                    height: 50,
+                                    width: '100%',
+                                    zIndex: 100,
+                                    overflow: 'visible',
+                                }}>
+                                    <View style={{ flex: 1, height: '100%', justifyContent: 'center' }}>
+                                        <TextInput
+                                            style={{ 
+                                                width: '100%',
+                                                height: '100%',
+                                                paddingHorizontal: 12, 
+                                                fontSize: 15, 
+                                                color: colors.textColor, 
+                                                backgroundColor: 'transparent',
+                                                borderWidth: 0,
+                                                // @ts-ignore
+                                                outlineStyle: 'none',
+                                            }}
+                                            value={departureTime}
+                                            onChangeText={handleTimeChange}
+                                            placeholder="10:00"
+                                            placeholderTextColor={colors.subtextColor}
+                                            keyboardType="numeric"
+                                            maxLength={5}
+                                        />
+                                    </View>
+                                    <View style={{ width: 1, height: '60%', backgroundColor: colors.inputBorderColor }} />
+                                    <TouchableOpacity
+                                        style={{ 
+                                            width: 60, 
+                                            height: '100%', 
+                                            flexDirection: 'row', 
+                                            justifyContent: 'center', 
+                                            alignItems: 'center',
+                                            backgroundColor: 'transparent'
+                                        }}
+                                        onPress={() => setShowTimePeriodDropdown(!showTimePeriodDropdown)}
+                                        activeOpacity={0.8}
+                                    >
+                                        <Text style={{ color: colors.textColor, fontWeight: 'bold', fontSize: 14 }}>
+                                            {timePeriod}
+                                        </Text>
+                                        <Icon name="chevron-down" size={14} color={colors.textColor} style={{ marginLeft: 2 }} />
+                                    </TouchableOpacity>
+
+                                    {showTimePeriodDropdown && (
+                                        <View style={{ 
+                                            position: 'absolute', 
+                                            top: 52, 
+                                            right: 0, 
+                                            width: 80, 
+                                            borderRadius: 12, 
+                                            borderWidth: 1, 
+                                            backgroundColor: colors.cardColor, 
+                                            borderColor: colors.borderColor, 
+                                            zIndex: 1000, 
+                                            elevation: 10, 
+                                            shadowColor: '#000',
+                                            shadowOffset: { width: 0, height: 4 }, 
+                                            shadowOpacity: 0.2, 
+                                            shadowRadius: 8, 
+                                            overflow: 'hidden' 
+                                        }}>
+                                            <TouchableOpacity
+                                                style={{ paddingVertical: 12, alignItems: 'center', backgroundColor: timePeriod === 'AM' ? (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(91,79,255,0.1)') : 'transparent' }}
+                                                onPress={() => { setTimePeriod('AM'); setShowTimePeriodDropdown(false); }}
+                                            >
+                                                <Text style={{ fontSize: 13, fontWeight: 'bold', color: colors.textColor }}>AM</Text>
+                                            </TouchableOpacity>
+                                            <View style={{ height: 1, width: '100%', backgroundColor: colors.inputBorderColor }} />
+                                            <TouchableOpacity
+                                                style={{ paddingVertical: 12, alignItems: 'center', backgroundColor: timePeriod === 'PM' ? (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(91,79,255,0.1)') : 'transparent' }}
+                                                onPress={() => { setTimePeriod('PM'); setShowTimePeriodDropdown(false); }}
+                                            >
+                                                <Text style={{ fontSize: 13, fontWeight: 'bold', color: colors.textColor }}>PM</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    )}
+                                </View>
+
+
+                            </View>
+
+                        </>
+                    )}
+                </View>
 
                 <View style={styles.spacer18} />
 
@@ -234,7 +439,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
                     onPress={isDriver ? handlePostRide : handleFindRides}
                     activeOpacity={0.85}>
                     <Text style={styles.findButtonText}>
-                        {isDriver ? 'Post This Ride' : 'Find Shared Rides'}
+                        {isDriver ? t('home.postRide') : t('home.findRides')}
                     </Text>
                 </TouchableOpacity>
 
@@ -244,16 +449,16 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
 
             {/* Recent Routes */}
             <Text style={[styles.sectionTitle, { color: colors.textColor }]}>
-                RECENT ROUTES
+                {t('home.recentRoutes')}
             </Text>
             <View style={styles.spacer14} />
 
             {loading ? (
                 <ActivityIndicator color={colors.primary} size="large" />
             ) : error ? (
-                <Text style={styles.errorText}>Error loading recent rides</Text>
+                <Text style={styles.errorText}>{t('home.errorRecent')}</Text>
             ) : (recentRides || []).length === 0 ? (
-                <Text style={{ color: colors.textColor }}>No recent rides found</Text>
+                <Text style={{ color: colors.textColor }}>{t('home.noRecentRides')}</Text>
             ) : (
                 <View style={styles.recentRow}>
                     {(recentRides || []).slice(0, 2).map((ride, index) => (
@@ -277,7 +482,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
                                 />
                                 <Text
                                     style={[styles.recentLabel, { color: recentLabelColor }]}>
-                                    Recent
+                                    {t('home.recent')}
                                 </Text>
                             </View>
                             <View style={styles.spacer6} />
@@ -289,15 +494,22 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
                             <Text
                                 style={[styles.recentSource, { color: colors.subtextColor }]}
                                 numberOfLines={1}>
-                                From {ride.pickup ?? 'Unknown'}
+                                {t('home.from')} {ride.pickup ?? 'Unknown'}
                             </Text>
+                            <View style={styles.detailRow}>
+                                <Icon name="calendar-outline" size={14} color={colors.subtextColor} style={styles.detailIcon} />
+                                <Text style={[styles.detailText, { color: colors.subtextColor }]}>{ride.date || '—'}</Text>
+                                <View style={{ width: 8 }} />
+                                <Icon name="time-outline" size={14} color={colors.subtextColor} style={styles.detailIcon} />
+                                <Text style={[styles.detailText, { color: colors.subtextColor }]}>{ride.departureTime || '—'}</Text>
+                            </View>
                             {isDriver && ride.seatsTotal !== undefined && (
                                 <View style={{ marginTop: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <Text style={{ fontSize: 12, color: colors.subtextColor, fontWeight: '500' }}>
-                                        Available: {Math.max(0, ride.seatsTotal - (ride.seatsBooked || 0))}
+                                        {t('home.availableSeats')}: {Math.max(0, ride.seatsTotal - (ride.seatsBooked || 0))}
                                     </Text>
                                     <Text style={{ fontSize: 12, color: isDark ? '#FF4081' : '#D81B60', fontWeight: 'bold' }}>
-                                        Taken: {ride.seatsBooked || 0}
+                                        {t('home.takenSeats')}: {ride.seatsBooked || 0}
                                     </Text>
                                 </View>
                             )}
@@ -310,7 +522,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
 
             {/* Why Choose Raahi */}
             <Text style={[styles.sectionTitle, { color: colors.textColor }]}>
-                WHY CHOOSE RAAHI?
+                {t('home.whyChoose')}
             </Text>
             <View style={styles.spacer14} />
 
@@ -324,40 +536,135 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
                         },
                         styles.whyCardFirst,
                     ]}>
-                    <Text style={[styles.whyIcon, { color: colors.accentColor }]}>
-                        🛡️
-                    </Text>
+                    <Icon name="shield-checkmark-outline" size={28} color={colors.accentColor} />
                     <View style={styles.spacer8} />
                     <Text style={[styles.whyTitle, { color: colors.textColor }]}>
-                        Safe Travel
+                        {t('home.safeTravel')}
                     </Text>
                     <Text style={[styles.whyDesc, { color: colors.subtextColor }]}>
-                        Verified experts.
+                        {t('home.verifiedExperts')}
                     </Text>
                 </View>
 
-                <View
+                <TouchableOpacity
                     style={[
                         styles.whyCard,
                         {
                             backgroundColor: isDark ? colors.cardColor : '#F8F9FF',
                             borderColor: colors.borderColor,
                         },
-                    ]}>
-                    <Text style={[styles.whyIcon, { color: colors.accentColor }]}>
-                        👥
-                    </Text>
+                    ]}
+                    onPress={() => {
+                        setView('parcel');
+                        if (setParcelMode) setParcelMode(true);
+                    }}
+                    activeOpacity={0.8}>
+                    <Icon name="cube-outline" size={28} color={colors.accentColor} />
                     <View style={styles.spacer8} />
                     <Text style={[styles.whyTitle, { color: colors.textColor }]}>
-                        Share & Save
+                        {t('login.iAmParceller')}
                     </Text>
                     <Text style={[styles.whyDesc, { color: colors.subtextColor }]}>
-                        Split costs.
+                        {t('login.shipGoods')}
                     </Text>
-                </View>
+                </TouchableOpacity>
             </View>
 
             <View style={styles.spacer24} />
+
+            {/* Calendar Modal */}
+            <Modal
+                visible={showCalendar}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setShowCalendar(false)}>
+                <View style={styles.modalOverlay}>
+                    <View style={[styles.calendarContent, { backgroundColor: colors.background, borderColor: colors.borderColor }]}>
+                        {/* Calendar Header */}
+                        <View style={styles.calendarHeader}>
+                            <TouchableOpacity onPress={() => {
+                                const current = new Date();
+                                if (calendarYear < current.getFullYear() || (calendarYear === current.getFullYear() && calendarMonth <= current.getMonth())) {
+                                    return; // Prevent navigating to past months
+                                }
+                                if (calendarMonth === 0) {
+                                    setCalendarMonth(11);
+                                    setCalendarYear(calendarYear - 1);
+                                } else {
+                                    setCalendarMonth(calendarMonth - 1);
+                                }
+                            }}>
+                                <Text style={[styles.calendarNav, { color: colors.primary }]}>‹</Text>
+                            </TouchableOpacity>
+                            <Text style={[styles.calendarTitle, { color: colors.textColor }]}>
+                                {t(`calendar.${['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'][calendarMonth]}`)} {calendarYear}
+                            </Text>
+                            <TouchableOpacity onPress={() => {
+                                if (calendarMonth === 11) {
+                                    setCalendarMonth(0);
+                                    setCalendarYear(calendarYear + 1);
+                                } else {
+                                    setCalendarMonth(calendarMonth + 1);
+                                }
+                            }}>
+                                <Text style={[styles.calendarNav, { color: colors.primary }]}>›</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Days Header */}
+                        <View style={styles.daysHeader}>
+                            {['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'].map(d => (
+                                <Text key={d} style={[styles.dayLabel, { color: colors.subtextColor }]}>{t(`calendar.${d}`).charAt(0)}</Text>
+                            ))}
+                        </View>
+
+                        {/* Calendar Grid */}
+                        <View style={styles.calendarGrid}>
+                            {Array.from({ length: new Date(calendarYear, calendarMonth, 1).getDay() }).map((_, i) => (
+                                <View key={`empty-${i}`} style={styles.calendarDay} />
+                            ))}
+                            {Array.from({ length: new Date(calendarYear, calendarMonth + 1, 0).getDate() }).map((_, i) => {
+                                const day = i + 1;
+                                const current = new Date();
+                                const isToday = day === current.getDate() && calendarMonth === current.getMonth() && calendarYear === current.getFullYear();
+                                const isSelected = date === `${day < 10 ? '0' : ''}${day}/${calendarMonth + 1 < 10 ? '0' : ''}${calendarMonth + 1}/${calendarYear}`;
+                                const isPast = new Date(calendarYear, calendarMonth, day) < new Date(current.getFullYear(), current.getMonth(), current.getDate());
+
+                                return (
+                                    <TouchableOpacity
+                                        key={`day-${day}`}
+                                        disabled={isPast}
+                                        style={[
+                                            styles.calendarDay,
+                                            isToday && { backgroundColor: 'rgba(31, 175, 99, 0.15)' },
+                                            isSelected && { backgroundColor: colors.primary, borderRadius: 8 },
+                                            isPast && { opacity: 0.3 }
+                                        ]}
+                                        onPress={() => {
+                                            const formattedDate = `${day < 10 ? '0' : ''}${day}/${calendarMonth + 1 < 10 ? '0' : ''}${calendarMonth + 1}/${calendarYear}`;
+                                            setDate(formattedDate);
+                                            setShowCalendar(false);
+                                        }}>
+                                        <Text style={[
+                                            styles.dayText,
+                                            { color: isSelected ? '#FFFFFF' : colors.textColor },
+                                            isToday && !isSelected && { color: '#1FAF63', fontWeight: 'bold' }
+                                        ]}>
+                                            {day}
+                                        </Text>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </View>
+
+                        <TouchableOpacity
+                            style={{ marginTop: 20, padding: 10 }}
+                            onPress={() => setShowCalendar(false)}>
+                            <Text style={{ color: colors.subtextColor, fontWeight: 'bold' }}>{t('common.cancel')}</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
 
             {/* Post Ride Success Modal */}
             <Modal
@@ -370,15 +677,15 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
                         <View style={styles.successIconContainer}>
                             <Text style={styles.successIcon}>✓</Text>
                         </View>
-                        <Text style={[styles.modalTitle, { color: colors.textColor }]}>RIDE POSTED!</Text>
+                        <Text style={[styles.modalTitle, { color: colors.textColor }]}>{t('home.ridePostedTitle')}</Text>
                         <Text style={[styles.modalSubtitle, { color: colors.subtextColor }]}>
-                            Your ride is now live! Passengers can now see and book your cab.
+                            {t('home.ridePostedSub')}
                         </Text>
 
                         <TouchableOpacity
                             style={styles.returnHomeBtn}
                             onPress={() => setShowPostSuccess(false)}>
-                            <Text style={styles.returnHomeBtnText}>OK</Text>
+                            <Text style={styles.returnHomeBtnText}>{t('common.ok')}</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -410,6 +717,7 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.15,
         shadowRadius: 12,
         elevation: 6,
+        // overflow: 'hidden', // Removed to prevent dropdown clipping
     },
     rideTypeRow: {
         flexDirection: 'row',
@@ -463,7 +771,7 @@ const styles = StyleSheet.create({
         padding: 14,
     },
     recentCardFirst: {
-        marginRight: 6,
+        // Redundant as gap is used
     },
     recentLabelRow: {
         flexDirection: 'row',
@@ -485,6 +793,34 @@ const styles = StyleSheet.create({
     },
     recentSource: {
         fontSize: 13,
+    },
+    detailRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        marginTop: 8,
+        rowGap: 4,
+    },
+    detailIcon: {
+        fontSize: 14,
+        marginRight: 6,
+    },
+    detailText: {
+        fontSize: 13,
+        fontWeight: '500',
+    },
+    row: {
+        flexDirection: 'row',
+    },
+    datePickerButton: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        borderWidth: 1,
+    },
+    datePickerText: {
+        fontSize: 15,
+        flex: 1,
     },
     whyRow: {
         flexDirection: 'row',
@@ -573,6 +909,129 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         fontSize: 14,
         letterSpacing: 1,
+    },
+    calendarContent: {
+        width: '90%',
+        maxWidth: 340,
+        borderRadius: 24,
+        padding: 24,
+        borderWidth: 1,
+        alignItems: 'center',
+    },
+    calendarHeader: {
+        flexDirection: 'row',
+        width: '100%',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    calendarNav: {
+        fontSize: 32,
+        paddingHorizontal: 10,
+    },
+    calendarTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+    },
+    daysHeader: {
+        flexDirection: 'row',
+        width: '100%',
+        marginBottom: 10,
+    },
+    dayLabel: {
+        flex: 1,
+        textAlign: 'center',
+        fontSize: 12,
+        fontWeight: 'bold',
+    },
+    calendarGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        width: '100%',
+    },
+    calendarDay: {
+        width: '14.28%',
+        aspectRatio: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    dayText: {
+        fontSize: 15,
+        fontWeight: '500',
+    },
+    periodDropdown: {
+        width: 60,
+        height: 50,
+        borderRadius: 12,
+        borderWidth: 1,
+        marginLeft: 8,
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    unifiedInput: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderRadius: 12,
+        borderWidth: 1,
+        height: 50,
+    },
+    flexInput: {
+        flex: 1,
+        paddingHorizontal: 14,
+        fontSize: 15,
+        height: '100%',
+        borderTopLeftRadius: 12,
+        borderBottomLeftRadius: 12,
+    },
+    verticalSeparator: {
+        width: 1,
+        height: '60%',
+    },
+    periodDropdownUnified: {
+        width: 60,
+        height: '100%',
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderTopRightRadius: 12,
+        borderBottomRightRadius: 12,
+    },
+    dropdownMenu: {
+        position: 'absolute',
+        top: 55,
+        right: 0,
+        width: 60,
+        borderRadius: 12,
+        borderWidth: 1,
+        zIndex: 1000,
+        elevation: 10,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        overflow: 'hidden',
+    },
+    dropdownMenuWrapper: {
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        top: 0,
+        bottom: 0,
+        zIndex: 2000,
+        elevation: 20,
+        // pointerEvents: 'box-none',
+    },
+    dropdownItem: {
+        paddingVertical: 12,
+        alignItems: 'center',
+    },
+    dropdownItemText: {
+        fontSize: 13,
+        fontWeight: 'bold',
+    },
+    dropdownSeparator: {
+        height: 1,
+        width: '100%',
     },
 });
 

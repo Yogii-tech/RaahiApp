@@ -34,9 +34,9 @@ const babelLoaderConfiguration = {
     },
 };
 
-// Image loader configuration
+// Asset loader configuration for images and fonts
 const imageLoaderConfiguration = {
-    test: /\.(gif|jpe?g|png|svg)$/,
+    test: /\.(gif|jpe?g|png|svg|ttf)$/,
     type: 'asset/resource',
 };
 
@@ -57,6 +57,22 @@ module.exports = {
             },
             babelLoaderConfiguration,
             imageLoaderConfiguration,
+            {
+                test: /\.css$/,
+                use: [
+                    'style-loader',
+                    {
+                        loader: 'css-loader',
+                        options: {
+                            esModule: false,
+                            modules: {
+                                auto: true, // automatically enable CSS modules for .module.css
+                                localIdentName: '[name]__[local]--[hash:base64:5]',
+                            },
+                        },
+                    },
+                ],
+            },
         ],
     },
     resolve: {
@@ -82,10 +98,15 @@ module.exports = {
     devServer: {
         static: path.resolve(appDirectory, 'public'),
         port: 3000,
+        host: '0.0.0.0',
+        allowedHosts: 'all',
         hot: true,
         historyApiFallback: true,
     },
     cache: false,
     devtool: 'source-map',
+    watchOptions: {
+        ignored: ['**/node_modules', '**/android', '**/ios', '**/dist'],
+    },
     mode: 'development',
 };

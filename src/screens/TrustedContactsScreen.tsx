@@ -11,16 +11,18 @@ import {
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 
 interface Contact {
     phone: string;
 }
 
-const API_BASE = 'http://localhost:8081';
+import { API_BASE } from '../apiConfig';
 
 const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const { colors, isDark } = useTheme();
     const { token } = useAuth();
+    const { t } = useLanguage();
     const [contacts, setContacts] = useState<Contact[]>([
         { phone: '' },
         { phone: '' },
@@ -59,13 +61,13 @@ const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
         const toSave = contacts.filter(c => c.phone.trim().length > 0);
 
         if (toSave.length === 0) {
-            Alert.alert('Error', 'Please add at least one contact or go back.');
+            Alert.alert(t('common.error'), t('trusted.atLeastOne'));
             return;
         }
 
         const invalidContact = toSave.find(c => c.phone.length !== 10);
         if (invalidContact) {
-            Alert.alert('Error', 'Each phone number must be exactly 10 digits');
+            Alert.alert(t('common.error'), t('trusted.tenDigits'));
             return;
         }
 
@@ -81,13 +83,13 @@ const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
             });
 
             if (response.ok) {
-                Alert.alert('Success', 'Trusted contacts updated successfully');
+                Alert.alert(t('requests.success'), t('trusted.successUpdate'));
                 onBack();
             } else {
-                Alert.alert('Error', 'Failed to update contacts');
+                Alert.alert(t('common.error'), t('trusted.failUpdate'));
             }
         } catch (err) {
-            Alert.alert('Error', 'Could not connect to server');
+            Alert.alert(t('common.error'), t('book.errorConnect'));
         } finally {
             setSaving(false);
         }
@@ -125,14 +127,14 @@ const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
         <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
             <View style={styles.header}>
                 <TouchableOpacity onPress={onBack} style={styles.backButton}>
-                    <Text style={[styles.backText, { color: colors.primary }]}>← Back</Text>
+                    <Text style={[styles.backText, { color: colors.primary }]}>{t('common.back')}</Text>
                 </TouchableOpacity>
-                <Text style={[styles.title, { color: colors.textColor }]}>Trusted Contacts</Text>
+                <Text style={[styles.title, { color: colors.textColor }]}>{t('trusted.title')}</Text>
             </View>
 
             <View style={styles.content}>
                 <Text style={[styles.description, { color: colors.subtextColor }]}>
-                    Add up to 2 trusted contacts who will be notified in case of an emergency (SOS).
+                    {t('trusted.description')}
                 </Text>
 
                 <View style={styles.spacer20} />
@@ -140,19 +142,19 @@ const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
                 {contacts.map((contact, index) => (
                     <View key={index} style={[styles.contactCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <Text style={[styles.cardLabel, { color: colors.primary }]}>CONTACT {index + 1}</Text>
+                            <Text style={[styles.cardLabel, { color: colors.primary }]}>{t('trusted.contactLabel')}{index + 1}</Text>
                             <TouchableOpacity onPress={() => removeContact(index)}>
                                 <Text style={{ color: '#C62828', fontSize: 18 }}>✕</Text>
                             </TouchableOpacity>
                         </View>
                         <View style={styles.spacer12} />
 
-                        <Text style={[styles.inputLabel, { color: colors.textColor }]}>Phone Number</Text>
+                        <Text style={[styles.inputLabel, { color: colors.textColor }]}>{t('trusted.phoneLabel')}</Text>
                         <TextInput
                             style={[styles.input, { backgroundColor: colors.inputFillColor, color: colors.textColor, borderColor: colors.inputBorderColor }]}
                             value={contact.phone}
                             onChangeText={(val) => updateContact(index, 'phone', val.replace(/[^0-9]/g, '').slice(0, 10))}
-                            placeholder="e.g. 9876543210"
+                            placeholder={t('trusted.phonePlaceholderSmall')}
                             placeholderTextColor={isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)'}
                             keyboardType="phone-pad"
                             maxLength={10}
@@ -164,7 +166,7 @@ const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
                     <TouchableOpacity
                         style={[styles.addButton, { borderColor: colors.primary }]}
                         onPress={addContact}>
-                        <Text style={[styles.addButtonText, { color: colors.primary }]}>+ Add Another Contact</Text>
+                        <Text style={[styles.addButtonText, { color: colors.primary }]}>{t('trusted.addAnother')}</Text>
                     </TouchableOpacity>
                 )}
 
@@ -176,7 +178,7 @@ const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
                     onPress={handleSave}
                     disabled={saving}
                 >
-                    {saving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveButtonText}>Save Trusted Contacts</Text>}
+                    {saving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveButtonText}>{t('trusted.saveTrusted')}</Text>}
                 </TouchableOpacity>
             </View>
         </ScrollView>
