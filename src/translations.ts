@@ -7,6 +7,7 @@ export const translations = {
     'tab.trips': 'Trips',
     'tab.trackPackage': 'Track Package',
     'tab.map': 'Map',
+    'tab.history': 'History',
     'tab.account': 'Account',
 
     // Shared
@@ -337,6 +338,21 @@ export const translations = {
     'parcel.estPrice': 'Est. Price',
     'parcel.pickupScheduled': 'Pickup scheduled',
     'parcel.bookingSuccess': 'Parcel booking request sent successfully!',
+    'parcel.trackTitle': "Let's Track Your Package",
+    'parcel.enterTracking': 'Enter your tracking number',
+    'parcel.checkRate': 'Check Rate',
+    'parcel.pickUp': 'Pick Up',
+    'parcel.dropOff': 'Drop Off',
+    'parcel.history': 'History',
+    'parcel.currentShipment': 'Current Shipment',
+    'parcel.viewAll': 'View All',
+    'parcel.waitingForDriver': 'Waiting for Driver',
+    'parcel.onTheWay': 'On the way',
+    'parcel.from': 'From',
+    'parcel.to': 'To',
+    'parcel.noActiveShipments': 'No active shipments',
+    'parcel.recentShipment': 'Recent Shipment',
+    'parcel.noRecentHistory': 'No recent history',
   },
   hi: {
     // App Header & Tabs
@@ -345,6 +361,7 @@ export const translations = {
     'tab.trips': 'यात्राएँ',
     'tab.trackPackage': 'पैकेज ट्रैक करें',
     'tab.map': 'मैप',
+    'tab.history': 'इतिहास',
     'tab.account': 'अकाउंट',
 
     // Shared
@@ -674,6 +691,21 @@ export const translations = {
     'parcel.estPrice': 'अनुमानित मूल्य',
     'parcel.pickupScheduled': 'पिकअप शेड्यूल हो गया',
     'parcel.bookingSuccess': 'पार्सल बुकिंग अनुरोध सफलतापूर्वक भेजा गया!',
+    'parcel.trackTitle': 'अपना पैकेज ट्रैक करें',
+    'parcel.enterTracking': 'अपना ट्रैकिंग नंबर दर्ज करें',
+    'parcel.checkRate': 'दर जांचें',
+    'parcel.pickUp': 'पिक अप',
+    'parcel.dropOff': 'ड्रॉप ऑफ़',
+    'parcel.history': 'इतिहास',
+    'parcel.currentShipment': 'वर्तमान शिपमेंट',
+    'parcel.viewAll': 'सभी देखें',
+    'parcel.waitingForDriver': 'ड्राइवर की प्रतीक्षा में',
+    'parcel.onTheWay': 'रास्ते में',
+    'parcel.from': 'से',
+    'parcel.to': 'तक',
+    'parcel.noActiveShipments': 'कोई सक्रिय शिपमेंट नहीं',
+    'parcel.recentShipment': 'हालिया शिपमेंट',
+    'parcel.noRecentHistory': 'कोई हालिया इतिहास नहीं',
   }
 };
 

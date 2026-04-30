@@ -131,12 +131,23 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
                             </View>
                         ) : (
                             <View style={{ alignItems: 'center' }}>
-                                <Text style={{ color: item.status === 'accepted' ? '#4CAF50' : '#F44336', fontWeight: 'bold' }}>
-                                    {item.status === 'accepted' ? `✓ ${t('requests.accepted').toUpperCase()}` : `✗ ${t('requests.rejected').toUpperCase()}`}
+                                <Text style={{ color: (item.status === 'accepted' || item.status === 'picked_up') ? '#4CAF50' : '#F44336', fontWeight: 'bold' }}>
+                                    {(item.status === 'accepted' || item.status === 'picked_up') ? `✓ ${t('requests.accepted').toUpperCase()}` : `✗ ${t('requests.rejected').toUpperCase()}`}
                                 </Text>
-                                {item.status === 'accepted' && (
+                                
+                                {item.status === 'accepted' && item.type === 'parcel' && (
                                     <TouchableOpacity
-                                        style={styles.chatBtn}
+                                        style={[styles.chatBtn, { backgroundColor: '#FF9800', marginTop: 15, paddingHorizontal: 30, paddingVertical: 12 }]}
+                                        onPress={() => handleUpdateStatus(item.id, 'picked_up')}>
+                                        <View style={styles.chatBtnContent}>
+                                            <Text style={styles.chatBtnText}>📦 Complete Pick Up</Text>
+                                        </View>
+                                    </TouchableOpacity>
+                                )}
+
+                                {(item.status === 'accepted' || item.status === 'picked_up') && (
+                                    <TouchableOpacity
+                                        style={[styles.chatBtn, item.status === 'accepted' && item.type === 'parcel' ? { marginTop: 10, backgroundColor: '#777' } : {}]}
                                         onPress={() => onOpenChat(item)}>
                                         <View style={styles.chatBtnContent}>
                                             <Text style={styles.chatBtnText}>💬 {t('chat.withPassenger')}</Text>
@@ -151,7 +162,7 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
                             </View>
                         )}
                     </>
-                ) : item.status === 'accepted' ? (
+                ) : (item.status === 'accepted' || item.status === 'picked_up') ? (
                     <>
                         <View style={styles.successHeader}>
                             <View style={styles.successIconOuter}>

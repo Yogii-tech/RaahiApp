@@ -206,6 +206,7 @@ const tabIcons: Record<string, { default: string; focused: string }> = {
   Trips: { default: 'car-sport-outline', focused: 'car-sport' },
   ParcelTrips: { default: 'cube-outline', focused: 'cube' },
   Map: { default: 'map-outline', focused: 'map' },
+  History: { default: 'time-outline', focused: 'time' },
   Account: { default: 'person-outline', focused: 'person' },
 };
 
@@ -309,11 +310,19 @@ function MainTabs() {
           children={(props) => <TripsScreen {...props} isParcelMode={user?.role === 'parceller' || parcelMode} />}
           options={{ title: (user?.role === 'parceller' || parcelMode) ? t('tab.trackPackage') : t('tab.trips') }}
         />
-        <Tab.Screen
-          name="Map"
-          component={MapScreen}
-          options={{ title: t('tab.map') }}
-        />
+        {(user?.role === 'parceller' || parcelMode) ? (
+          <Tab.Screen
+            name="History"
+            children={(props) => <TripsScreen {...props} isParcelMode={true} isHistoryMode={true} />}
+            options={{ title: t('tab.history') }}
+          />
+        ) : (
+          <Tab.Screen
+            name="Map"
+            component={MapScreen}
+            options={{ title: t('tab.map') }}
+          />
+        )}
         <Tab.Screen
           name="Account"
           children={(props) => <AccountScreen {...props} isParcelMode={user?.role === 'parceller' || parcelMode} />}

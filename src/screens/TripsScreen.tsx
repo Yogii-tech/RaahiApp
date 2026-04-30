@@ -59,9 +59,10 @@ const DistanceDisplay = ({ pickup, dropoff, color }: { pickup?: string, dropoff?
 
 interface TripsScreenProps {
     isParcelMode?: boolean;
+    isHistoryMode?: boolean;
 }
 
-const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode }) => {
+const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isHistoryMode }) => {
     const { colors, isDark } = useTheme();
     const { user, token, logout } = useAuth();
     const { t } = useLanguage();
@@ -92,7 +93,7 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode }) => {
     const fetchData = async () => {
         try {
             const endpoint = isDriver ? '/api/rides/recent' : '/api/rides/bookings';
-            const response = await apiRequest(endpoint, {}, logout);
+            const response = await apiRequest(`${endpoint}?t=${Date.now()}`, {}, logout);
             if (response.ok) {
                 const data = await response.json();
                 setBookings(data || []);
@@ -236,7 +237,7 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode }) => {
                                     </View>
                                 </View>
                             </View>
-                        ) : item.status === 'accepted' && (() => {
+                        ) : (item.status === 'accepted' || item.status === 'picked_up') && (() => {
                             const ticketBg = isDark ? '#111822' : '#EEF2FF';
                             const ticketLabel = isDark ? '#607D8B' : '#7986A3';
                             const ticketText = isDark ? '#FFFFFF' : '#222260';
@@ -381,7 +382,7 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode }) => {
                                                 {isParcel ? `Size: ${booking.parcelSize || 'Standard'}` : `Seats: ${booking.seatLayout?.join(', ') || booking.seatsRequested || 0}`}
                                             </Text>
                                         </View>
-                                        {booking.status === 'accepted' ? (
+                                        {booking.status === 'accepted' || booking.status === 'picked_up' ? (
                                             <TouchableOpacity 
                                                 onPress={() => handleCompleteBooking(booking.id)}
                                                 style={{ backgroundColor: colors.primary, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}
@@ -415,7 +416,7 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode }) => {
     };
 
     if (isParcelMode) {
-        return <TrackPackageView />;
+        return <TrackPackageView isHistoryMode={isHistoryMode} />;
     }
 
     return (
