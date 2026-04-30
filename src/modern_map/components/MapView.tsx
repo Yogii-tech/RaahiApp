@@ -66,10 +66,13 @@ interface MapViewProps {
   onMapClick?: (lat: number, lng: number) => void;
 }
 
-// ── Lerp for smooth marker animation ──
 function lerp(a: number, b: number, t: number) {
+  if (isNaN(a) || isNaN(b) || isNaN(t)) return a;
   return a + (b - a) * t;
 }
+
+const isValidLngLat = (lng: any, lat: any) => 
+  typeof lng === 'number' && typeof lat === 'number' && !isNaN(lng) && !isNaN(lat);
 
 const MapView = forwardRef<MapViewHandle, MapViewProps>(
   ({ userLocation, driverLocation, theme, pickupCoords, dropCoords, routeCoords, pinModeActive, onMapClick }, ref) => {
@@ -124,6 +127,14 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
       });
 
       map.addControl(new maplibregl.NavigationControl({ showCompass: true }), 'top-right');
+      map.addControl(
+        new maplibregl.GeolocateControl({
+          positionOptions: { enableHighAccuracy: true },
+          trackUserLocation: true,
+          showUserLocation: false, // We use our own userMarker for consistency
+        }),
+        'top-right'
+      );
       map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
 
       map.on('load', () => {
@@ -187,6 +198,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
       if (!map || !userLocation) return;
 
       const { lat, lng } = userLocation;
+      if (!isValidLngLat(lng, lat)) return;
 
       if (!userMarkerRef.current) {
         const el = document.createElement('div');
@@ -206,6 +218,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
       if (!map || !driverLocation) return;
 
       if (!driverMarkerRef.current) {
+        if (!isValidLngLat(driverLocation.lng, driverLocation.lat)) return;
         const el = document.createElement('div');
         el.className = styles.driverMarker;
         el.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor">
@@ -239,7 +252,9 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
              if (markerEl) markerEl.style.transform = `rotate(${to.heading}deg)`;
           }
 
-          driverMarkerRef.current?.setLngLat([lng, lat]);
+          if (isValidLngLat(lng, lat)) {
+            driverMarkerRef.current?.setLngLat([lng, lat]);
+          }
           
           if (t < 1) {
             animFrameRef.current = requestAnimationFrame(animate);
@@ -257,7 +272,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
       const map = mapRef.current;
       if (!map) return;
       pickupMarkerRef.current?.remove();
-      if (!pickupCoords) return;
+      if (!pickupCoords || !isValidLngLat(pickupCoords[1], pickupCoords[0])) return;
       const el = document.createElement('div');
       el.className = styles.pickupMarker;
       el.title = 'Pickup';
@@ -271,7 +286,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
       const map = mapRef.current;
       if (!map) return;
       dropMarkerRef.current?.remove();
-      if (!dropCoords) return;
+      if (!dropCoords || !isValidLngLat(dropCoords[1], dropCoords[0])) return;
       const el = document.createElement('div');
       el.className = styles.dropMarker;
       el.title = 'Drop';

@@ -131,7 +131,6 @@ const headerStyles = StyleSheet.create({
     backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 8, // Nudge down to align with text baseline
   },
   logo: {
     width: 100,
@@ -224,7 +223,7 @@ function MainTabs() {
 
   useEffect(() => {
     fetchNotificationCount();
-    const interval = setInterval(fetchNotificationCount, 5000);
+    const interval = setInterval(fetchNotificationCount, 10000);
     return () => clearInterval(interval);
   }, [user, token]);
 
