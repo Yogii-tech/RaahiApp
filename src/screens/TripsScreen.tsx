@@ -30,12 +30,17 @@ const DistanceDisplay = ({ pickup, dropoff, color }: { pickup?: string, dropoff?
         if (!pickup || !dropoff) return;
         let mounted = true;
         const fetchDist = async () => {
+            const fetchWithUA = (url: string) => fetch(url, { headers: { 'User-Agent': 'GoRaahiApp/1.0' } });
             try {
-                const pRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(pickup)}&format=json&limit=1`);
+                let pLabel = pickup;
+                if (pLabel?.toLowerCase() === 'nanital') pLabel = 'Nainital';
+                const pRes = await fetchWithUA(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(pLabel)}&format=json&limit=1&countrycodes=in`);
                 const pData = await pRes.json();
                 if (!pData || pData.length === 0) return;
                 
-                const dRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(dropoff)}&format=json&limit=1`);
+                let dLabel = dropoff;
+                if (dLabel?.toLowerCase() === 'nanital') dLabel = 'Nainital';
+                const dRes = await fetchWithUA(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(dLabel)}&format=json&limit=1&countrycodes=in`);
                 const dData = await dRes.json();
                 if (!dData || dData.length === 0) return;
                 
@@ -62,7 +67,8 @@ interface TripsScreenProps {
     isHistoryMode?: boolean;
 }
 
-const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isHistoryMode }) => {
+const TripsScreen: React.FC<TripsScreenProps> = (props) => {
+    const { isParcelMode, isHistoryMode } = props;
     const { colors, isDark } = useTheme();
     const { user, token, logout } = useAuth();
     const { t } = useLanguage();
@@ -237,102 +243,109 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isHistoryMode }
                                     </View>
                                 </View>
                             </View>
-                        ) : (item.status === 'accepted' || item.status === 'picked_up') && (() => {
-                            const ticketBg = isDark ? '#111822' : '#EEF2FF';
-                            const ticketLabel = isDark ? '#607D8B' : '#7986A3';
-                            const ticketText = isDark ? '#FFFFFF' : '#222260';
-                            const ticketDash = isDark ? 'rgba(255,255,255,0.2)' : 'rgba(34,34,96,0.15)';
-                            const ticketFooter = isDark ? '#4B5C6B' : '#8A96BB';
-                            return (
-                            <View style={[styles.bookingIdCard, { marginTop: 20, backgroundColor: ticketBg }]}>
-                                {/* Ticket Layout Redesign - Row Based */}
-                                <View style={{ flexDirection: 'column', width: '100%' }}>
+                        ) : (item.status === 'accepted' || item.status === 'picked_up') ? (
+                            <View style={{ marginTop: 20 }}>
+                                <TouchableOpacity 
+                                    style={[styles.actionBtn, { backgroundColor: colors.primary, marginBottom: 15, paddingVertical: 12, flexDirection: 'row', justifyContent: 'center', gap: 8 }]}
+                                    onPress={() => {
+                                        const navigation = (props as any).navigation; 
+                                        const targetRide = isDriver ? item : item.ride;
+                                        navigation.navigate('Map', {
+                                            rideId: item.id,
+                                            pickupLabel: targetRide?.pickup,
+                                            dropLabel: targetRide?.dropoff,
+                                            pickupCoords: (targetRide?.pickupLat && targetRide?.pickupLng) ? [targetRide.pickupLat, targetRide.pickupLng] : null,
+                                            dropCoords: (targetRide?.dropoffLat && targetRide?.dropoffLng) ? [targetRide.dropoffLat, targetRide.dropoffLng] : null,
+                                        });
+                                    }}>
+                                    <Icon name="map-outline" size={18} color="#FFF" />
+                                    <Text style={styles.btnText}>Track on Map</Text>
+                                </TouchableOpacity>
 
-                                    {/* Row 1: Header / Vehicle / Verification */}
-                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                        <View style={{ flex: 1.2 }}>
-                                            <Text style={{ color: ticketLabel, fontSize: 9, fontWeight: 'bold' }}>CONFIRMED E-TICKET</Text>
-                                        </View>
-                                        <View style={{ flex: 0.8, alignItems: 'center' }}>
-                                            <Text style={{ color: ticketLabel, fontSize: 9, fontWeight: 'bold', textAlign: 'center' }}>VEHICLE NO.</Text>
-                                            <Text style={{ color: ticketText, fontSize: 12, marginTop: 2, textAlign: 'center', fontWeight: '600' }}>{item.ride?.vehicleNumber || '—'}</Text>
-                                        </View>
-                                        <View style={{ flex: 1.2, alignItems: 'flex-end' }}>
-                                            <View style={[styles.verifiedTag, { margin: 0 }]}>
-                                                <Text style={styles.verifiedTagText}>{t('trips.verifiedDriver')}</Text>
+                                {(() => {
+                                    const ticketBg = isDark ? '#111822' : '#EEF2FF';
+                                    const ticketLabel = isDark ? '#607D8B' : '#7986A3';
+                                    const ticketText = isDark ? '#FFFFFF' : '#222260';
+                                    const ticketDash = isDark ? 'rgba(255,255,255,0.2)' : 'rgba(34,34,96,0.15)';
+                                    const ticketFooter = isDark ? '#4B5C6B' : '#8A96BB';
+                                    return (
+                                        <View style={[styles.bookingIdCard, { marginTop: 0, backgroundColor: ticketBg }]}>
+                                            <View style={{ flexDirection: 'column', width: '100%' }}>
+                                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                                    <View style={{ flex: 1.2 }}>
+                                                        <Text style={{ color: ticketLabel, fontSize: 9, fontWeight: 'bold' }}>CONFIRMED E-TICKET</Text>
+                                                    </View>
+                                                    <View style={{ flex: 0.8, alignItems: 'center' }}>
+                                                        <Text style={{ color: ticketLabel, fontSize: 9, fontWeight: 'bold', textAlign: 'center' }}>VEHICLE NO.</Text>
+                                                        <Text style={{ color: ticketText, fontSize: 12, marginTop: 2, textAlign: 'center', fontWeight: '600' }}>{item.ride?.vehicleNumber || '—'}</Text>
+                                                    </View>
+                                                    <View style={{ flex: 1.2, alignItems: 'flex-end' }}>
+                                                        <View style={[styles.verifiedTag, { margin: 0 }]}>
+                                                            <Text style={styles.verifiedTagText}>{t('trips.verifiedDriver')}</Text>
+                                                        </View>
+                                                    </View>
+                                                </View>
+                                                <View style={{ flexDirection: 'row' }}>
+                                                    <View style={{ flex: 1 }} />
+                                                    <View style={{ flex: 1.5 }}>
+                                                        <View style={{ width: '100%', height: 1, borderStyle: 'dashed', borderColor: ticketDash, borderWidth: 1, marginVertical: 15 }} />
+                                                    </View>
+                                                    <View style={{ flex: 1 }} />
+                                                </View>
+                                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                                    <View style={{ flex: 1.2 }}>
+                                                        <Text style={{ color: ticketLabel, fontSize: 9, fontWeight: 'bold' }}>BOOKED ON</Text>
+                                                        <Text style={{ color: ticketText, fontSize: 11, marginTop: 2 }}>{new Date(item.createdAt).toLocaleDateString()} at {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
+                                                    </View>
+                                                    <View style={{ flex: 0.8, alignItems: 'center' }}>
+                                                        <Text style={{ color: ticketLabel, fontSize: 9, fontWeight: 'bold' }}>REF CODE</Text>
+                                                        <Text style={{ color: '#4CAF50', fontSize: 13, marginTop: 2, fontWeight: 'bold', letterSpacing: 0.5 }}>RA-{item.id.slice(-4).toUpperCase()}</Text>
+                                                    </View>
+                                                    <View style={{ flex: 1.2, alignItems: 'flex-end' }}>
+                                                        <Text style={{ color: ticketLabel, fontSize: 9, fontWeight: 'bold', textAlign: 'right' }}>JOURNEY INFO</Text>
+                                                        <Text style={{ color: ticketText, fontSize: 11, marginTop: 2, textAlign: 'right' }}>{item.ride?.date} at {item.ride?.departureTime}</Text>
+                                                    </View>
+                                                </View>
+                                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 18 }}>
+                                                    <View style={{ flex: 1.2 }}>
+                                                        <Text style={{ color: ticketLabel, fontSize: 9, fontWeight: 'bold' }}>FROM</Text>
+                                                        <Text style={{ color: ticketText, fontSize: 13, marginTop: 2, fontWeight: '500' }} numberOfLines={1}>{item.ride?.pickup}</Text>
+                                                    </View>
+                                                    <View style={{ flex: 0.8, alignItems: 'center', justifyContent: 'center' }}>
+                                                        <DistanceDisplay pickup={item.ride?.pickup} dropoff={item.ride?.dropoff} color={ticketLabel} />
+                                                        <Text style={{ color: '#4CAF50', fontSize: 14 }}>➔</Text>
+                                                    </View>
+                                                    <View style={{ flex: 1.2, alignItems: 'flex-end' }}>
+                                                        <Text style={{ color: ticketLabel, fontSize: 9, fontWeight: 'bold' }}>TO</Text>
+                                                        <Text style={{ color: ticketText, fontSize: 13, marginTop: 2, textAlign: 'right', fontWeight: '500' }} numberOfLines={1}>{item.ride?.dropoff}</Text>
+                                                    </View>
+                                                </View>
+                                                <View style={{ flexDirection: 'row', marginTop: 18 }}>
+                                                    <View style={{ flex: 1.2 }} />
+                                                    <View style={{ flex: 0.8, alignItems: 'center' }}>
+                                                        <Text style={{ color: ticketLabel, fontSize: 9, fontWeight: 'bold' }}>SEAT NO(S)</Text>
+                                                        <Text style={{ color: ticketText, fontSize: 14, marginTop: 2, fontWeight: 'bold' }}>
+                                                            {item.seatLayout && item.seatLayout.length > 0 ? item.seatLayout.join(', ') : item.seatsRequested}
+                                                        </Text>
+                                                    </View>
+                                                    <View style={{ flex: 1.2 }} />
+                                                </View>
+                                                <View style={{ flexDirection: 'row', marginTop: 18 }}>
+                                                    <View style={{ flex: 0.5 }} />
+                                                    <View style={{ flex: 2.2, alignItems: 'center' }}>
+                                                        <View style={{ width: '100%', height: 1, borderStyle: 'dashed', borderColor: ticketDash, borderWidth: 1, marginBottom: 12 }} />
+                                                        <Text style={{ color: ticketFooter, fontSize: 8.5, fontWeight: 'bold', textAlign: 'center', letterSpacing: 0.8 }}>
+                                                            SHOW THIS E-TICKET TO YOUR DRIVER
+                                                        </Text>
+                                                    </View>
+                                                    <View style={{ flex: 0.5 }} />
+                                                </View>
                                             </View>
                                         </View>
-                                    </View>
-
-                                    {/* Dashed Line Center */}
-                                    <View style={{ flexDirection: 'row' }}>
-                                        <View style={{ flex: 1 }} />
-                                        <View style={{ flex: 1.5 }}>
-                                            <View style={{ width: '100%', height: 1, borderStyle: 'dashed', borderColor: ticketDash, borderWidth: 1, marginVertical: 15 }} />
-                                        </View>
-                                        <View style={{ flex: 1 }} />
-                                    </View>
-
-                                    {/* Row 2: Booking Details */}
-                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                        <View style={{ flex: 1.2 }}>
-                                            <Text style={{ color: ticketLabel, fontSize: 9, fontWeight: 'bold' }}>BOOKED ON</Text>
-                                            <Text style={{ color: ticketText, fontSize: 11, marginTop: 2 }}>{new Date(item.createdAt).toLocaleDateString()} at {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
-                                        </View>
-                                        <View style={{ flex: 0.8, alignItems: 'center' }}>
-                                            <Text style={{ color: ticketLabel, fontSize: 9, fontWeight: 'bold' }}>REF CODE</Text>
-                                            <Text style={{ color: '#4CAF50', fontSize: 13, marginTop: 2, fontWeight: 'bold', letterSpacing: 0.5 }}>RA-{item.id.slice(-4).toUpperCase()}</Text>
-                                        </View>
-                                        <View style={{ flex: 1.2, alignItems: 'flex-end' }}>
-                                            <Text style={{ color: ticketLabel, fontSize: 9, fontWeight: 'bold', textAlign: 'right' }}>JOURNEY INFO</Text>
-                                            <Text style={{ color: ticketText, fontSize: 11, marginTop: 2, textAlign: 'right' }}>{item.ride?.date} at {item.ride?.departureTime}</Text>
-                                        </View>
-                                    </View>
-
-                                    {/* Row 3: Places and Arrow */}
-                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 18 }}>
-                                        <View style={{ flex: 1.2 }}>
-                                            <Text style={{ color: ticketLabel, fontSize: 9, fontWeight: 'bold' }}>FROM</Text>
-                                            <Text style={{ color: ticketText, fontSize: 13, marginTop: 2, fontWeight: '500' }} numberOfLines={1}>{item.ride?.pickup}</Text>
-                                        </View>
-                                        <View style={{ flex: 0.8, alignItems: 'center', justifyContent: 'center' }}>
-                                            <DistanceDisplay pickup={item.ride?.pickup} dropoff={item.ride?.dropoff} color={ticketLabel} />
-                                            <Text style={{ color: '#4CAF50', fontSize: 14 }}>➔</Text>
-                                        </View>
-                                        <View style={{ flex: 1.2, alignItems: 'flex-end' }}>
-                                            <Text style={{ color: ticketLabel, fontSize: 9, fontWeight: 'bold' }}>TO</Text>
-                                            <Text style={{ color: ticketText, fontSize: 13, marginTop: 2, textAlign: 'right', fontWeight: '500' }} numberOfLines={1}>{item.ride?.dropoff}</Text>
-                                        </View>
-                                    </View>
-
-                                    {/* Row 4: Seat No */}
-                                    <View style={{ flexDirection: 'row', marginTop: 18 }}>
-                                        <View style={{ flex: 1.2 }} />
-                                        <View style={{ flex: 0.8, alignItems: 'center' }}>
-                                            <Text style={{ color: ticketLabel, fontSize: 9, fontWeight: 'bold' }}>SEAT NO(S)</Text>
-                                            <Text style={{ color: ticketText, fontSize: 14, marginTop: 2, fontWeight: 'bold' }}>
-                                                {item.seatLayout && item.seatLayout.length > 0 ? item.seatLayout.join(', ') : item.seatsRequested}
-                                            </Text>
-                                        </View>
-                                        <View style={{ flex: 1.2 }} />
-                                    </View>
-
-                                    {/* Footer Dashed Line & Text Row */}
-                                    <View style={{ flexDirection: 'row', marginTop: 18 }}>
-                                        <View style={{ flex: 0.5 }} />
-                                        <View style={{ flex: 2.2, alignItems: 'center' }}>
-                                            <View style={{ width: '100%', height: 1, borderStyle: 'dashed', borderColor: ticketDash, borderWidth: 1, marginBottom: 12 }} />
-                                            <Text style={{ color: ticketFooter, fontSize: 8.5, fontWeight: 'bold', textAlign: 'center', letterSpacing: 0.8 }}>
-                                                SHOW THIS E-TICKET TO YOUR DRIVER
-                                            </Text>
-                                        </View>
-                                        <View style={{ flex: 0.5 }} />
-                                    </View>
-
-                                </View>
+                                    );
+                                })()}
                             </View>
-                            );
-                        })()}
+                        ) : null}
                     </View>
                 )}
 
@@ -351,7 +364,6 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isHistoryMode }
                             date={item.date}
                         />
                         
-                        {/* List of active bookings for completion */}
                         {!isCompleted && item.bookings && item.bookings.length > 0 && (
                             <View style={{ marginTop: 20 }}>
                                 {(() => {
@@ -508,8 +520,6 @@ const styles = StyleSheet.create({
         gap: 12,
     },
     actionBtn: {
-        flex: 1,
-        paddingVertical: 10,
         borderRadius: 8,
         alignItems: 'center',
     },

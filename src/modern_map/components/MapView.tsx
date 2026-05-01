@@ -9,7 +9,7 @@
  * • Zoom controls + "Locate Me" button
  * ─────────────────────────────────────────────────────────────
  */
-import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
+import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle, useState } from 'react';
 import maplibregl, { Map, Marker, LngLatLike, GeoJSONSource } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { UserLocation } from '../hooks/useUserLocation';
@@ -84,6 +84,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
     const dropMarkerRef   = useRef<Marker | null>(null);
     const animFrameRef    = useRef<number>(0);
     const driverPosRef    = useRef<DriverLocation | null>(null);
+    const [isMapLoaded, setIsMapLoaded] = useState(false);
 
     // ── Expose imperative methods ──
     useImperativeHandle(ref, () => ({
@@ -166,6 +167,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
             'line-opacity': 0.15,
           },
         }, 'route-line');
+        setIsMapLoaded(true);
       });
 
       mapRef.current = map;
@@ -189,8 +191,61 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
 
     // ── Update tile style when theme changes ──
     useEffect(() => {
-      mapRef.current?.setStyle(TILE_STYLES[theme]);
-    }, [theme]);
+      const map = mapRef.current;
+      if (!map) return;
+      
+      const handleStyleLoad = () => {
+        try {
+          if (!map.getSource('route')) {
+            map.addSource('route', {
+              type: 'geojson',
+              data: { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [] } },
+            });
+            map.addLayer({
+              id: 'route-line',
+              type: 'line',
+              source: 'route',
+              layout: { 'line-join': 'round', 'line-cap': 'round' },
+              paint: {
+                'line-color': '#007AFF',
+                'line-width': 6,
+                'line-opacity': 0.9,
+              },
+            });
+            map.addLayer({
+              id: 'route-line-glow',
+              type: 'line',
+              source: 'route',
+              layout: { 'line-join': 'round', 'line-cap': 'round' },
+              paint: {
+                'line-color': '#007AFF',
+                'line-width': 14,
+                'line-opacity': 0.15,
+              },
+            }, 'route-line');
+          }
+          
+          // Re-draw current route if we have coordinates
+          if (routeCoords && routeCoords.length > 1) {
+            const geojson: GeoJSON.Feature<GeoJSON.LineString> = {
+              type: 'Feature',
+              properties: {},
+              geometry: {
+                type: 'LineString',
+                coordinates: routeCoords.map(([lat, lng]) => [lng, lat]),
+              },
+            };
+            const source = map.getSource('route') as GeoJSONSource;
+            if (source) source.setData(geojson);
+          }
+        } catch (err) {
+          console.warn("Map style transition: route layer handled safely", err);
+        }
+      };
+
+      map.once('idle', handleStyleLoad);
+      map.setStyle(TILE_STYLES[theme], { diff: false });
+    }, [theme, routeCoords]);
 
     // ── User location pulsing marker ──
     useEffect(() => {
@@ -221,9 +276,18 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
         if (!isValidLngLat(driverLocation.lng, driverLocation.lat)) return;
         const el = document.createElement('div');
         el.className = styles.driverMarker;
-        el.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor">
-          <path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/>
-        </svg>`;
+        el.innerHTML = `
+          <div class="${styles.carBase}"></div>
+          <svg viewBox="0 0 40 65" class="${styles.carSvg}">
+            <path d="M10,10 Q20,0 30,10 L35,48 Q20,58 5,48 Z" fill="#ffffff" stroke="#999" stroke-width="0.5" />
+            <path d="M13,15 Q20,10 27,15 L26,22 Q20,24 14,22 Z" fill="#111" />
+            <path d="M14,24 Q20,20 26,24 L25,38 Q20,42 15,38 Z" fill="#111" />
+            <path d="M8,18 L5,20 L6,22 Z" fill="#eee" stroke="#999" stroke-width="0.5" />
+            <path d="M32,18 L35,20 L34,22 Z" fill="#eee" stroke="#999" stroke-width="0.5" />
+            <rect x="7" y="46" width="6" height="3" fill="#ff2222" rx="1.5" />
+            <rect x="27" y="46" width="6" height="3" fill="#ff2222" rx="1.5" />
+          </svg>
+        `;
         driverMarkerRef.current = new maplibregl.Marker({ element: el, anchor: 'center' })
           .setLngLat([driverLocation.lng, driverLocation.lat])
           .addTo(map);
@@ -275,8 +339,18 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
       if (!pickupCoords || !isValidLngLat(pickupCoords[1], pickupCoords[0])) return;
       const el = document.createElement('div');
       el.className = styles.pickupMarker;
-      el.title = 'Pickup';
-      pickupMarkerRef.current = new maplibregl.Marker({ element: el, anchor: 'bottom' })
+      el.innerHTML = `
+        <div class="${styles.carBase}"></div>
+        <svg viewBox="0 0 40 65" class="${styles.carSvg}">
+          <path d="M10,10 Q20,0 30,10 L35,48 Q20,58 5,48 Z" fill="#ffffff" stroke="#333" stroke-width="1" />
+          <path d="M13,15 Q20,10 27,15 L26,22 Q20,24 14,22 Z" fill="#333" />
+          <path d="M14,24 Q20,20 26,24 L25,38 Q20,42 15,38 Z" fill="#333" />
+          <circle cx="10" cy="50" r="4" fill="#333" />
+          <circle cx="30" cy="50" r="4" fill="#333" />
+        </svg>
+      `;
+      el.title = 'Current Location';
+      pickupMarkerRef.current = new maplibregl.Marker({ element: el, anchor: 'center' })
         .setLngLat([pickupCoords[1], pickupCoords[0]])
         .addTo(map);
     }, [pickupCoords]);
@@ -298,7 +372,16 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
     // ── Route drawing ──
     useEffect(() => {
       const map = mapRef.current;
-      if (!map || !routeCoords || !map.getSource('route')) return;
+      if (!map || !isMapLoaded || !map.getSource('route')) return;
+      
+      if (!routeCoords || routeCoords.length < 2) {
+        (map.getSource('route') as GeoJSONSource).setData({
+          type: 'Feature', properties: {},
+          geometry: { type: 'LineString', coordinates: [] },
+        });
+        return;
+      }
+
       const geojson: GeoJSON.Feature<GeoJSON.LineString> = {
         type: 'Feature',
         properties: {},
