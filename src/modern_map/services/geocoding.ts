@@ -40,10 +40,11 @@ const CACHE_TTL = 300000; // 5 minutes cache
 
 // Fetch route geometry between two points via OSRM public API
 export async function fetchRoute(
-  from: [number, number], // [lat, lng]
-  to: [number, number]
+  from: [number, number] | null,
+  to: [number, number] | null
 ): Promise<RouteResponse | null> {
-  const precision = 4; // Approx 10m precision for caching
+  if (!from || !to || isNaN(from[0]) || isNaN(from[1]) || isNaN(to[0]) || isNaN(to[1])) return null;
+  const precision = 4;
   const cacheKey = `${from[0].toFixed(precision)},${from[1].toFixed(precision)}-${to[0].toFixed(precision)},${to[1].toFixed(precision)}`;
   
   const cached = routeCache.get(cacheKey);

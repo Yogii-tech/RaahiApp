@@ -61,8 +61,8 @@ interface MapViewProps {
   pickupCoords?: [number, number] | null;
   dropCoords?: [number, number] | null;
   routeCoords?: [number, number][] | null;
-  /** When true, clicking the map fires onMapClick with {lat, lng} */
   pinModeActive?: boolean;
+  activeBookingId?: string | null;
   onMapClick?: (lat: number, lng: number) => void;
 }
 
@@ -75,7 +75,12 @@ const isValidLngLat = (lng: any, lat: any) =>
   typeof lng === 'number' && typeof lat === 'number' && !isNaN(lng) && !isNaN(lat);
 
 const MapView = forwardRef<MapViewHandle, MapViewProps>(
-  ({ userLocation, driverLocation, theme, pickupCoords, dropCoords, routeCoords, pinModeActive, onMapClick }, ref) => {
+  ({ userLocation, driverLocation, theme, pickupCoords, dropCoords, routeCoords, pinModeActive, 
+      activeBookingId,
+      onMapClick 
+    }, 
+    ref
+  ) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const mapRef       = useRef<Map | null>(null);
     const userMarkerRef   = useRef<Marker | null>(null);
@@ -91,17 +96,8 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
       flyTo(lat: number, lng: number, zoom = 15) {
         mapRef.current?.flyTo({ center: [lng, lat], zoom, duration: 1200 });
       },
-      drawRoute(coords: [number, number][]) {
-        const map = mapRef.current;
-        if (!map) return;
-        const geojson: GeoJSON.Feature<GeoJSON.LineString> = {
-          type: 'Feature',
-          properties: {},
-          geometry: { type: 'LineString', coordinates: coords.map(([lat, lng]) => [lng, lat]) },
-        };
-        if (map.getSource('route')) {
-          (map.getSource('route') as GeoJSONSource).setData(geojson);
-        }
+      drawRoute(_coords: [number, number][]) {
+        // Now handled reactively by useEffect[routeCoords]
       },
       clearRoute() {
         const map = mapRef.current;
@@ -245,7 +241,30 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
 
       map.once('idle', handleStyleLoad);
       map.setStyle(TILE_STYLES[theme], { diff: false });
-    }, [theme, routeCoords]);
+    }, [theme]);
+
+    // ── Update route line when coords change ──
+    useEffect(() => {
+      const map = mapRef.current;
+      if (!map || !map.getSource('route')) return;
+      
+      const geojson: GeoJSON.Feature<GeoJSON.LineString> = {
+        type: 'Feature',
+        properties: {},
+        geometry: {
+          type: 'LineString',
+          coordinates: (routeCoords && routeCoords.length > 1) 
+            ? routeCoords.map(([lat, lng]) => [lng, lat]) 
+            : [],
+        },
+      };
+      
+      try {
+        (map.getSource('route') as maplibregl.GeoJSONSource).setData(geojson);
+      } catch (err) {
+        console.warn("Route update handled safely", err);
+      }
+    }, [routeCoords]);
 
     // ── User location pulsing marker ──
     useEffect(() => {
@@ -276,18 +295,21 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
         if (!isValidLngLat(driverLocation.lng, driverLocation.lat)) return;
         const el = document.createElement('div');
         el.className = styles.driverMarker;
+        el.style.zIndex = '9999'; // FORCE ABOVE ALL
         el.innerHTML = `
-          <div class="${styles.carBase}"></div>
-          <svg viewBox="0 0 40 65" class="${styles.carSvg}">
-            <path d="M10,10 Q20,0 30,10 L35,48 Q20,58 5,48 Z" fill="#ffffff" stroke="#999" stroke-width="0.5" />
+          <div class="${styles.carBase}" style="transform: scale(1.4);"></div>
+          <svg viewBox="0 0 40 65" class="${styles.carSvg}" style="width: 45px; height: 70px;">
+            <path d="M10,10 Q20,0 30,10 L35,48 Q20,58 5,48 Z" fill="#ffffff" stroke="#111" stroke-width="2" />
             <path d="M13,15 Q20,10 27,15 L26,22 Q20,24 14,22 Z" fill="#111" />
             <path d="M14,24 Q20,20 26,24 L25,38 Q20,42 15,38 Z" fill="#111" />
-            <path d="M8,18 L5,20 L6,22 Z" fill="#eee" stroke="#999" stroke-width="0.5" />
-            <path d="M32,18 L35,20 L34,22 Z" fill="#eee" stroke="#999" stroke-width="0.5" />
+            <path d="M8,18 L5,20 L6,22 Z" fill="#eee" stroke="#111" stroke-width="0.5" />
+            <path d="M32,18 L35,20 L34,22 Z" fill="#eee" stroke="#111" stroke-width="0.5" />
             <rect x="7" y="46" width="6" height="3" fill="#ff2222" rx="1.5" />
             <rect x="27" y="46" width="6" height="3" fill="#ff2222" rx="1.5" />
           </svg>
         `;
+        // Ensure car is ALWAYS on top of everything else
+        el.style.zIndex = '9999';
         driverMarkerRef.current = new maplibregl.Marker({ element: el, anchor: 'center' })
           .setLngLat([driverLocation.lng, driverLocation.lat])
           .addTo(map);
@@ -296,28 +318,27 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
         // ── 70-80% Animation Logic ──
         // Smoothly interpolate over 5000ms (to create illusion of constant movement)
         const from = driverPosRef.current ?? driverLocation;
-        const to   = driverLocation;
+        const to = driverLocation;
         const start = performance.now();
         const DURATION = 5000; // Increased to 5s for smoother, continuous animation
 
         cancelAnimationFrame(animFrameRef.current);
 
+        // If no movement, just jump there
+        if (from.lat === to.lat && from.lng === to.lng) {
+          driverMarkerRef.current?.setLngLat([to.lng + 0.00005, to.lat + 0.00005]);
+          return;
+        }
+
         function animate(now: number) {
           const t = Math.min((now - start) / DURATION, 1);
-          // Ease-out so it slows down near the end if no new data arrives
           const easedT = 1 - Math.pow(1 - t, 3); 
           
           const lat = lerp(from.lat, to.lat, easedT);
           const lng = lerp(from.lng, to.lng, easedT);
           
-          // Apply heading rotation if provided
-          if (to.heading !== undefined) {
-             const markerEl = driverMarkerRef.current?.getElement();
-             if (markerEl) markerEl.style.transform = `rotate(${to.heading}deg)`;
-          }
-
           if (isValidLngLat(lng, lat)) {
-            driverMarkerRef.current?.setLngLat([lng, lat]);
+            driverMarkerRef.current?.setLngLat([lng + 0.00005, lat + 0.00005]);
           }
           
           if (t < 1) {
@@ -339,17 +360,8 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
       if (!pickupCoords || !isValidLngLat(pickupCoords[1], pickupCoords[0])) return;
       const el = document.createElement('div');
       el.className = styles.pickupMarker;
-      el.innerHTML = `
-        <div class="${styles.carBase}"></div>
-        <svg viewBox="0 0 40 65" class="${styles.carSvg}">
-          <path d="M10,10 Q20,0 30,10 L35,48 Q20,58 5,48 Z" fill="#ffffff" stroke="#333" stroke-width="1" />
-          <path d="M13,15 Q20,10 27,15 L26,22 Q20,24 14,22 Z" fill="#333" />
-          <path d="M14,24 Q20,20 26,24 L25,38 Q20,42 15,38 Z" fill="#333" />
-          <circle cx="10" cy="50" r="4" fill="#333" />
-          <circle cx="30" cy="50" r="4" fill="#333" />
-        </svg>
-      `;
-      el.title = 'Current Location';
+      el.innerHTML = '<div style="width: 12px; height: 12px; background: #22c55e; border: 2px solid white; border-radius: 50%; box-shadow: 0 0 8px rgba(0,0,0,0.3);"></div>';
+      el.title = 'Pickup Location';
       pickupMarkerRef.current = new maplibregl.Marker({ element: el, anchor: 'center' })
         .setLngLat([pickupCoords[1], pickupCoords[0]])
         .addTo(map);

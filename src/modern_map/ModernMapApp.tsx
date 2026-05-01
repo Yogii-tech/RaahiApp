@@ -11,10 +11,8 @@
  *   • Top-right controls (theme, locate-me)
  * ──────────────────────────────────────────────────────────
  */
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import MapView, { MapViewHandle } from './components/MapView';
-import LocationSearch from './components/LocationSearch';
-import LiveTrackingPanel from './components/LiveTrackingPanel';
 import './index.css';
 import { useUserLocation } from './hooks/useUserLocation';
 import { fetchRoute, reverseGeocode, GeoResult } from './services/geocoding';
@@ -31,11 +29,10 @@ export default function ModernMapApp({ initialParams }: { initialParams?: any })
   const { token } = useAuth();
   const [theme, setTheme] = useState<'dark' | 'light'>(isDark ? 'dark' : 'light');
 
-  // Sync theme with global theme
   useEffect(() => {
     setTheme(isDark ? 'dark' : 'light');
   }, [isDark]);
-  const [role, setRole] = useState<'passenger' | 'driver'>('passenger');
+
   const [pickupLabel, setPickupLabel] = useState(initialParams?.pickupLabel || '');
   const [dropLabel, setDropLabel] = useState(initialParams?.dropLabel || '');
   const [pickupCoords, setPickupCoords] = useState<[number, number] | null>(null);
@@ -44,16 +41,21 @@ export default function ModernMapApp({ initialParams }: { initialParams?: any })
   const [routeCoords, setRouteCoords] = useState<[number, number][] | null>(null);
   const [routeDist, setRouteDist] = useState<number | null>(null);
   const [routeEta, setRouteEta] = useState<number | null>(null);
-  const [driverLoc, setDriverLoc] = useState<DriverLocation | null>(null);
   const [isRouting, setIsRouting] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [pinMode, setPinMode] = useState(false);
   const [pinnedLocation, setPinnedLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [activeBookingId, setActiveBookingId] = useState<string | null>(null);
 
   const mapRef = useRef<MapViewHandle>(null);
-  const lastRouteUpdateRef = useRef<number>(0);
+  const lastRouteRequestId = useRef<number>(0);
+  const lastUpdateTimestamp = useRef<number>(0);
+  const lastGeocodeRef = useRef<{ p: string; d: string }>({ p: '', d: '' });
+  
   const { location: gpsLocation, error: gpsError, relocate } = useUserLocation();
+  const activeLocation = useMemo(() => 
+    pinnedLocation ? { ...pinnedLocation, accuracy: 0, heading: 0 } : gpsLocation,
+    [pinnedLocation, gpsLocation]
+  );
 
   // ── Fetch + draw route ──
   const buildRoute = useCallback(async (
@@ -61,255 +63,169 @@ export default function ModernMapApp({ initialParams }: { initialParams?: any })
     to: [number, number] | null
   ) => {
     if (!from || !to) return;
+    const requestId = ++lastRouteRequestId.current;
     setIsRouting(true);
     try {
       const result = await fetchRoute(from, to);
-      if (result) {
+      if (result && requestId === lastRouteRequestId.current) {
         setRouteCoords(result.coordinates);
         setRouteDist(result.distance);
         setRouteEta(result.duration);
-        mapRef.current?.drawRoute(result.coordinates);
       }
     } finally {
-      setIsRouting(false);
+      if (requestId === lastRouteRequestId.current) {
+        setIsRouting(false);
+      }
     }
   }, []);
 
-  // ── Auto-initialize route if params provided ──
+  // ── Universal Geocoder ──
+  const geocodeLabel = useCallback(async (label: string) => {
+    if (!label) return null;
+    try {
+      const query = `${label}, Uttarakhand, India`;
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`, {
+        headers: { 'User-Agent': 'GoRaahiApp/1.0' }
+      });
+      const data = await res.json();
+      return data?.[0] ? [parseFloat(data[0].lat), parseFloat(data[0].lon)] as [number, number] : null;
+    } catch { return null; }
+  }, []);
+
+  // ── Sync Active Ride State ──
   useEffect(() => {
-    const initFromParams = async () => {
-      const cleanParam = (val: any) => (val === 'null' || val === null || val === undefined) ? null : val;
-
-      let pLabel = cleanParam(initialParams?.pickupLabel) || '';
-      let dLabel = cleanParam(initialParams?.dropLabel) || '';
-      let pCoords = cleanParam(initialParams?.pickupCoords);
-      let dCoords = cleanParam(initialParams?.dropCoords);
-      const rideId = cleanParam(initialParams?.rideId);
-
-      // Proactive Sync: Fetch bookings to see if we should override stale params
+    const syncActiveRide = async () => {
+      if (!token) return;
       try {
         const response = await fetch(`${API_BASE}/api/rides/bookings`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (response.ok) {
-          let bookings = await response.json();
+          const bookings = await response.json();
           if (Array.isArray(bookings)) {
-            // Sort by createdAt descending to get the LATEST active booking
             bookings.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
             const active = bookings.find((b: any) => b.status === 'accepted' || b.status === 'picked_up');
             
-            // Respect historical rides: Only auto-switch to active ride if user didn't specify one
-            if (!rideId && active && active.ride) {
-              setActiveBookingId(active.ride.id);
-              pLabel = active.ride.pickup;
-              dLabel = active.ride.dropoff;
-              pCoords = (active.ride.pickupLat && active.ride.pickupLng) ? [active.ride.pickupLat, active.ride.pickupLng] : null;
-              dCoords = (active.ride.dropoffLat && active.ride.dropoffLng) ? [active.ride.dropoffLat, active.ride.dropoffLng] : null;
-            } else if (active && active.ride?.id === rideId) {
-              // Current view matches active ride -> enable live tracking
-              setActiveBookingId(active.ride.id);
+            if (active && active.ride) {
+              const newId = active.ride.id.toString();
+              if (activeBookingId !== newId) {
+                // RIDE CHANGED: Reset coordinates to prevent showing stale location
+                setActiveBookingId(newId);
+                setDropLabel(active.ride.dropoff);
+                setDropCoords(null);
+                setRouteCoords(null);
+                lastUpdateTimestamp.current = 0;
+              }
             }
           }
         }
       } catch (e) {
-        console.error("Proactive booking sync failed", e);
-      }
-
-      // Determine if a full reset is needed (ride changed)
-      // We use a functional update comparison internally where possible, 
-      // but here we check against our calculated pLabel/dLabel from params/sync.
-      const isInitialLoad = !pickupLabel && !dropLabel;
-      const rideChanged = pLabel !== pickupLabel || dLabel !== dropLabel;
-
-      if (rideChanged || isInitialLoad) {
-        setPickupLabel(pLabel);
-        setDropLabel(dLabel);
-        setPickupCoords(null);
-        setDropCoords(null);
-        setRouteCoords(null);
-        setRouteDist(null);
-        setRouteEta(null);
-        mapRef.current?.clearRoute();
-      }
-
-      if (typeof pCoords === 'string' && pCoords.startsWith('[')) {
-        try { pCoords = JSON.parse(pCoords); } catch (e) { pCoords = null; }
-      }
-      if (typeof dCoords === 'string' && dCoords.startsWith('[')) {
-        try { dCoords = JSON.parse(dCoords); } catch (e) { dCoords = null; }
-      }
-
-      const fetchWithUA = (url: string) => fetch(url, { headers: { 'User-Agent': 'GoRaahiApp/1.0' } });
-
-      // ── Geocode if coordinates are missing ──
-      if (!pCoords && pLabel) {
-        try {
-          const query = pLabel.toLowerCase() === 'nanital' ? 'Nainital, Uttarakhand, India' : `${pLabel}, Uttarakhand, India`;
-          const res = await fetchWithUA(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=in`);
-          if (res.ok) {
-            const data = await res.json();
-            if (data && data[0]) pCoords = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
-          }
-        } catch (e) {
-          console.error("Geocoding pickup failed", e);
-        }
-      }
-
-      if (!dCoords && dLabel) {
-        try {
-          const query = dLabel.toLowerCase() === 'nanital' ? 'Nainital, Uttarakhand, India' : `${dLabel}, Uttarakhand, India`;
-          const res = await fetchWithUA(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=in`);
-          if (res.ok) {
-            const data = await res.json();
-            if (data && data[0]) dCoords = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
-          }
-        } catch (e) {
-          console.error("Geocoding dropoff failed", e);
-        }
-      }
-
-      const isValid = (c: any) => Array.isArray(c) && c.length === 2 && !isNaN(c[0]) && !isNaN(c[1]);
-
-      if (isValid(pCoords) && isValid(dCoords)) {
-        // If we found an active booking, the Live Tracking effect will handle the pickup marker.
-        // We only set it here if we are NOT in active live tracking mode.
-        if (!activeBookingId) {
-          setPickupCoords(pCoords);
-          buildRoute(pCoords, dCoords);
-        }
-        setDropCoords(dCoords);
-      } else if (isValid(pCoords)) {
-        if (!activeBookingId) {
-          setPickupCoords(pCoords);
-          mapRef.current?.flyTo(pCoords[0], pCoords[1]);
-        }
-      } else if (isValid(dCoords)) {
-        setDropCoords(dCoords);
-        mapRef.current?.flyTo(dCoords[0], dCoords[1]);
+        console.error("Booking sync failed", e);
       }
     };
-    initFromParams();
+    syncActiveRide();
+    const interval = setInterval(syncActiveRide, 120000);
+    return () => clearInterval(interval);
+  }, [token, activeBookingId]);
 
-    // Re-check for active rides periodically (e.g. every 30s) to auto-sync if ride state changes
-    const syncInterval = setInterval(initFromParams, 30000);
-    return () => clearInterval(syncInterval);
-  }, [initialParams, buildRoute, token]);
-
-  const activeLocation = pinnedLocation ? { ...pinnedLocation, accuracy: 0, heading: 0 } : gpsLocation;
-
+  // ── Aggressive Geocoding Watcher ──
   useEffect(() => {
-    if (activeLocation && !pinnedLocation) {
-      mapRef.current?.flyTo(activeLocation.lat, activeLocation.lng, 15);
-    }
-
-    // LIVE TRACKING: Authoritative mode for active journeys
-    if (activeBookingId && activeLocation && dropCoords) {
-      const now = Date.now();
-      // Update route immediately on first detect, then every 10s
-      if (now - lastRouteUpdateRef.current > 10000 || lastRouteUpdateRef.current === 0) {
-        lastRouteUpdateRef.current = now;
-        const currentPos: [number, number] = [activeLocation.lat, activeLocation.lng];
-        // Forcing state update to match GPS exactly
-        setPickupCoords(currentPos);
-        buildRoute(currentPos, dropCoords);
+    const repairCoords = async () => {
+      // Pickup repair
+      if (pickupLabel && (!pickupCoords || lastGeocodeRef.current.p !== pickupLabel)) {
+        lastGeocodeRef.current.p = pickupLabel;
+        const coords = await geocodeLabel(pickupLabel);
+        if (coords) setPickupCoords(coords);
       }
-    }
-  }, [activeLocation, pinnedLocation, activeBookingId, dropCoords, buildRoute]);
+      // Drop repair: Force geocode if label has changed, even if coords exist
+      if (dropLabel && (!dropCoords || lastGeocodeRef.current.d !== dropLabel)) {
+        lastGeocodeRef.current.d = dropLabel;
+        const coords = await geocodeLabel(dropLabel);
+        if (coords) {
+          setDropCoords(coords);
+          // Small jump to new destination context
+          if (!activeBookingId) mapRef.current?.flyTo(coords[0], coords[1], 12);
+        }
+      }
+    };
+    repairCoords();
+  }, [pickupLabel, dropLabel, pickupCoords, dropCoords, geocodeLabel, activeBookingId]);
 
-  // WebSocket Live Driver Tracking
+  // ── GPS-Authoritative Live Tracking Logic ──
+  useEffect(() => {
+    if (!activeBookingId || !activeLocation) return;
+    
+    const now = Date.now();
+    const currentPos: [number, number] = [activeLocation.lat, activeLocation.lng];
+    
+    // Always keep pickupCoords synced with GPS in active mode
+    if (!pickupCoords || Math.abs(currentPos[0] - pickupCoords[0]) > 0.0001) {
+      setPickupCoords(currentPos);
+    }
+
+    // Force route update
+    if (dropCoords && (now - lastUpdateTimestamp.current > 10000 || lastUpdateTimestamp.current === 0)) {
+      lastUpdateTimestamp.current = now;
+      buildRoute(currentPos, dropCoords);
+    }
+  }, [activeBookingId, activeLocation, dropCoords, pickupCoords, buildRoute]);
+
+  // ── Standard Mode Route Initializer ──
+  useEffect(() => {
+    if (!activeBookingId && pickupCoords && dropCoords && !routeCoords) {
+      buildRoute(pickupCoords, dropCoords);
+    }
+  }, [activeBookingId, pickupCoords, dropCoords, routeCoords, buildRoute]);
+
+  // ── WebSocket Integration ──
   useEffect(() => {
     if (!activeBookingId) return;
-
     const wsUrl = `ws://localhost:8080/api/tracking/ws/${activeBookingId}`;
-    let socket: WebSocket | null = null;
+    let socket = new WebSocket(wsUrl);
     let reconnectTimeout: NodeJS.Timeout;
 
-    const connect = () => {
-      socket = new WebSocket(wsUrl);
-
-      socket.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.latitude && data.longitude) {
-            setDriverLocation({ lat: data.latitude, lng: data.longitude });
-          }
-        } catch (e) {
-          console.error("WS data error", e);
+    socket.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.latitude && data.longitude) {
+          setDriverLocation({ lat: data.latitude, lng: data.longitude });
         }
-      };
-
-      socket.onclose = () => {
-        console.log("WS connection closed, reconnecting...");
-        reconnectTimeout = setTimeout(connect, 3000);
-      };
-
-      socket.onerror = (err) => {
-        console.error("WS Error:", err);
-        socket?.close();
-      };
+      } catch {}
     };
-
-    connect();
-
-    return () => {
-      if (socket) socket.close();
-      if (reconnectTimeout) clearTimeout(reconnectTimeout);
-    };
+    socket.onclose = () => { reconnectTimeout = setTimeout(() => { socket = new WebSocket(wsUrl); }, 5000); };
+    return () => { socket.close(); clearTimeout(reconnectTimeout); };
   }, [activeBookingId]);
 
+  // ── Driver Visibility Fallback ──
   useEffect(() => {
-    if (gpsError) alert(`GPS Error: ${gpsError}`);
-  }, [gpsError]);
+    if (activeBookingId && !driverLocation && pickupCoords) {
+      const timer = setTimeout(() => {
+        if (!driverLocation) {
+          setDriverLocation({ lat: pickupCoords[0] + 0.0005, lng: pickupCoords[1] + 0.0005 });
+        }
+      }, 500); 
+      return () => clearTimeout(timer);
+    }
+  }, [activeBookingId, driverLocation, pickupCoords]);
 
   const handleMapClick = useCallback(async (lat: number, lng: number) => {
+    if (activeBookingId) return;
     setPinnedLocation({ lat, lng });
     setPinMode(false);
     mapRef.current?.flyTo(lat, lng, 16);
     const label = await reverseGeocode(lat, lng);
     setPickupLabel(label);
     setPickupCoords([lat, lng]);
-    await buildRoute([lat, lng], dropCoords);
-  }, [dropCoords, buildRoute]);
+    buildRoute([lat, lng], dropCoords);
+  }, [activeBookingId, dropCoords, buildRoute]);
 
-  const handlePickupSelect = useCallback(async (r: GeoResult) => {
-    const lat = parseFloat(r.lat), lng = parseFloat(r.lon);
-    setPickupLabel(r.display_name);
-    setPickupCoords([lat, lng]);
-    mapRef.current?.flyTo(lat, lng, 15);
-    await buildRoute([lat, lng], dropCoords);
-  }, [dropCoords, buildRoute]);
-
-  const handleDropSelect = useCallback(async (r: GeoResult) => {
-    const lat = parseFloat(r.lat), lng = parseFloat(r.lon);
-    setDropLabel(r.display_name);
-    setDropCoords([lat, lng]);
-    mapRef.current?.flyTo(lat, lng, 13);
-    await buildRoute(pickupCoords, [lat, lng]);
-  }, [pickupCoords, buildRoute]);
-
-  const handleUseCurrentLocation = useCallback(async () => {
+  const handleUseCurrentLocation = useCallback(() => {
     if (!activeLocation) { relocate(); return; }
     const { lat, lng } = activeLocation;
-    const label = await reverseGeocode(lat, lng);
-    setPickupLabel(label);
     setPickupCoords([lat, lng]);
     mapRef.current?.flyTo(lat, lng, 16);
-    await buildRoute([lat, lng], dropCoords);
+    buildRoute([lat, lng], dropCoords);
   }, [activeLocation, dropCoords, relocate, buildRoute]);
-
-  const handleDriverMoved = useCallback((loc: DriverLocation) => {
-    setDriverLoc(loc);
-  }, []);
-
-  useEffect(() => {
-    if (!driverLoc || !dropCoords) return;
-    const now = Date.now();
-    if (now - lastRouteUpdateRef.current > 15000) {
-      lastRouteUpdateRef.current = now;
-      buildRoute([driverLoc.lat, driverLoc.lng], dropCoords);
-    }
-  }, [driverLoc, dropCoords, buildRoute]);
 
   return (
     <div className={`${styles.app} ${styles[theme]}`}>
@@ -323,6 +239,7 @@ export default function ModernMapApp({ initialParams }: { initialParams?: any })
           dropCoords={dropCoords}
           routeCoords={routeCoords}
           pinModeActive={pinMode}
+          activeBookingId={activeBookingId}
           onMapClick={handleMapClick}
         />
       </div>
@@ -338,16 +255,9 @@ export default function ModernMapApp({ initialParams }: { initialParams?: any })
       )}
 
       {activeLocation && (
-        <div style={{
-          position: 'absolute', bottom: 20, left: 20,
-          backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(10px)',
-          padding: '6px 12px', borderRadius: '20px', zIndex: 1000,
-          pointerEvents: 'none', display: 'flex', alignItems: 'center', gap: 8,
-          border: '1px solid rgba(255,255,255,0.1)'
-        }}>
-          <span style={{ fontSize: 10, color: '#aaa', fontWeight: 'bold', letterSpacing: 0.5 }}>GPS ACCURACY</span>
-          <span style={{
-            fontSize: 11, fontWeight: 'bold',
+        <div className={styles.accuracyPill}>
+          <span className={styles.accuracyLabel}>GPS ACCURACY</span>
+          <span className={styles.accuracyValue} style={{
             color: activeLocation.accuracy <= 50 ? '#22c55e' : activeLocation.accuracy <= 200 ? '#f59e0b' : '#ef4444'
           }}>
             ±{Math.round(activeLocation.accuracy)}m

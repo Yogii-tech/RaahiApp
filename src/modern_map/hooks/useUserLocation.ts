@@ -76,11 +76,19 @@ export function useUserLocation(): UseUserLocationReturn {
           // Track the best reading
           if (!bestResult || pos.coords.accuracy < bestResult.coords.accuracy) {
             bestResult = pos;
+            // STREAMING MODE: Even if we haven't hit the "perfect" 100m target yet, 
+            // send the best available location immediately so the map shows PROGRESS.
+            const { latitude, longitude, accuracy, heading } = pos.coords;
+            setLocation({ lat: latitude, lng: longitude, accuracy, heading: heading ?? 0 });
           }
-          // Lock in immediately if we hit our target (50m-200m)
+          // If we hit our target (50m-200m), we can stop hunting
           if (pos.coords.accuracy <= ACCURACY_TARGET) {
             clearTimeout(timeoutId);
-            done(pos);
+            setIsLocating(false);
+            if (watchRef.current !== null) {
+              navigator.geolocation.clearWatch(watchRef.current);
+              watchRef.current = null;
+            }
           }
         },
         (err: any) => {
