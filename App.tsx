@@ -22,12 +22,30 @@ import {
 } from 'react-native-safe-area-context';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
+import { LanguageProvider, useLanguage } from './src/context/LanguageContext';
+import { API_BASE } from './src/apiConfig';
+import { apiRequest } from './src/utils/api';
 import LoginScreen from './src/screens/LoginScreen';
+import AdminDashboardScreen from './src/screens/admin/AdminDashboardScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import TripsScreen from './src/screens/TripsScreen';
 import RequestsOverlay from './src/screens/RequestsOverlay';
 import AccountScreen from './src/screens/AccountScreen';
-import SosScreen from './src/screens/SosScreen';
+import MapScreen from './src/screens/MapScreen';
+import ChatScreen from './src/screens/ChatScreen';
+import Icon from 'react-native-vector-icons/Ionicons';
+
+const linking = {
+  prefixes: ['http://localhost:3000', 'raahi://'],
+  config: {
+    screens: {
+      Home: 'Home',
+      Trips: 'Trips',
+      Map: 'Map',
+      Account: 'Account',
+    },
+  },
+};
 
 const Tab = createBottomTabNavigator();
 
@@ -47,13 +65,15 @@ function AppHeader({ onToggleNotifications, notificationCount = 0 }: { onToggleN
         },
       ]}>
       {/* Logo */}
-      <Image
-        source={require('./src/assets/raahi_logo.png')}
-        style={headerStyles.logo}
-        resizeMode="contain"
-      />
+      <View style={headerStyles.logoContainer}>
+        <Image
+          source={require('./src/assets/logo_brand.png')}
+          style={headerStyles.logo}
+          resizeMode="contain"
+        />
+      </View>
       <Text style={[headerStyles.title, { color: colors.primary }]}>
-        Raahi
+        Go Raahi
       </Text>
 
       <View style={headerStyles.spacer} />
@@ -64,28 +84,28 @@ function AppHeader({ onToggleNotifications, notificationCount = 0 }: { onToggleN
         style={[
           headerStyles.themeButton,
           {
-            borderColor: isDark ? '#222260' : '#5B4FFF',
+            backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(91, 79, 255, 0.05)',
+            borderColor: 'transparent',
           },
         ]}
         activeOpacity={0.7}>
-        <Text style={headerStyles.themeIcon}>
-          {isDark ? '☀️' : '🌙'}
-        </Text>
+        <Icon name={isDark ? 'sunny-outline' : 'moon-outline'} size={22} color={isDark ? '#FBC02D' : '#5B4FFF'} />
       </TouchableOpacity>
 
       {/* Notification Bell */}
-      <View style={headerStyles.gap} />
+      <View style={{ width: 10 }} />
       <TouchableOpacity
         onPress={onToggleNotifications}
         style={[
           headerStyles.themeButton,
           {
-            borderColor: isDark ? '#222260' : '#5B4FFF',
+            backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(91, 79, 255, 0.05)',
+            borderColor: 'transparent',
           },
         ]}
         activeOpacity={0.7}>
         <View>
-          <Text style={headerStyles.themeIcon}>🔔</Text>
+          <Icon name="notifications-outline" size={22} color={isDark ? '#FBC02D' : '#5B4FFF'} />
           {notificationCount > 0 && (
             <View style={headerStyles.badge}>
               <Text style={headerStyles.badgeText}>{notificationCount}</Text>
@@ -102,30 +122,36 @@ const headerStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingBottom: 16,
+  },
+  logoContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 50,
+    backgroundColor: 'transparent',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   logo: {
-    width: 40,
-    height: 40,
+    width: 100,
+    height: 100,
   },
   title: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginLeft: 12,
+    fontSize: 28,
+    fontWeight: '700',
+    marginLeft: 10,
+    letterSpacing: -0.5,
   },
   spacer: {
     flex: 1,
   },
   themeButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    borderWidth: 2,
-    backgroundColor: '#FFFFFF',
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 1.5,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.12,
     shadowRadius: 8,
     elevation: 3,
@@ -175,26 +201,29 @@ const headerStyles = StyleSheet.create({
 
 // ─── Tab Icons ───────────────────────────────────────────────────────
 const tabIcons: Record<string, { default: string; focused: string }> = {
-  Home: { default: '🏠', focused: '🏠' },
-  Trips: { default: '🚗', focused: '🚗' },
-  SOS: { default: '⚠️', focused: '⚠️' },
-  Account: { default: '👤', focused: '👤' },
+  Home: { default: 'home-outline', focused: 'home' },
+  Trips: { default: 'car-sport-outline', focused: 'car-sport' },
+  ParcelTrips: { default: 'cube-outline', focused: 'cube' },
+  Map: { default: 'map-outline', focused: 'map' },
+  Account: { default: 'person-outline', focused: 'person' },
 };
 
 // ─── Main Tab Navigator ──────────────────────────────────────────────
 function MainTabs() {
   const { colors, isDark } = useTheme();
-  const { user, token } = useAuth();
-  const [sosVisible, setSosVisible] = useState(false);
+  const { user, token, logout } = useAuth();
+  const { t } = useLanguage();
   const [notificationsVisible, setNotificationsVisible] = useState(false);
   const [notificationCount, setNotificationCount] = useState(0);
+  const [activeChat, setActiveChat] = useState<any>(null);
+  const [parcelMode, setParcelMode] = useState(false);
   const insets = useSafeAreaInsets();
 
   const isDriver = user?.role === 'driver';
 
   useEffect(() => {
     fetchNotificationCount();
-    const interval = setInterval(fetchNotificationCount, 5000);
+    const interval = setInterval(fetchNotificationCount, 10000);
     return () => clearInterval(interval);
   }, [user, token]);
 
@@ -202,18 +231,19 @@ function MainTabs() {
     try {
       if (!token) return;
       const endpoint = isDriver ? '/api/rides/requests' : '/api/rides/bookings';
-      const response = await fetch(`http://localhost:8081${endpoint}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await apiRequest(endpoint, {}, logout);
       if (response.ok) {
-        const data = await response.json();
+        const data = await response.json() || [];
         // Filter: Driver sees UNVIEWED 'pending' reqs, Passenger sees UNVIEWED 'accepted' or 'rejected'
-        const count = (data || []).filter((b: any) =>
+        const reqCount = data.filter((b: any) =>
           isDriver
             ? (b.status === 'pending' && !b.viewedByDriver)
             : ((b.status === 'accepted' || b.status === 'rejected') && !b.viewedByPassenger)
         ).length;
-        setNotificationCount(count);
+
+        // Add unread chat counts
+        const unreadChatTotal = data.reduce((sum: number, b: any) => sum + (b.unreadChatCount || 0), 0);
+        setNotificationCount(reqCount + unreadChatTotal);
       }
     } catch (err) {
       console.error('Badge poll fail:', err);
@@ -223,10 +253,9 @@ function MainTabs() {
   const handleMarkViewed = async () => {
     try {
       if (!token) return;
-      await fetch(`http://localhost:8081/api/rides/viewed?role=${isDriver ? 'driver' : 'passenger'}`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await apiRequest(`/api/rides/viewed?role=${isDriver ? 'driver' : 'passenger'}`, {
+        method: 'POST'
+      }, logout);
       setNotificationCount(0);
     } catch (err) {
       console.error('Mark viewed fail:', err);
@@ -235,69 +264,89 @@ function MainTabs() {
 
   return (
     <View style={{ flex: 1 }}>
-      <SosScreen visible={sosVisible} onClose={() => setSosVisible(false)} />
+      <AppHeader
+        notificationCount={notificationCount}
+        onToggleNotifications={() => {
+          const newState = !notificationsVisible;
+          setNotificationsVisible(newState);
+          if (newState) handleMarkViewed();
+        }}
+      />
 
       <Tab.Navigator
         screenOptions={({ route }) => ({
-          header: () => {
-            if (route.name === 'SOS') return null;
+          headerShown: false,
+          tabBarIcon: ({ focused }) => {
+            const isParcel = route.name === 'Trips' && (user?.role === 'parceller' || parcelMode);
+            const icon = isParcel ? tabIcons.ParcelTrips : tabIcons[route.name];
             return (
-              <AppHeader
-                notificationCount={notificationCount}
-                onToggleNotifications={() => {
-                  const newState = !notificationsVisible;
-                  setNotificationsVisible(newState);
-                  if (newState) handleMarkViewed();
-                }}
-              />
+              <View>
+                <Icon
+                  name={focused ? icon.focused : icon.default}
+                  size={24}
+                  color={focused ? colors.primary : colors.subtextColor}
+                />
+              </View>
             );
-          },
-          tabBarStyle: {
-            backgroundColor: isDark ? '#101828' : '#FFFFFF',
-            borderTopColor: colors.borderColor,
-            borderTopWidth: 1,
-            paddingBottom: 6,
-            paddingTop: 6,
-            height: 62,
           },
           tabBarActiveTintColor: colors.primary,
           tabBarInactiveTintColor: colors.subtextColor,
-          tabBarIcon: ({ focused }) => {
-            const icons = tabIcons[route.name];
-            if (route.name === 'SOS') {
-              return (
-                <View style={tabStyles.sosIconContainer}>
-                  <Text style={tabStyles.sosIcon}>⚠️</Text>
-                </View>
-              );
-            }
-            return (
-              <Text style={[tabStyles.tabIcon, focused && tabStyles.tabIconFocused]}>
-                {focused ? icons.focused : icons.default}
-              </Text>
-            );
+          tabBarStyle: {
+            height: 60,
+            paddingBottom: 8,
+            backgroundColor: colors.background,
+            borderTopColor: colors.borderColor,
+            display: notificationsVisible || activeChat ? 'none' : 'flex'
           },
-        })}>
+        })}
+      >
         <Tab.Screen name="Home">
-          {() => <HomeScreen onSosPressed={() => setSosVisible(true)} />}
+          {props => <HomeScreen {...props} setParcelMode={setParcelMode} />}
         </Tab.Screen>
-        <Tab.Screen name="Trips" component={TripsScreen} />
         <Tab.Screen
-          name="SOS"
-          component={SosScreenTab}
-          listeners={{
-            tabPress: (e) => {
-              e.preventDefault();
-              setSosVisible(true);
-            },
-          }}
+          name="Trips"
+          children={(props) => <TripsScreen {...props} isParcelMode={user?.role === 'parceller' || parcelMode} />}
+          options={{ title: (user?.role === 'parceller' || parcelMode) ? t('tab.trackPackage') : t('tab.trips') }}
         />
-        <Tab.Screen name="Account" component={AccountScreen} />
+        <Tab.Screen
+          name="Map"
+          component={MapScreen}
+          options={{ title: t('tab.map') }}
+        />
+        <Tab.Screen
+          name="Account"
+          children={(props) => <AccountScreen {...props} isParcelMode={user?.role === 'parceller' || parcelMode} />}
+          options={{ title: t('tab.account') }}
+        />
       </Tab.Navigator>
 
       {notificationsVisible && (
-        <View style={[StyleSheet.absoluteFill, { top: insets.top + 64, bottom: 62, backgroundColor: colors.background, zIndex: 100, elevation: 10 }]}>
-          <RequestsOverlay onClose={() => setNotificationsVisible(false)} />
+        <View style={[StyleSheet.absoluteFill, { top: insets.top + 64, bottom: 0, backgroundColor: colors.background, zIndex: 100, elevation: 10 }]}>
+          <RequestsOverlay
+            onClose={() => setNotificationsVisible(false)}
+            onOpenChat={(booking) => {
+              setActiveChat(booking);
+              setNotificationsVisible(false);
+            }}
+          />
+        </View>
+      )}
+
+      {activeChat && (
+        <View style={StyleSheet.absoluteFill}>
+          <ChatScreen
+            bookingId={activeChat.id}
+            recipientName={isDriver ? activeChat.passengerName || "Passenger" : activeChat.ride?.driverName || "Driver"}
+            recipientPhone={activeChat.type === 'parcel' ? activeChat.contactNumber : (isDriver ? activeChat.passengerPhone : activeChat.driverPhone)}
+            pickup={activeChat.ride?.pickup}
+            dropoff={activeChat.ride?.dropoff}
+            pickupLat={activeChat.ride?.pickupLat}
+            pickupLng={activeChat.ride?.pickupLng}
+            dropoffLat={activeChat.ride?.dropoffLat}
+            dropoffLng={activeChat.ride?.dropoffLng}
+            departureTime={activeChat.ride?.departureTime}
+            onBack={() => setActiveChat(null)}
+          />
         </View>
       )}
     </View>
@@ -318,21 +367,19 @@ function SosScreenTab() {
 const tabStyles = StyleSheet.create({
   tabIcon: { fontSize: 22 },
   tabIconFocused: { fontSize: 24 },
-  sosIconContainer: {
-    backgroundColor: '#C62828',
-    borderRadius: 17,
-    width: 34,
-    height: 34,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  sosIcon: { fontSize: 18, color: '#FFFFFF' },
-  sosPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 });
 
 function RootApp() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user, isInitialLoading } = useAuth();
   const { isDark } = useTheme();
+
+  if (isInitialLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ color: '#fff' }}>Loading Go Raahi...</Text>
+      </View>
+    );
+  }
 
   if (!isAuthenticated) {
     return (
@@ -343,8 +390,18 @@ function RootApp() {
     );
   }
 
+  // Admin users get the dedicated admin dashboard
+  if (user?.role === 'admin') {
+    return (
+      <View style={{ flex: 1 }}>
+        <StatusBar barStyle="light-content" />
+        <AdminDashboardScreen />
+      </View>
+    );
+  }
+
   return (
-    <NavigationContainer>
+    <NavigationContainer linking={linking}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
       <MainTabs />
     </NavigationContainer>
@@ -354,13 +411,15 @@ function RootApp() {
 function App() {
   return (
     <SafeAreaProvider
-      style={{ flex: 1 }}
-      initialMetrics={Platform.OS === 'web' ? undefined : initialWindowMetrics || undefined}>
+      style={{ flex: 1, ...(Platform.OS === 'web' ? ({ height: '100dvh' } as any) : {}) }}
+      initialMetrics={Platform.OS === 'web' ? { frame: { x: 0, y: 0, width: 0, height: 0 }, insets: { top: 0, left: 0, right: 0, bottom: 0 } } : initialWindowMetrics || undefined}>
       <AuthProvider>
         <ThemeProvider>
-          <View style={{ flex: 1, backgroundColor: '#101B2B' }}>
-            <RootApp />
-          </View>
+          <LanguageProvider>
+            <View style={{ flex: 1, backgroundColor: '#181F2A', ...(Platform.OS === 'web' ? ({ height: '100dvh' } as any) : {}) }}>
+              <RootApp />
+            </View>
+          </LanguageProvider>
         </ThemeProvider>
       </AuthProvider>
     </SafeAreaProvider>

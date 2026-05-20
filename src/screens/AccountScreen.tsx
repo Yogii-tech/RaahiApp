@@ -8,17 +8,32 @@ import {
     Alert,
     Platform,
     Modal,
+    Linking,
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage, LanguageType } from '../context/LanguageContext';
+import Icon from 'react-native-vector-icons/Ionicons';
+
+import { API_BASE } from '../apiConfig';
+import { apiRequest } from '../utils/api';
 import TrustedContactsScreen from './TrustedContactsScreen';
+import VehicleDetailsScreen from './VehicleDetailsScreen';
 
 
-const AccountScreen: React.FC = () => {
+interface AccountScreenProps {
+    isParcelMode?: boolean;
+}
+
+const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
     const { isDark, colors } = useTheme();
-    const { user, logout } = useAuth();
-    const [view, setView] = useState<'main' | 'trusted'>('main');
-    const [logoutVisible, setLogoutVisible] = useState(false); // New state for logout modal
+    const { user, token, logout, setAuth } = useAuth();
+    const { t, language, setLanguage } = useLanguage();
+    const [view, setView] = useState<'main' | 'trusted' | 'vehicle'>('main');
+    const [logoutVisible, setLogoutVisible] = useState(false);
+    const [languageVisible, setLanguageVisible] = useState(false);
+    const [supportVisible, setSupportVisible] = useState(false);
+    const supportNumber = '8809228888';
     const ratingColor = isDark ? '#FFC107' : '#FFB300';
 
     // New functions for logout modal
@@ -29,16 +44,62 @@ const AccountScreen: React.FC = () => {
 
     const handleLogoutPress = () => setLogoutVisible(true);
 
+    const handleLanguagePress = () => setLanguageVisible(true);
+
+    const handleSelectLanguage = async (lang: LanguageType) => {
+        setLanguage(lang);
+        setLanguageVisible(false);
+
+        // Sync with backend if logged in
+        if (token && user) {
+            try {
+                const response = await apiRequest('/api/user/profile', {
+                    method: 'PUT',
+                    body: JSON.stringify({
+                        name: user.name,
+                        role: user.role,
+                        language: lang
+                    }),
+                }, logout);
+
+                if (response.ok) {
+                    // Update local user state to keep in sync
+                    await setAuth(token, null, { ...user, language: lang });
+                }
+            } catch (err) {
+                console.error('Failed to sync language to backend:', err);
+            }
+        }
+    };
+
+    const handleSupportCall = () => {
+        setSupportVisible(false);
+        Linking.openURL(`tel:+91${supportNumber}`);
+    };
+
+    const handleSupportWhatsApp = () => {
+        setSupportVisible(false);
+        const message = encodeURIComponent("Hello Go Raahi Support, I need help with...");
+        Linking.openURL(`https://wa.me/91${supportNumber}?text=${message}`);
+    };
+
+    const handleSupportPress = () => setSupportVisible(true);
+
     const optionItems = [
-        { icon: '💳', title: 'Payment Methods' },
-        { icon: '📇', title: 'Trusted Contacts', action: () => setView('trusted') },
-        { icon: '🌐', title: 'Language' },
-        { icon: '🆘', title: 'Support', color: '#C62828' },
-        { icon: '🚪', title: 'Logout', action: handleLogoutPress, color: '#C62828' }, // Updated action
+        { icon: 'card-outline', title: t('account.paymentMethods') },
+        ...(!isParcelMode ? [{ icon: 'id-card-outline', title: t('account.trustedContacts'), action: () => setView('trusted') }] : []),
+        { icon: 'globe-outline', title: t('account.language'), action: handleLanguagePress },
+        ...(user?.role === 'driver' && !isParcelMode ? [{ icon: 'car-sport-outline', title: t('account.vehicleDetails'), action: () => setView('vehicle') }] : []),
+        { icon: 'headset-outline', title: t('account.support'), action: handleSupportPress },
+        { icon: 'log-out-outline', title: t('account.logout'), action: handleLogoutPress, color: '#C62828' },
     ];
 
     if (view === 'trusted') {
         return <TrustedContactsScreen onBack={() => setView('main')} />;
+    }
+
+    if (view === 'vehicle') {
+        return <VehicleDetailsScreen onBack={() => setView('main')} />;
     }
 
     return (
@@ -62,9 +123,7 @@ const AccountScreen: React.FC = () => {
                             backgroundColor: isDark ? '#181F2A' : '#F8F9FF',
                         },
                     ]}>
-                    <Text style={[styles.avatarIcon, { color: colors.accentColor }]}>
-                        👤
-                    </Text>
+                    <Icon name="person" size={40} color={colors.accentColor} style={styles.avatarIcon} />
                 </View>
 
                 <View style={styles.profileInfo}>
@@ -73,21 +132,25 @@ const AccountScreen: React.FC = () => {
                     </Text>
                     <View style={styles.spacer6} />
                     <Text style={[styles.profilePhone, { color: colors.accentColor }]}>
-                        {user?.phone_number || 'No number'}
+                        {user?.phone_number || t('account.noNumber')}
                     </Text>
                     <View style={styles.spacer6} />
                     <View style={[styles.roleBadge, { backgroundColor: user?.role === 'driver' ? '#E65100' : colors.primary }]}>
                         <Text style={styles.roleBadgeText}>
-                            {(user?.role || 'passenger').toUpperCase()}
+                            {(user?.role === 'driver' ? t('account.driver') : t('account.passenger')).toUpperCase()}
                         </Text>
                     </View>
-                    <View style={styles.spacer8} />
-                    <View style={styles.ratingRow}>
-                        <Text style={[styles.star, { color: ratingColor }]}>⭐</Text>
-                        <Text style={[styles.ratingText, { color: ratingColor }]}>
-                            4.8 rating
-                        </Text>
-                    </View>
+                    {user?.role === 'driver' && (
+                        <>
+                            <View style={styles.spacer8} />
+                            <View style={styles.ratingRow}>
+                                <Icon name="star" size={16} color={ratingColor} style={styles.star} />
+                                <Text style={[styles.ratingText, { color: ratingColor }]}>
+                                    4.8 {t('account.rating')}
+                                </Text>
+                            </View>
+                        </>
+                    )}
                 </View>
             </View>
 
@@ -107,17 +170,16 @@ const AccountScreen: React.FC = () => {
                         ]}
                         activeOpacity={0.7}
                         onPress={item.action}>
-                        <Text
-                            style={[
-                                styles.optionIcon,
-                                { color: item.color ?? '#FFEA00' },
-                            ]}>
-                            {item.icon}
-                        </Text>
+                        <Icon
+                            name={item.icon}
+                            size={24}
+                            color={item.color ?? colors.primary}
+                            style={styles.optionIcon}
+                        />
                         <Text style={[styles.optionTitle, { color: item.color ?? colors.textColor }]}>
                             {item.title}
                         </Text>
-                        {item.title !== 'Logout' && (
+                        {item.title !== t('account.logout') && (
                             <Text style={[styles.chevron, { color: colors.subtextColor }]}>
                                 ›
                             </Text>
@@ -127,6 +189,7 @@ const AccountScreen: React.FC = () => {
                 </React.Fragment>
             ))}
 
+            {/* Logout Modal */}
             <Modal
                 transparent={true}
                 visible={logoutVisible}
@@ -134,21 +197,97 @@ const AccountScreen: React.FC = () => {
                 onRequestClose={() => setLogoutVisible(false)}>
                 <View style={styles.modalOverlay}>
                     <View style={[styles.modalContent, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}>
-                        <Text style={[styles.modalTitle, { color: colors.textColor }]}>Logout</Text>
-                        <Text style={[styles.modalText, { color: colors.subtextColor }]}>Are you sure you want to log out?</Text>
+                        <Text style={[styles.modalTitle, { color: colors.textColor }]}>{t('account.logoutTitle')}</Text>
+                        <Text style={[styles.modalText, { color: colors.subtextColor }]}>{t('account.logoutConfirm')}</Text>
 
                         <View style={styles.modalButtons}>
                             <TouchableOpacity
                                 style={[styles.modalButton, styles.cancelButton]}
                                 onPress={() => setLogoutVisible(false)}>
-                                <Text style={styles.cancelButtonText}>Cancel</Text>
+                                <Text style={styles.cancelButtonText}>{t('common.cancel')}</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
                                 style={[styles.modalButton, styles.confirmButton]}
                                 onPress={confirmLogout}>
-                                <Text style={styles.confirmButtonText}>Logout</Text>
+                                <Text style={styles.confirmButtonText}>{t('account.logout')}</Text>
                             </TouchableOpacity>
                         </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Language Selection Modal */}
+            <Modal
+                transparent={true}
+                visible={languageVisible}
+                animationType="fade"
+                onRequestClose={() => setLanguageVisible(false)}>
+                <View style={styles.modalOverlay}>
+                    <View style={[styles.modalContent, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}>
+                        <Text style={[styles.modalTitle, { color: colors.textColor, marginBottom: 20 }]}>{t('account.languageModalTitle')}</Text>
+
+                        <TouchableOpacity
+                            style={[
+                                styles.languageOption,
+                                language === 'en' && { borderColor: colors.primary, backgroundColor: 'rgba(91, 79, 255, 0.1)' }
+                            ]}
+                            onPress={() => handleSelectLanguage('en')}>
+                            <Text style={[styles.languageOptionText, { color: colors.textColor }]}>English</Text>
+                            {language === 'en' && <Text style={{ color: colors.primary }}>✓</Text>}
+                        </TouchableOpacity>
+
+                        <View style={styles.spacer14} />
+
+                        <TouchableOpacity
+                            style={[
+                                styles.languageOption,
+                                language === 'hi' && { borderColor: colors.primary, backgroundColor: 'rgba(91, 79, 255, 0.1)' }
+                            ]}
+                            onPress={() => handleSelectLanguage('hi')}>
+                            <Text style={[styles.languageOptionText, { color: colors.textColor }]}>हिंदी (Hindi)</Text>
+                            {language === 'hi' && <Text style={{ color: colors.primary }}>✓</Text>}
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={{ padding: 16, marginTop: 10 }}
+                            onPress={() => setLanguageVisible(false)}>
+                            <Text style={{ color: colors.subtextColor, fontWeight: 'bold' }}>{t('common.cancel')}</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+            {/* Support Selection Modal */}
+            <Modal
+                transparent={true}
+                visible={supportVisible}
+                animationType="fade"
+                onRequestClose={() => setSupportVisible(false)}>
+                <View style={styles.modalOverlay}>
+                    <View style={[styles.modalContent, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}>
+                        <Text style={[styles.modalTitle, { color: colors.textColor }]}>{t('account.support')}</Text>
+                        <Text style={[styles.modalText, { color: colors.subtextColor }]}>{t('common.chooseAction') || 'Choose how you want to reach us'}</Text>
+
+                        <TouchableOpacity
+                            style={[styles.supportOption, { borderColor: colors.borderColor }]}
+                            onPress={handleSupportCall}>
+                            <Icon name="call-outline" size={22} color={colors.textColor} style={styles.supportOptionIcon} />
+                            <Text style={[styles.supportOptionText, { color: colors.textColor }]}>{t('account.callSupport') || 'Call Support'}</Text>
+                        </TouchableOpacity>
+
+                        <View style={styles.spacer14} />
+
+                        <TouchableOpacity
+                            style={[styles.supportOption, { borderColor: colors.borderColor }]}
+                            onPress={handleSupportWhatsApp}>
+                            <Icon name="logo-whatsapp" size={22} color="#25D366" style={styles.supportOptionIcon} />
+                            <Text style={[styles.supportOptionText, { color: colors.textColor }]}>{t('account.whatsappSupport') || 'WhatsApp Support'}</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={{ padding: 16, marginTop: 10 }}
+                            onPress={() => setSupportVisible(false)}>
+                            <Text style={{ color: colors.subtextColor, fontWeight: 'bold' }}>{t('common.cancel')}</Text>
+                        </TouchableOpacity>
                     </View>
                 </View>
             </Modal>
@@ -298,6 +437,38 @@ const styles = StyleSheet.create({
         color: '#FFF',
         fontWeight: 'bold',
         fontSize: 16,
+    },
+    languageOption: {
+        width: '100%',
+        paddingVertical: 16,
+        paddingHorizontal: 20,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.1)',
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    languageOptionText: {
+        fontSize: 16,
+        fontWeight: 'bold',
+    },
+    supportOption: {
+        width: '100%',
+        paddingVertical: 16,
+        paddingHorizontal: 20,
+        borderRadius: 16,
+        borderWidth: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    supportOptionIcon: {
+        fontSize: 22,
+        marginRight: 16,
+    },
+    supportOptionText: {
+        fontSize: 16,
+        fontWeight: 'bold',
     },
 });
 

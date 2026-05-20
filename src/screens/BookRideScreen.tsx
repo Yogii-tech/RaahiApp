@@ -11,10 +11,18 @@ import {
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+<<<<<<< HEAD
 import { API_BASE } from '../config/api';
 import JeepLayout from '../components/JeepLayout';
 
 
+=======
+import { useLanguage } from '../context/LanguageContext';
+import JeepLayout from '../components/JeepLayout';
+
+import { API_BASE } from '../apiConfig';
+import { apiRequest } from '../utils/api';
+>>>>>>> 7c6b6ca6d8b0613d82ece15b6e9e2244096d7291
 
 interface BookRideScreenProps {
     ride: {
@@ -22,7 +30,11 @@ interface BookRideScreenProps {
         vehicleModel: string;
         pricePerSeat: number;
         seatsTotal: number;
+        seatingLayout?: string;
+        seatsBooked?: number;
         takenSeats?: number[];
+        date?: string;
+        departureTime?: string;
     };
     onBack: () => void;
     onBookingComplete: () => void;
@@ -30,12 +42,11 @@ interface BookRideScreenProps {
 
 const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, onBack, onBookingComplete }) => {
     const { colors, isDark } = useTheme();
-    const { token } = useAuth();
+    const { token, logout } = useAuth();
+    const { t } = useLanguage();
     const [ride, setRide] = useState(initialRide);
-    const [numSeats, setNumSeats] = useState(1);
     const [selectedSeats, setSelectedSeats] = useState<number[]>([]);
     const [roofCarrier, setRoofCarrier] = useState(false);
-    const [motionSickness, setMotionSickness] = useState(false);
     const [loading, setLoading] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [bookingId, setBookingId] = useState('');
@@ -48,9 +59,7 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, onBa
 
     const fetchRideDetails = async () => {
         try {
-            const response = await fetch(`${API_BASE}/api/rides/${initialRide.id}`, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
+            const response = await apiRequest(`/api/rides/${initialRide.id}`, {}, logout);
             if (response.ok) {
                 const data = await response.json();
                 setRide(data);
@@ -64,33 +73,27 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, onBa
         if (selectedSeats.includes(index)) {
             setSelectedSeats(selectedSeats.filter(s => s !== index));
         } else {
-            if (selectedSeats.length < numSeats) {
+            // Check if there's a reason to limit, like max 6 per person or just based on available
+            if (selectedSeats.length < (ride.seatsTotal - (ride.takenSeats?.length || 0))) {
                 setSelectedSeats([...selectedSeats, index]);
-            } else {
-                Alert.alert('Limit reached', `You've selected ${numSeats} seats.`);
             }
         }
     };
 
     const handleBook = async () => {
         if (selectedSeats.length === 0) {
-            Alert.alert('Wait', 'Please select at least one seat.');
+            Alert.alert(t('book.wait'), t('book.selectAtLeastOne'));
             return;
         }
 
         setLoading(true);
         try {
-            const response = await fetch(`${API_BASE}/api/rides/${ride.id}/book`, {
+            const response = await apiRequest(`/api/rides/${ride.id}/book`, {
                 method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
                 body: JSON.stringify({
-                    seatsRequested: numSeats,
+                    seatsRequested: selectedSeats.length,
                     seatLayout: selectedSeats,
                     roofCarrier,
-                    motionSickness,
                 }),
             });
 
@@ -99,11 +102,15 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, onBa
                 setBookingId(`RA-${randomId}`);
                 setShowSuccessModal(true);
             } else {
-                Alert.alert('Error', 'Failed to book ride.');
+                const errorData = await response.json().catch(() => ({}));
+                Alert.alert(
+                    t('common.error'),
+                    `${t('book.failBook')}\n\nStatus: ${response.status}\n${errorData.error || ''}`
+                );
             }
         } catch (err) {
             console.error('Booking error:', err);
-            Alert.alert('Error', 'Could not connect to server.');
+            Alert.alert(t('common.error'), t('book.errorConnect'));
         } finally {
             setLoading(false);
         }
@@ -113,58 +120,32 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, onBa
         <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
             <View style={styles.header}>
                 <TouchableOpacity onPress={onBack}>
-                    <Text style={[styles.backText, { color: colors.textColor }]}>‹ BACK</Text>
+                    <Text style={[styles.backText, { color: colors.textColor }]}>{t('common.back')}</Text>
                 </TouchableOpacity>
-                <Text style={[styles.title, { color: colors.textColor }]}>BOOK MY SEAT</Text>
+                <Text style={[styles.title, { color: colors.textColor }]}>{t('book.bookMySeat')}</Text>
                 <View style={{ width: 40 }} />
             </View>
 
             <View style={styles.content}>
-                <Text style={[styles.sectionTitle, { color: colors.subtextColor }]}>NUMBER OF SEATS</Text>
-                <View style={styles.numSeatsRow}>
-                    {[1, 2, 3, 4, 5, 6].map(n => (
-                        <TouchableOpacity
-                            key={n}
-                            style={[
-                                styles.numSeatBtn,
-                                {
-                                    backgroundColor: numSeats === n ? colors.primary : colors.cardColor,
-                                    borderColor: colors.borderColor,
-                                },
-                            ]}
-                            onPress={() => {
-                                setNumSeats(n);
-                                if (selectedSeats.length > n) setSelectedSeats(selectedSeats.slice(0, n));
-                            }}>
-                            <Text style={[styles.numSeatText, { color: numSeats === n ? '#FFFFFF' : colors.textColor }]}>{n}</Text>
-                        </TouchableOpacity>
-                    ))}
-                </View>
-
                 <JeepLayout
                     selectedSeats={selectedSeats}
                     takenSeats={ride.takenSeats}
                     onSeatPress={toggleSeat}
-                    numSeatsRequested={numSeats}
+                    numSeatsRequested={selectedSeats.length}
+                    totalSeats={ride.seatsTotal}
+                    layoutType={ride.seatingLayout || 'suv'}
+                    date={ride.date}
+                    departureTime={ride.departureTime}
                 />
 
                 <View style={[styles.logisticsCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}>
-                    <Text style={[styles.logisticsTitle, { color: colors.subtextColor }]}>HILL LOGISTICS</Text>
+                    <Text style={[styles.logisticsTitle, { color: colors.subtextColor }]}>{t('book.hillLogistics')}</Text>
                     <View style={styles.toggleRow}>
                         <Text style={styles.toggleIcon}>🧳</Text>
-                        <Text style={[styles.toggleText, { color: colors.textColor }]}>ROOF CARRIER BAGGAGE</Text>
+                        <Text style={[styles.toggleText, { color: colors.textColor }]}>{t('book.roofCarrierBaggage')}</Text>
                         <Switch
                             value={roofCarrier}
                             onValueChange={setRoofCarrier}
-                            trackColor={{ false: '#222', true: colors.primary }}
-                        />
-                    </View>
-                    <View style={styles.toggleRow}>
-                        <Text style={styles.toggleIcon}>🚙</Text>
-                        <Text style={[styles.toggleText, { color: colors.textColor }]}>MOTION SICKNESS (FRONT SEAT)</Text>
-                        <Switch
-                            value={motionSickness}
-                            onValueChange={setMotionSickness}
                             trackColor={{ false: '#222', true: colors.primary }}
                         />
                     </View>
@@ -175,7 +156,7 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, onBa
                     onPress={handleBook}
                     disabled={loading}>
                     <Text style={styles.bookBtnText}>
-                        {loading ? 'Processing...' : `Confirm Booking (₹ ${ride.pricePerSeat * numSeats})`}
+                        {loading ? t('book.processing') : `${t('book.confirmBooking')} (₹ ${ride.pricePerSeat * selectedSeats.length})`}
                     </Text>
                 </TouchableOpacity>
             </View>
@@ -191,9 +172,9 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, onBa
                         <View style={styles.successIconContainer}>
                             <Text style={styles.successIcon}>✓</Text>
                         </View>
-                        <Text style={[styles.modalTitle, { color: colors.textColor }]}>REQUEST SENT!</Text>
+                        <Text style={[styles.modalTitle, { color: colors.textColor }]}>{t('book.requestSent')}</Text>
                         <Text style={[styles.modalSubtitle, { color: colors.subtextColor }]}>
-                            Awaiting driver approval. You'll be notified once confirmed.
+                            {t('book.awaitingApproval')}
                         </Text>
 
                         <TouchableOpacity
@@ -202,7 +183,7 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, onBa
                                 setShowSuccessModal(false);
                                 onBookingComplete();
                             }}>
-                            <Text style={styles.returnHomeBtnText}>OK</Text>
+                            <Text style={styles.returnHomeBtnText}>{t('common.ok')}</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -233,28 +214,6 @@ const styles = StyleSheet.create({
     content: {
         paddingHorizontal: 20,
         paddingBottom: 40,
-    },
-    sectionTitle: {
-        fontSize: 10,
-        fontWeight: 'bold',
-        marginBottom: 10,
-    },
-    numSeatsRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginBottom: 25,
-    },
-    numSeatBtn: {
-        width: 45,
-        height: 45,
-        borderRadius: 12,
-        borderWidth: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    numSeatText: {
-        fontSize: 16,
-        fontWeight: 'bold',
     },
     layoutCard: {
         borderRadius: 24,
@@ -342,6 +301,22 @@ const styles = StyleSheet.create({
         marginBottom: 15,
     },
     toggleIcon: { fontSize: 20, marginRight: 15 },
+    headerInfoRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 15,
+        backgroundColor: 'rgba(255,255,255,0.03)',
+        padding: 12,
+        borderRadius: 12,
+    },
+    headerIcon: {
+        fontSize: 16,
+        marginRight: 8,
+    },
+    headerInfoText: {
+        fontSize: 14,
+        fontWeight: 'bold',
+    },
     toggleText: { flex: 1, fontSize: 13, fontWeight: 'bold' },
     bookBtn: {
         paddingVertical: 18,

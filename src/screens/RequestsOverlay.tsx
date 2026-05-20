@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+<<<<<<< HEAD
 import { API_BASE } from '../config/api';
 import JeepLayout from '../components/JeepLayout';
 
@@ -18,14 +19,22 @@ interface Booking {
     roofCarrier: boolean;
     motionSickness: boolean;
 }
+=======
+import { useLanguage } from '../context/LanguageContext';
+import JeepLayout from '../components/JeepLayout';
+
+import { apiRequest } from '../utils/api';
+>>>>>>> 7c6b6ca6d8b0613d82ece15b6e9e2244096d7291
 
 interface RequestsOverlayProps {
     onClose?: () => void;
+    onOpenChat: (booking: any) => void;
 }
 
-const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose }) => {
+const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }) => {
     const { colors, isDark } = useTheme();
-    const { token, user } = useAuth();
+    const { user, logout } = useAuth();
+    const { t } = useLanguage();
     const [bookings, setBookings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -33,14 +42,14 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose }) => {
 
     useEffect(() => {
         fetchData();
+        const interval = setInterval(fetchData, 5000); // Poll every 5s for updates
+        return () => clearInterval(interval);
     }, []);
 
     const fetchData = async () => {
         try {
             const endpoint = isDriver ? '/api/rides/requests' : '/api/rides/bookings';
-            const response = await fetch(`${API_BASE}${endpoint}`, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
+            const response = await apiRequest(endpoint, {}, logout);
             if (response.ok) {
                 const data = await response.json();
                 setBookings(data || []);
@@ -54,21 +63,17 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose }) => {
 
     const handleUpdateStatus = async (bookingId: string, status: string) => {
         try {
-            const response = await fetch(`${API_BASE}/api/rides/bookings/${bookingId}`, {
+            const response = await apiRequest(`/api/rides/bookings/${bookingId}`, {
                 method: 'PUT',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
                 body: JSON.stringify({ status }),
-            });
+            }, logout);
             if (response.ok) {
-                Alert.alert('Success', `Booking ${status}`);
+                Alert.alert(t('requests.success'), t('requests.bookingStatus').replace('{{status}}', t(`requests.${status}`)));
                 fetchData();
             }
         } catch (err) {
             console.error('Update error:', err);
-            Alert.alert('Error', 'Could not update status.');
+            Alert.alert(t('common.error'), 'Could not update status.');
         }
     };
 
@@ -81,44 +86,87 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose }) => {
                     <>
                         <View style={styles.cardHeader}>
                             <Text style={[styles.requestTitle, { color: colors.textColor }]}>
-                                New Ride Request
+                                {t('requests.newRequestTitle')}
                             </Text>
-                            <Text style={[styles.statusTag, { color: colors.primary }]}>{item.status.toUpperCase()}</Text>
+                            <Text style={[styles.statusTag, { color: colors.primary }]}>{t(`requests.${item.status}`).toUpperCase()}</Text>
                         </View>
 
                         <View style={styles.details}>
-                            <Text style={[styles.detailText, { color: colors.subtextColor }]}>Seats Requested: {item.seatsRequested}</Text>
-                            {item.roofCarrier && <Text style={[styles.detailText, { color: colors.subtextColor }]}>• Needs Roof Carrier</Text>}
-                            {item.motionSickness && <Text style={[styles.detailText, { color: colors.subtextColor }]}>• Motion Sickness (Front Seat)</Text>}
+                            <View style={styles.dateTimeRow}>
+                                <Text style={styles.dateTimeIcon}>📅</Text>
+                                <Text style={[styles.dateTimeText, { color: colors.textColor }]}>{item.ride?.date || item.date}</Text>
+                                <View style={{ width: 12 }} />
+                                <Text style={styles.dateTimeIcon}>🕒</Text>
+                                <Text style={[styles.dateTimeText, { color: colors.textColor }]}>{item.ride?.departureTime}</Text>
+                            </View>
+                            <View style={{ height: 4 }} />
+
+                            {item.type === 'parcel' ? (
+                                <View style={{ marginTop: 8 }}>
+                                    <Text style={[styles.detailText, { color: colors.primary, fontWeight: 'bold' }]}>📦 PARCEL DELIVERY</Text>
+                                    <Text style={[styles.detailText, { color: colors.textColor }]}>Route: {item.pickup} → {item.dropoff}</Text>
+                                    <Text style={[styles.detailText, { color: colors.subtextColor }]}>Recipient: {item.recipientName} ({item.contactNumber})</Text>
+                                    <Text style={[styles.detailText, { color: colors.subtextColor }]}>Size: {item.parcelSize?.toUpperCase()}</Text>
+                                </View>
+                            ) : (
+                                <>
+                                    <Text style={[styles.detailText, { color: colors.subtextColor }]}>{t('requests.seatsTitle')}{item.seatsRequested}</Text>
+                                    {item.roofCarrier && <Text style={[styles.detailText, { color: colors.subtextColor }]}>• {t('trips.needsRoofCarrier')}</Text>}
+                                </>
+                            )}
+
+                            <Text style={{ fontSize: 11, color: colors.subtextColor, marginTop: 4, fontStyle: 'italic' }}>
+                                {t('trips.bookedOn') || 'Booked on: '}
+                                {new Date(item.createdAt).toLocaleDateString()} at {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </Text>
                         </View>
 
-                        {/* Layout for Driver to see requested seats */}
-                        <View style={{ marginBottom: 20 }}>
-                            <JeepLayout
-                                interactive={false}
-                                takenSeats={item.seatLayout || []}
-                                numSeatsRequested={item.seatsRequested}
-                            />
-                        </View>
+                        {/* Layout for Driver to see requested seats (Hide for parcels) */}
+                        {item.type !== 'parcel' && (
+                            <View style={{ marginBottom: 20 }}>
+                                <JeepLayout
+                                    interactive={false}
+                                    takenSeats={item.status === 'accepted' ? (item.seatLayout || []) : []}
+                                    pendingSeats={item.status === 'pending' ? (item.seatLayout || []) : []}
+                                    numSeatsRequested={item.seatsRequested}
+                                    totalSeats={item.ride?.seatsTotal}
+                                    layoutType={item.ride?.seatingLayout || 'suv'}
+                                />
+                            </View>
+                        )}
 
                         {item.status === 'pending' ? (
                             <View style={styles.actions}>
                                 <TouchableOpacity
                                     style={[styles.actionBtn, { backgroundColor: '#4CAF50' }]}
                                     onPress={() => handleUpdateStatus(item.id, 'accepted')}>
-                                    <Text style={styles.btnText}>Accept</Text>
+                                    <Text style={styles.btnText}>{t('requests.accept')}</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity
                                     style={[styles.actionBtn, { backgroundColor: '#F44336' }]}
                                     onPress={() => handleUpdateStatus(item.id, 'rejected')}>
-                                    <Text style={styles.btnText}>Reject</Text>
+                                    <Text style={styles.btnText}>{t('requests.reject')}</Text>
                                 </TouchableOpacity>
                             </View>
                         ) : (
                             <View style={{ alignItems: 'center' }}>
                                 <Text style={{ color: item.status === 'accepted' ? '#4CAF50' : '#F44336', fontWeight: 'bold' }}>
-                                    {item.status === 'accepted' ? '✓ ACCEPTED' : '✗ REJECTED'}
+                                    {item.status === 'accepted' ? `✓ ${t('requests.accepted').toUpperCase()}` : `✗ ${t('requests.rejected').toUpperCase()}`}
                                 </Text>
+                                {item.status === 'accepted' && (
+                                    <TouchableOpacity
+                                        style={styles.chatBtn}
+                                        onPress={() => onOpenChat(item)}>
+                                        <View style={styles.chatBtnContent}>
+                                            <Text style={styles.chatBtnText}>💬 {t('chat.withPassenger')}</Text>
+                                            {item.unreadChatCount > 0 && (
+                                                <View style={styles.unreadBadge}>
+                                                    <Text style={styles.unreadCount}>{item.unreadChatCount}</Text>
+                                                </View>
+                                            )}
+                                        </View>
+                                    </TouchableOpacity>
+                                )}
                             </View>
                         )}
                     </>
@@ -128,21 +176,54 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose }) => {
                             <View style={styles.successIconOuter}>
                                 <Text style={styles.successIconInner}>✓</Text>
                             </View>
-                            <Text style={[styles.successText, { color: colors.textColor }]}>SEAT RESERVED!</Text>
+                            <Text style={[styles.successText, { color: colors.textColor }]}>
+                                {item.type === 'parcel' ? (t('parcel.parcelScheduled') || 'Parcel Scheduled') : t('requests.seatReserved')}
+                            </Text>
+                            <View style={[styles.dateTimeRow, { marginTop: 4 }]}>
+                                <Text style={styles.dateTimeIcon}>📅</Text>
+                                <Text style={[styles.dateTimeText, { color: colors.textColor }]}>{item.ride?.date || item.date}</Text>
+                                <View style={{ width: 12 }} />
+                                <Text style={styles.dateTimeIcon}>🕒</Text>
+                                <Text style={[styles.dateTimeText, { color: colors.textColor }]}>{item.ride?.departureTime}</Text>
+                            </View>
+                            {item.type === 'parcel' && (
+                                <Text style={[styles.routeText, { color: colors.textColor, fontWeight: 'bold', marginTop: 8 }]}>
+                                    {item.pickup} → {item.dropoff}
+                                </Text>
+                            )}
                             <Text style={[styles.successSubtitle, { color: colors.subtextColor }]}>
-                                Verified. Present this ID to your driver at pickup.
+                                {item.type === 'parcel' ? 'Your parcel is being tracked' : t('requests.verifiedSubtitle')}
                             </Text>
                         </View>
 
-                        <View style={styles.bookingIdCard}>
+                        <View style={[styles.bookingIdCard, { backgroundColor: isDark ? '#111822' : '#EEF2FF' }]}>
                             <View style={styles.bookingIdHeader}>
-                                <Text style={styles.bookingIdLabel}>OFFLINE BOOKING ID</Text>
+                                <Text style={[styles.bookingIdLabel, { color: isDark ? '#607D8B' : '#7986A3' }]}>
+                                    {item.type === 'parcel' ? 'UNIQUE PARCEL ID' : t('trips.offlineBookingId')}
+                                </Text>
                                 <View style={styles.verifiedTag}>
-                                    <Text style={styles.verifiedTagText}>VERIFIED DRIVER</Text>
+                                    <Text style={styles.verifiedTagText}>{item.type === 'parcel' ? 'PARCEL SECURED' : t('trips.verifiedDriver')}</Text>
                                 </View>
                             </View>
-                            <Text style={styles.bookingIdText}>RA-{item.id.slice(-4).toUpperCase()}</Text>
-                            <Text style={styles.bookingIdFooter}>SHOW THIS TO YOUR DRIVER IN NO-NETWORK ZONES</Text>
+                            <Text style={styles.bookingIdText}>
+                                {item.type === 'parcel' ? 'RA-P-' : 'RA-'}{item.id.slice(-4).toUpperCase()}
+                            </Text>
+                            <Text style={[styles.bookingIdFooter, { color: isDark ? '#4B5C6B' : '#8A96BB' }]}>
+                                {item.type === 'parcel' ? 'Show this ID to the parcel partner' : t('trips.showDriverOffline')}
+                            </Text>
+
+                            <TouchableOpacity
+                                style={[styles.chatBtn, { marginTop: 12, width: '100%' }]}
+                                onPress={() => onOpenChat(item)}>
+                                <View style={styles.chatBtnContent}>
+                                    <Text style={styles.chatBtnText}>💬 {t('chat.withDriver')}</Text>
+                                    {item.unreadChatCount > 0 && (
+                                        <View style={styles.unreadBadge}>
+                                            <Text style={styles.unreadCount}>{item.unreadChatCount}</Text>
+                                        </View>
+                                    )}
+                                </View>
+                            </TouchableOpacity>
                         </View>
                     </>
                 ) : (
@@ -150,9 +231,9 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose }) => {
                         <View style={styles.rejectionIconOuter}>
                             <Text style={styles.rejectionIconInner}>✗</Text>
                         </View>
-                        <Text style={[styles.rejectionText, { color: colors.textColor }]}>SEATS NOT BOOKED</Text>
+                        <Text style={[styles.rejectionText, { color: colors.textColor }]}>{t('requests.seatsNotBooked')}</Text>
                         <Text style={[styles.rejectionSubtitle, { color: colors.subtextColor }]}>
-                            Your request was declined by the driver. Please try booking another ride.
+                            {t('requests.declinedSubtitle')}
                         </Text>
                     </View>
                 )}
@@ -164,10 +245,10 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose }) => {
         <View style={[styles.container, { backgroundColor: colors.background }]}>
             <View style={styles.header}>
                 <Text style={[styles.title, { color: colors.textColor }]}>
-                    {isDriver ? 'Requests' : 'Notifications'}
+                    {isDriver ? t('requests.title') : t('requests.notifications')}
                 </Text>
                 <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-                    <Text style={{ color: colors.primary, fontWeight: 'bold' }}>Close</Text>
+                    <Text style={{ color: colors.primary, fontWeight: 'bold' }}>{t('requests.closeBtn')}</Text>
                 </TouchableOpacity>
             </View>
 
@@ -181,7 +262,7 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose }) => {
                     contentContainerStyle={styles.list}
                     ListEmptyComponent={
                         <Text style={[styles.empty, { color: colors.subtextColor }]}>
-                            {isDriver ? 'No pending requests' : 'No notifications'}
+                            {isDriver ? t('requests.emptyDriver') : t('requests.noNotifications')}
                         </Text>
                     }
                 />
@@ -243,6 +324,19 @@ const styles = StyleSheet.create({
         fontSize: 14,
         marginBottom: 4,
     },
+    dateTimeRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    dateTimeIcon: {
+        fontSize: 14,
+        marginRight: 6,
+    },
+    dateTimeText: {
+        fontSize: 14,
+        fontWeight: 'bold',
+    },
     actions: {
         flexDirection: 'row',
         gap: 12,
@@ -260,8 +354,43 @@ const styles = StyleSheet.create({
     },
     empty: {
         textAlign: 'center',
-        marginTop: 40,
+        padding: 40,
         fontSize: 16,
+    },
+    chatBtn: {
+        backgroundColor: '#4285F4',
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+        borderRadius: 20,
+        marginTop: 10,
+        alignItems: 'center',
+    },
+    chatBtnText: {
+        color: '#FFFFFF',
+        fontWeight: 'bold',
+        fontSize: 14,
+    },
+    chatBtnContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    unreadBadge: {
+        backgroundColor: '#FF4444',
+        borderRadius: 10,
+        minWidth: 20,
+        height: 20,
+        paddingHorizontal: 6,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginLeft: 8,
+        borderWidth: 1.5,
+        borderColor: '#FFFFFF',
+    },
+    unreadCount: {
+        color: '#FFFFFF',
+        fontSize: 10,
+        fontWeight: 'bold',
     },
     successHeader: {
         alignItems: 'center',
@@ -295,7 +424,6 @@ const styles = StyleSheet.create({
         opacity: 0.7,
     },
     bookingIdCard: {
-        backgroundColor: '#111822',
         borderRadius: 16,
         padding: 20,
         marginTop: 10,
@@ -307,7 +435,6 @@ const styles = StyleSheet.create({
         marginBottom: 15,
     },
     bookingIdLabel: {
-        color: '#607D8B',
         fontSize: 10,
         fontWeight: 'bold',
         letterSpacing: 0.5,
@@ -366,6 +493,10 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         opacity: 0.7,
         lineHeight: 18,
+    },
+    routeText: {
+        fontSize: 14,
+        textAlign: 'center',
     },
 });
 

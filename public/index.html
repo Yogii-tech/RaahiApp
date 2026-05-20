@@ -5,19 +5,23 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="theme-color" content="#181F2A" />
-  <meta name="description" content="Raahi - Local, trusted rides in the hills" />
-  <title>Raahi</title>
+  <meta name="description" content="Go Raahi - Local, trusted rides in the hills" />
+  <title>Go Raahi</title>
   <style>
     html,
     body,
     #root {
-      height: 100vh;
+      height: 100%;
+      height: 100dvh;
+      min-height: 100%;
+      max-height: 100dvh;
       width: 100vw;
       margin: 0;
       padding: 0;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
       background-color: #181F2A;
       overflow: hidden;
+      position: fixed; /* Prevents unwanted bounce on mobile web */
     }
 
     #root {
