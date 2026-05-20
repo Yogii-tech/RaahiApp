@@ -11,12 +11,13 @@ import {
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import { API_BASE } from '../config/api';
 
 interface Contact {
     phone: string;
 }
 
-const API_BASE = 'http://localhost:8081';
+
 
 const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const { colors, isDark } = useTheme();

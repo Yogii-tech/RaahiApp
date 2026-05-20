@@ -12,9 +12,10 @@ import {
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { API_BASE } from '../config/api';
 
 
-const API_BASE = 'http://localhost:8081';
+
 
 interface LoginScreenProps {
     onAuthenticated: () => void;

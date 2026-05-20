@@ -9,8 +9,9 @@ import {
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import { API_BASE } from '../config/api';
 
-const API_BASE = 'http://localhost:8081';
+
 
 interface Ride {
     id: string;
@@ -32,7 +33,7 @@ interface AvailableRidesScreenProps {
 }
 
 const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ onBack, onSelectRide }) => {
-    const { colors, isDark } = useTheme();
+    const { colors } = useTheme();
     const { token } = useAuth();
     const [rides, setRides] = useState<Ride[]>([]);
     const [loading, setLoading] = useState(true);

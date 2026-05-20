@@ -11,9 +11,10 @@ import {
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import { API_BASE } from '../config/api';
 import JeepLayout from '../components/JeepLayout';
 
-const API_BASE = 'http://localhost:8081';
+
 
 interface BookRideScreenProps {
     ride: {

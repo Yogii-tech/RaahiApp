@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import { API_BASE } from '../config/api';
 
 import AvailableRidesScreen from './AvailableRidesScreen';
 import BookRideScreen from './BookRideScreen';
@@ -33,7 +34,7 @@ interface Ride {
     pricePerSeat: number;
 }
 
-const API_BASE = 'http://localhost:8081';
+
 
 const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed }) => {
     const { isDark, colors } = useTheme();

@@ -15,6 +15,7 @@ interface SosScreenProps {
 }
 
 import { useAuth } from '../context/AuthContext';
+import { API_BASE } from '../config/api';
 
 const SosScreen: React.FC<SosScreenProps> = ({ visible, onClose }) => {
     const { token } = useAuth();
