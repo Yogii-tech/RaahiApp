@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - main
-    paths:
-      - 'RaahiApp/**'
 
 jobs:
   deploy:
@@ -22,11 +20,9 @@ jobs:
         node-version: 22
 
     - name: Install Dependencies
-      working-directory: ./RaahiApp
       run: npm install
 
     - name: Build Web Application
-      working-directory: ./RaahiApp
       run: npm run build
       env:
         VITE_BACKEND_URL: https://raahi-api-137804375265.asia-south2.run.app
