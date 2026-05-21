@@ -12,13 +12,10 @@ import {
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-<<<<<<< HEAD
 import { API_BASE } from '../config/api';
-=======
 import { useLanguage } from '../context/LanguageContext';
 import { apiRequest } from '../utils/api';
 import Icon from 'react-native-vector-icons/Ionicons';
->>>>>>> 7c6b6ca6d8b0613d82ece15b6e9e2244096d7291
 
 import AvailableRidesScreen from './AvailableRidesScreen';
 import BookRideScreen from './BookRideScreen';
@@ -43,11 +40,7 @@ interface Ride {
     pricePerSeat: number;
 }
 
-<<<<<<< HEAD
 
-=======
-import { API_BASE } from '../apiConfig';
->>>>>>> 7c6b6ca6d8b0613d82ece15b6e9e2244096d7291
 
 const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) => {
     const { isDark, colors } = useTheme();

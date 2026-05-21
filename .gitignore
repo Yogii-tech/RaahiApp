@@ -73,3 +73,17 @@ yarn-error.log
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# Web build artifacts
+dist/
+build/
+*.js.map
+bundle.js
+bundle.js.LICENSE.txt
+
+# Firebase
+.firebase/
+hosting.ZGlzdA.cache
+firebase-debug.log
+firebug-*.log
+.firebaserc.local

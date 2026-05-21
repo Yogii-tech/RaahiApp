@@ -9,11 +9,6 @@ import {
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-<<<<<<< HEAD
-import { API_BASE } from '../config/api';
-
-
-=======
 import { useLanguage } from '../context/LanguageContext';
 
 const DistanceDisplay = ({ pickup, dropoff, color }: { pickup?: string, dropoff?: string, color: string }) => {
@@ -49,9 +44,8 @@ const DistanceDisplay = ({ pickup, dropoff, color }: { pickup?: string, dropoff?
     return <Text style={{ fontSize: 12, fontWeight: 'bold', color: color, marginTop: 4 }}>{distance}</Text>;
 };
 
-import { API_BASE } from '../apiConfig';
+import { API_BASE } from '../config/api';
 import { apiRequest } from '../utils/api';
->>>>>>> 7c6b6ca6d8b0613d82ece15b6e9e2244096d7291
 
 interface Ride {
     id: string;
@@ -75,16 +69,10 @@ interface AvailableRidesScreenProps {
     onSelectRide: (ride: Ride) => void;
 }
 
-<<<<<<< HEAD
-const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ onBack, onSelectRide }) => {
-    const { colors } = useTheme();
-    const { token } = useAuth();
-=======
 const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ searchPickup, searchDropoff, onBack, onSelectRide }) => {
     const { colors, isDark } = useTheme();
     const { token, logout } = useAuth();
     const { t } = useLanguage();
->>>>>>> 7c6b6ca6d8b0613d82ece15b6e9e2244096d7291
     const [rides, setRides] = useState<Ride[]>([]);
     const [loading, setLoading] = useState(true);
 

@@ -13,17 +13,8 @@ import {
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-<<<<<<< HEAD
-import { API_BASE } from '../config/api';
-
-
-
-=======
 import { useLanguage } from '../context/LanguageContext';
-
-
-import { API_BASE } from '../apiConfig';
->>>>>>> 7c6b6ca6d8b0613d82ece15b6e9e2244096d7291
+import { API_BASE } from '../config/api';
 
 interface LoginScreenProps {
     onAuthenticated: () => void;

@@ -33,7 +33,7 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
     const [logoutVisible, setLogoutVisible] = useState(false);
     const [languageVisible, setLanguageVisible] = useState(false);
     const [supportVisible, setSupportVisible] = useState(false);
-    const supportNumber = '8809228888';
+    const supportNumber = '8434405463';
     const ratingColor = isDark ? '#FFC107' : '#FFB300';
 
     // New functions for logout modal

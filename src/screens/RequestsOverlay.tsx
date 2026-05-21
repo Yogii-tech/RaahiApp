@@ -2,11 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-<<<<<<< HEAD
 import { API_BASE } from '../config/api';
+import { useLanguage } from '../context/LanguageContext';
 import JeepLayout from '../components/JeepLayout';
-
-
+import { apiRequest } from '../utils/api';
 
 interface Booking {
     id: string;
@@ -19,12 +18,6 @@ interface Booking {
     roofCarrier: boolean;
     motionSickness: boolean;
 }
-=======
-import { useLanguage } from '../context/LanguageContext';
-import JeepLayout from '../components/JeepLayout';
-
-import { apiRequest } from '../utils/api';
->>>>>>> 7c6b6ca6d8b0613d82ece15b6e9e2244096d7291
 
 interface RequestsOverlayProps {
     onClose?: () => void;

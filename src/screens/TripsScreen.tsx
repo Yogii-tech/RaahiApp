@@ -2,23 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-<<<<<<< HEAD
 import { API_BASE } from '../config/api';
-=======
 import { useLanguage } from '../context/LanguageContext';
->>>>>>> 7c6b6ca6d8b0613d82ece15b6e9e2244096d7291
 import JeepLayout from '../components/JeepLayout';
 import SlideToComplete from '../components/SlideToComplete';
 
-<<<<<<< HEAD
-
-=======
-import { API_BASE } from '../apiConfig';
 import { apiRequest } from '../utils/api';
 import Icon from 'react-native-vector-icons/Ionicons';
 import TrackPackageView from '../components/TrackPackageView';
 import { startDriverTracking } from '../modern_map/services/socket';
->>>>>>> 7c6b6ca6d8b0613d82ece15b6e9e2244096d7291
 
 interface Booking {
     id: string;
