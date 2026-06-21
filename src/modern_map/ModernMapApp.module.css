@@ -1,7 +1,8 @@
 .app {
   width: 100%;
   height: 100%;
-  position: relative;
+  position: absolute;
+  inset: 0;
   overflow: hidden;
   background: var(--bg);
 }
@@ -41,9 +42,15 @@
   z-index: 100;
 }
 
-.brand { display: flex; align-items: center; gap: 8px; }
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 
-.brandIcon { font-size: 22px; }
+.brandIcon {
+  font-size: 22px;
+}
 
 .brandName {
   font-size: 20px;
@@ -66,7 +73,11 @@
   letter-spacing: 0.05em;
 }
 
-.topActions { display: flex; align-items: center; gap: 8px; }
+.topActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 
 .iconBtn {
   width: 38px;
@@ -84,13 +95,20 @@
   backdrop-filter: blur(8px);
 }
 
-.iconBtn:hover { background: rgba(255,255,255,0.12); transform: scale(1.05); }
+.iconBtn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  transform: scale(1.05);
+}
 
 .iconBtn.spinning {
   animation: spin 0.8s linear infinite;
 }
 
-@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 
 /* ── Sidebar ── */
 .sidebar {
@@ -112,8 +130,13 @@
   padding-bottom: 20px;
 }
 
-.sidebar.closed { transform: translateX(-100%); }
-.sidebar.open   { transform: translateX(0); }
+.sidebar.closed {
+  transform: translateX(-100%);
+}
+
+.sidebar.open {
+  transform: translateX(0);
+}
 
 /* ── Role toggle ── */
 .roleToggle {
@@ -135,8 +158,14 @@
   transition: all 0.2s;
 }
 
-.roleBtn:first-child { border-radius: 10px 0 0 10px; border-right: none; }
-.roleBtn:last-child  { border-radius: 0 10px 10px 0; }
+.roleBtn:first-child {
+  border-radius: 10px 0 0 10px;
+  border-right: none;
+}
+
+.roleBtn:last-child {
+  border-radius: 0 10px 10px 0;
+}
 
 .roleBtn.roleActive {
   background: linear-gradient(135deg, #3b82f6, #2563eb);
@@ -206,8 +235,15 @@
   letter-spacing: 0.02em;
 }
 
-.routeBtn:hover:not(:disabled)  { opacity: 0.9; transform: translateY(-1px); }
-.routeBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+.routeBtn:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.routeBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
 /* ── Horizontal rule ── */
 .hr {
@@ -259,8 +295,13 @@
     border-bottom: 1px solid var(--border);
   }
 
-  .sidebar.closed { transform: translateY(-100%); }
-  .sidebar.open   { transform: translateY(0); }
+  .sidebar.closed {
+    transform: translateY(-100%);
+  }
+
+  .sidebar.open {
+    transform: translateY(0);
+  }
 }
 
 /* ── Poor GPS warning banner ── */
@@ -307,7 +348,10 @@
   box-shadow: 0 3px 12px rgba(245, 158, 11, 0.35);
 }
 
-.pinBtn:hover { opacity: 0.9; transform: translateY(-1px); }
+.pinBtn:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
 
 /* ── Pinned confirmation banner ── */
 .pinnedBanner {
@@ -337,7 +381,9 @@
   transition: background 0.2s;
 }
 
-.clearPinBtn:hover { background: rgba(34, 197, 94, 0.15); }
+.clearPinBtn:hover {
+  background: rgba(34, 197, 94, 0.15);
+}
 
 /* ── Pin mode full-screen overlay ── */
 .pinOverlay {
@@ -348,7 +394,8 @@
   align-items: flex-end;
   justify-content: center;
   padding-bottom: 40px;
-  pointer-events: none; /* let clicks pass through to map */
+  pointer-events: none;
+  /* let clicks pass through to map */
 }
 
 .pinOverlayCard {
@@ -369,15 +416,32 @@
 }
 
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-.pinOverlayIcon { font-size: 36px; animation: bounce 1s infinite; }
+.pinOverlayIcon {
+  font-size: 36px;
+  animation: bounce 1s infinite;
+}
 
 @keyframes bounce {
-  0%, 100% { transform: translateY(0); }
-  50%       { transform: translateY(-6px); }
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-6px);
+  }
 }
 
 .pinOverlayCard p {
@@ -389,7 +453,7 @@
 
 .pinCancelBtn {
   border: 1px solid var(--border);
-  background: rgba(255,255,255,0.06);
+  background: rgba(255, 255, 255, 0.06);
   border-radius: 8px;
   color: var(--text-muted);
   font-size: 13px;
@@ -399,4 +463,6 @@
   transition: background 0.2s;
 }
 
-.pinCancelBtn:hover { background: rgba(255,255,255,0.12); }
+.pinCancelBtn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}

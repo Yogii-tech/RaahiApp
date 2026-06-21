@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { API_BASE } from '../config/api';
+import { API_BASE } from '../apiConfig';
 import { useLanguage } from '../context/LanguageContext';
 import JeepLayout from '../components/JeepLayout';
 import SlideToComplete from '../components/SlideToComplete';
@@ -24,27 +24,42 @@ interface Booking {
     departureTime?: string;
 }
 
+// Hardcoded coordinates for villages missing from OSM/Nominatim
+const KNOWN_LOCATIONS: Record<string, { lat: string; lon: string }> = {
+    reema: { lat: '29.833', lon: '79.800' },
+    rima: { lat: '29.833', lon: '79.800' },
+};
+
+const geocodeLocation = async (name: string): Promise<{ lat: string; lon: string } | null> => {
+    const key = name.toLowerCase().trim();
+    if (KNOWN_LOCATIONS[key]) return KNOWN_LOCATIONS[key];
+    const query = `${name}, Uttarakhand, India`;
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`);
+    const data = await res.json();
+    if (!data || data.length === 0) return null;
+    return { lat: data[0].lat, lon: data[0].lon };
+};
+
 const DistanceDisplay = ({ pickup, dropoff, color }: { pickup?: string, dropoff?: string, color: string }) => {
-    const [distance, setDistance] = useState<string>('...');
+    const [info, setInfo] = useState<string>('...');
     useEffect(() => {
         if (!pickup || !dropoff) return;
         let mounted = true;
         const fetchDist = async () => {
             try {
-                const pRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(pickup)}&format=json&limit=1`);
-                const pData = await pRes.json();
-                if (!pData || pData.length === 0) return;
+                const pCoords = await geocodeLocation(pickup);
+                if (!pCoords) return;
+                const dCoords = await geocodeLocation(dropoff);
+                if (!dCoords) return;
 
-                const dRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(dropoff)}&format=json&limit=1`);
-                const dData = await dRes.json();
-                if (!dData || dData.length === 0) return;
-
-                const url = `https://router.project-osrm.org/route/v1/driving/${pData[0].lon},${pData[0].lat};${dData[0].lon},${dData[0].lat}?overview=false`;
+                const url = `https://router.project-osrm.org/route/v1/driving/${pCoords.lon},${pCoords.lat};${dCoords.lon},${dCoords.lat}?overview=false`;
                 const rRes = await fetch(url);
                 const rData = await rRes.json();
 
                 if (rData.routes && rData.routes.length > 0 && mounted) {
-                    setDistance(`~ ${Math.round(rData.routes[0].distance / 1000)} km`);
+                    const km = Math.round(rData.routes[0].distance / 1000);
+                    const hrs = Math.round(rData.routes[0].duration / 3600);
+                    setInfo(`${km} KM · ${hrs}h`);
                 }
             } catch (e) {
                 console.log(e);
@@ -54,14 +69,16 @@ const DistanceDisplay = ({ pickup, dropoff, color }: { pickup?: string, dropoff?
         return () => { mounted = false; };
     }, [pickup, dropoff]);
 
-    return <Text style={{ fontSize: 8, color: color, marginBottom: 2 }}>{distance}</Text>;
+    return <Text style={{ fontSize: 8, color: color, marginBottom: 2 }}>{info}</Text>;
 };
 
 interface TripsScreenProps {
     isParcelMode?: boolean;
+    isParcelHistory?: boolean;
+    title?: string;
 }
 
-const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode }) => {
+const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory, title }) => {
     const { colors, isDark } = useTheme();
     const { user, token, logout } = useAuth();
     const { t } = useLanguage();
@@ -71,15 +88,43 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode }) => {
 
     const isDriver = user?.role === 'driver';
 
+    const fetchData = React.useCallback(async () => {
+        try {
+            const endpoint = isDriver ? '/api/rides/recent?role=driver' : '/api/rides/bookings';
+            const response = await apiRequest(endpoint, {}, logout);
+            if (response.ok) {
+                let data = await response.json() || [];
+
+                // If this is the "History" tab in parcel mode, filter for parcels only
+                if (isParcelHistory || title === t('tab.history')) {
+                    data = data.filter((b: any) => b.type === 'parcel' || b.ride?.type === 'parcel');
+                }
+
+                setBookings(data);
+            }
+        } catch (err) {
+            console.error('Fetch error:', err);
+        } finally {
+            setLoading(false);
+        }
+    }, [isDriver, isParcelHistory, title, t, logout]);
+
     useEffect(() => {
         fetchData();
         const interval = setInterval(fetchData, 5000); // Polling for real-time updates
         return () => clearInterval(interval);
-    }, [isDriver]);
+    }, [fetchData]);
+
+    // For driver, auto-expand if there's only one active ride
+    useEffect(() => {
+        if (isDriver && bookings && bookings.length === 1 && !expandedRideId) {
+            setExpandedRideId(bookings[0].id);
+        }
+    }, [isDriver, bookings, expandedRideId]);
 
     // Start GPS tracking for driver
     useEffect(() => {
-        if (isDriver && user?.id && bookings.length > 0) {
+        if (isDriver && user?.id && bookings && bookings.length > 0) {
             // Find the most relevant active ride (available and has bookings)
             const activeRide = bookings.find(b => b.status === 'available');
             if (activeRide) {
@@ -89,24 +134,6 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode }) => {
         }
     }, [isDriver, bookings, user?.id]);
 
-    const fetchData = async () => {
-        try {
-            const endpoint = isDriver ? '/api/rides/recent' : '/api/rides/bookings';
-            const response = await apiRequest(endpoint, {}, logout);
-            if (response.ok) {
-                const data = await response.json();
-                setBookings(data || []);
-                // For driver, auto-expand if there's only one active ride
-                if (isDriver && data && data.length === 1 && !expandedRideId) {
-                    setExpandedRideId(data[0].id);
-                }
-            }
-        } catch (err) {
-            console.error('Fetch error:', err);
-        } finally {
-            setLoading(false);
-        }
-    };
     const handleCompleteTrip = async (rideId: string) => {
         try {
             const response = await apiRequest(`/api/rides/${rideId}/complete`, {
@@ -141,9 +168,28 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode }) => {
         }
     };
 
+    const handleToggleBlockSeat = async (rideId: string, seatIndex: number) => {
+        try {
+            const response = await apiRequest(`/api/rides/${rideId}/block-seat`, {
+                method: 'POST',
+                body: JSON.stringify({ seatIndex }),
+            }, logout);
+
+            if (response.ok) {
+                fetchData(); // Refresh to show new state
+            } else {
+                const data = await response.json();
+                Alert.alert(t('common.error'), data.error || 'Failed to toggle seat');
+            }
+        } catch (err) {
+            console.error('Toggle block error:', err);
+        }
+    };
+
     const renderRequestItem = ({ item }: { item: any }) => {
         const isExpanded = expandedRideId === item.id;
-        const isCompleted = isDriver && item.status === 'completed';
+        const isParcel = item.type === 'parcel';
+        const isCompleted = (isDriver && item.status === 'completed') || item.status === 'completed';
         const cardBgColor = isCompleted ? (isDark ? '#1C2939' : '#F5F5F5') : colors.cardColor;
         const cardOpacity = isCompleted ? 0.7 : 1;
 
@@ -151,7 +197,9 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode }) => {
             <View style={[styles.card, { backgroundColor: cardBgColor, borderColor: colors.borderColor, opacity: cardOpacity }]}>
                 <View style={styles.cardHeader}>
                     <Text style={[styles.requestTitle, { color: colors.textColor }]}>
-                        {isDriver ? `${t('trips.rideTo')} ${item.dropoff}` : `${t('trips.bookingFor')} ${item.ride?.vehicleModel || 'SUV'}`}
+                        {isParcel
+                            ? `Parcel to ${item.ride?.dropoff || item.dropoff || 'Recipient'}`
+                            : (isDriver ? `${t('trips.rideTo')} ${item.dropoff}` : `${t('trips.bookingFor')} ${item.ride?.vehicleModel || 'SUV'}`)}
                     </Text>
                     <Text style={[styles.statusTag, { color: isCompleted ? '#4CAF50' : colors.primary, backgroundColor: isCompleted ? 'rgba(76, 175, 80, 0.1)' : 'rgba(91, 79, 255, 0.1)' }]}>
                         {isCompleted ? 'COMPLETED' : t(`requests.${item.status || 'pending'}`).toUpperCase()}
@@ -160,8 +208,12 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode }) => {
 
                 <View style={styles.details}>
                     <Text style={[styles.detailText, { color: colors.subtextColor }]}>
-                        {isDriver ? `${t('book.pickup')}: ${item.pickup}` : `${t('book.pickup')}: ${item.ride?.pickup} ${t('home.from').toLowerCase()} ${item.ride?.dropoff}`}
+                        {t('book.pickup')}: {isDriver ? item.pickup : item.ride?.pickup}
                     </Text>
+                    <Text style={[styles.detailText, { color: colors.subtextColor }]}>
+                        {t('book.dropoff') || 'Dropoff'}: {isDriver ? item.dropoff : item.ride?.dropoff}
+                    </Text>
+
                     <View style={styles.dateTimeRow}>
                         <Icon name="calendar-outline" size={14} color={colors.textColor} style={styles.dateTimeIcon} />
                         <Text style={[styles.dateTimeText, { color: colors.textColor }]}>
@@ -173,14 +225,22 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode }) => {
                             {isDriver ? item.departureTime : item.ride?.departureTime}
                         </Text>
                     </View>
-                    <Text style={{ fontSize: 11, color: colors.subtextColor, marginTop: 4, fontStyle: 'italic' }}>
-                        {isDriver ? t('trips.postedOn') : t('trips.bookedOn')}
-                        {new Date(item.createdAt).toLocaleDateString()} at {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </Text>
-                    <View style={{ height: 8 }} />
-                    <Text style={[styles.detailText, { color: colors.subtextColor }]}>
-                        {isDriver ? `${t('trips.seatsBooked')}: ${item.seatsBooked || 0} / ${item.seatsTotal}` : `${t('trips.seatsRequested')}: ${item.seatsRequested}`}
-                    </Text>
+
+                    {isParcel ? (
+                        <>
+                            <View style={{ height: 8 }} />
+                            <Text style={[styles.detailText, { color: colors.textColor, fontWeight: 'bold' }]}>
+                                Recipient: {item.recipientName || 'N/A'}
+                            </Text>
+                            <Text style={[styles.detailText, { color: colors.subtextColor }]}>
+                                Size: {item.parcelSize || 'Standard'}
+                            </Text>
+                        </>
+                    ) : (
+                        <Text style={[styles.detailText, { color: colors.subtextColor }]}>
+                            {isDriver ? `${t('trips.seatsBooked')}: ${item.seatsBooked || 0} / ${item.seatsTotal}` : `${t('trips.seatsRequested')}: ${item.seatsRequested}`}
+                        </Text>
+                    )}
                     {item.roofCarrier && <Text style={[styles.detailText, { color: colors.subtextColor }]}>• {t('trips.needsRoofCarrier')}</Text>}
                 </View>
 
@@ -194,8 +254,8 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode }) => {
                     </TouchableOpacity>
                 )}
 
-                {/* For Passengers - Always show or add a button */}
-                {!isDriver && (
+                {/* For Passengers - Always show or add a button (Only for non-parcels) */}
+                {!isDriver && !isParcel && !isParcelHistory && (
                     <View style={{ marginTop: 10 }}>
                         <JeepLayout
                             interactive={false}
@@ -338,8 +398,13 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode }) => {
                 {isExpanded && isDriver && (
                     <View style={{ marginTop: 20 }}>
                         <JeepLayout
-                            interactive={false}
-                            takenSeats={item.acceptedSeats?.filter((s: number) => !item.completedSeats?.includes(s)) || []}
+                            interactive={!isCompleted}
+                            onSeatDoublePress={(seatIdx) => {
+                                if (!isCompleted) {
+                                    handleToggleBlockSeat(item.id, seatIdx);
+                                }
+                            }}
+                            takenSeats={item.takenSeats || []}
                             completedSeats={item.completedSeats || []}
                             pendingSeats={item.pendingSeats || []}
                             totalSeats={item.seatsTotal}
@@ -349,6 +414,13 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode }) => {
                             completedAt={item.completedAt}
                             date={item.date}
                         />
+
+                        {/* Tip for Driver */}
+                        {!isCompleted && (
+                            <Text style={{ color: colors.subtextColor, fontSize: 10, textAlign: 'center', marginTop: 10, fontStyle: 'italic' }}>
+                                Tip: Double tap a free seat to block it for offline passengers
+                            </Text>
+                        )}
 
                         {/* List of active bookings for completion */}
                         {!isCompleted && item.bookings && item.bookings.length > 0 && (
@@ -421,7 +493,7 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode }) => {
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
             <Text style={[styles.title, { color: colors.textColor }]}>
-                {isDriver ? t('trips.myRides') : t('trips.myBookings')}
+                {title || (isDriver ? t('trips.myRides') : t('trips.myBookings'))}
             </Text>
 
             {loading ? (
@@ -434,7 +506,7 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode }) => {
                     contentContainerStyle={styles.list}
                     ListEmptyComponent={
                         <Text style={[styles.empty, { color: colors.subtextColor }]}>
-                            {isDriver ? t('trips.noPublished') : t('trips.noTrips')}
+                            {isParcelHistory || title === t('tab.history') ? t('trips.noHistory') : (isDriver ? t('trips.noPublished') : t('trips.noTrips'))}
                         </Text>
                     }
                 />

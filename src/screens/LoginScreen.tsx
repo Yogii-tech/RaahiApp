@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -10,11 +10,13 @@ import {
     Alert,
     ActivityIndicator,
     ScrollView,
+    Dimensions,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
-import { API_BASE } from '../config/api';
+import { API_BASE } from '../apiConfig';
+import Icon from 'react-native-vector-icons/Ionicons';
 
 interface LoginScreenProps {
     onAuthenticated: () => void;
@@ -24,7 +26,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
     const [phoneNumber, setPhoneNumber] = useState('');
     const [otp, setOtp] = useState('');
     const [name, setName] = useState('');
-    const [step, setStep] = useState<'phone' | 'otp' | 'name' | 'role' | 'vehicle' | 'admin_phone' | 'admin_otp' | 'admin_secret'>('phone');
+    const [step, setStep] = useState<'phone' | 'otp' | 'name' | 'consent' | 'role' | 'vehicle' | 'admin_phone' | 'admin_otp' | 'admin_secret'>('phone');
+    const [consentChecked, setConsentChecked] = useState(false);
     const [adminSecretKey, setAdminSecretKey] = useState('');
     const [adminTempToken, setAdminTempToken] = useState<string | null>(null);
     const [adminTempUser, setAdminTempUser] = useState<any | null>(null);
@@ -171,7 +174,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 } else {
                     // Has name but no role
                     setName(data.user.name);
-                    setStep('role');
+                    setStep('consent');
                 }
             } else {
                 await setAuth(data.token, data.refresh_token, data.user);
@@ -189,7 +192,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
             Alert.alert(t('common.error'), t('login.enterNameError'));
             return;
         }
-        setStep('role');
+        setStep('consent');
     };
 
     const handleRoleSelect = (role: 'passenger' | 'driver' | 'parceller') => {
@@ -315,7 +318,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                     {step === 'name' ? t('login.enterName') :
                         step === 'role' ? t('login.chooseRole') :
                             step === 'vehicle' ? t('login.vehicleRegistration') :
-                                t('login.moveFreely')}
+                                step === 'consent' ? 'User Consent' :
+                                    t('login.moveFreely')}
                 </Text>
 
                 <View style={styles.spacer16} />
@@ -327,7 +331,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                             ? t('login.howUseRaahi')
                             : step === 'vehicle'
                                 ? ''
-                                : t('login.localTrusted')}
+                                : step === 'consent'
+                                    ? 'Please review our terms of use'
+                                    : t('login.localTrusted')}
                 </Text>
 
                 <View style={styles.spacer40} />
@@ -458,17 +464,67 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                                 <Text style={[styles.roleDesc, { color: colors.subtextColor }]}>{t('login.provideLocal')}</Text>
                             </View>
                         </TouchableOpacity>
+                    </View>
+                )}
 
-                        <View style={styles.spacer16} />
+                {step === 'consent' && (
+                    <View style={styles.consentContainer}>
+                        <ScrollView style={[styles.consentBox, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}>
+                            <Text style={[styles.consentTitle, { color: colors.textColor }]}>
+                                GORAAHI USER CONSENT & ACKNOWLEDGEMENT
+                            </Text>
+                            <Text style={[styles.consentIntro, { color: colors.textColor }]}>
+                                By selecting the checkbox and continuing to use GoRaahi, I acknowledge and agree that:
+                            </Text>
+                            {[
+                                "I am at least 18 years old and legally capable of entering into a binding agreement.",
+                                "I have read and understood GoRaahi’s Terms & Conditions and Privacy Policy.",
+                                "I understand that GoRaahi operates as a technology platform that connects passengers with independent drivers and transport operators.",
+                                "I understand that GoRaahi does not currently own, operate, or control transportation vehicles unless specifically stated otherwise.",
+                                "I agree to provide accurate and complete information during registration and booking.",
+                                "I understand that fare estimates may vary based on route, demand, weather conditions, tolls, taxes, operator charges, or other applicable fees.",
+                                "I understand that transportation services are provided by independent drivers and operators who remain responsible for maintaining valid licences, permits, registrations, insurance, and legal compliance.",
+                                "I understand that travel in mountainous and remote regions may involve additional risks, including weather disruptions, road closures, landslides, mechanical failures, communication outages, and delays.",
+                                "I agree to follow all safety instructions provided by drivers, operators, authorities, or GoRaahi.",
+                                "I consent to the collection, processing, storage, and sharing of my personal information as described in the Privacy Policy.",
+                                "I consent to the use of my location information where necessary for booking, route management, safety, customer support, fraud prevention, and service improvement.",
+                                "I understand that GoRaahi may contact me through phone calls, SMS, WhatsApp, email, push notifications, or other communication channels regarding my bookings, account activity, safety notifications, and support requests.",
+                                "I understand that refunds and cancellations are subject to GoRaahi’s published Cancellation and Refund Policy.",
+                                "I agree not to engage in fraudulent, abusive, unlawful, threatening, discriminatory, or harmful conduct while using the platform.",
+                                "I understand that violation of platform policies may result in suspension or termination of my account.",
+                                "I acknowledge that GoRaahi may cooperate with law enforcement authorities and government agencies when legally required.",
+                                "I understand that GoRaahi may update its policies from time to time and that continued use of the platform may constitute acceptance of revised policies.",
+                                "I voluntarily consent to these terms and wish to continue using the GoRaahi platform."
+                            ].map((point, index) => (
+                                <View key={index} style={styles.consentPoint}>
+                                    <Text style={[styles.consentPointText, { color: colors.subtextColor }]}>
+                                        {index + 1}. {point}
+                                    </Text>
+                                </View>
+                            ))}
+                        </ScrollView>
 
                         <TouchableOpacity
-                            style={[styles.roleCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}
-                            onPress={() => handleRoleSelect('parceller')}>
-                            <Text style={styles.roleEmoji}>📦</Text>
-                            <View style={styles.roleInfo}>
-                                <Text style={[styles.roleLabel, { color: colors.textColor }]}>{t('login.iAmParceller')}</Text>
-                                <Text style={[styles.roleDesc, { color: colors.subtextColor }]}>{t('login.shipGoods')}</Text>
+                            style={styles.checkboxContainer}
+                            onPress={() => setConsentChecked(!consentChecked)}
+                            activeOpacity={0.8}>
+                            <View style={[styles.checkbox, { borderColor: colors.primary, backgroundColor: consentChecked ? colors.primary : 'transparent' }]}>
+                                {consentChecked && <Icon name="checkmark" size={14} color="#FFF" />}
                             </View>
+                            <Text style={[styles.checkboxLabel, { color: colors.textColor }]}>
+                                I voluntarily consent to these terms and wish to continue using the GoRaahi platform.
+                            </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={[styles.button, { backgroundColor: colors.primary }, !consentChecked && styles.buttonDisabled]}
+                            onPress={() => setStep('role')}
+                            disabled={!consentChecked}>
+                            <Text style={styles.buttonText}>{t('login.continue')}</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity onPress={() => setStep('name')} style={styles.backButton}>
+                            <Text style={[styles.switchText, { color: colors.primary }]}>{t('common.back')}</Text>
                         </TouchableOpacity>
                     </View>
                 )}
@@ -573,9 +629,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                                 <TouchableOpacity
                                     style={[styles.uploadButton, { borderColor: colors.borderColor, backgroundColor: colors.inputFillColor }]}
                                     onPress={() => handleFileUpload(doc.key as any)}>
-                                    <Text style={[styles.uploadButtonText, { color: colors.textColor }]}>
-                                        {(vehicleDocs as any)[doc.key] ? `✅ ${t('login.uploadSuccess')}${(vehicleDocs as any)[doc.key].substring(0, 15)}...` : t(doc.label as any)}
-                                    </Text>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', width: '100%', justifyContent: 'center' }}>
+                                        <Text style={[styles.uploadButtonText, { color: colors.textColor, textAlign: 'center', flex: 1 }]}>
+                                            {(vehicleDocs as any)[doc.key] ? `${t('login.uploadSuccess')}${(vehicleDocs as any)[doc.key].split('/').pop()?.substring(0, 20)}...` : t(doc.label as any)}
+                                        </Text>
+                                        {(vehicleDocs as any)[doc.key] && (
+                                            <Text style={{ fontSize: 18, position: 'absolute', right: 0 }}>✅</Text>
+                                        )}
+                                    </View>
                                 </TouchableOpacity>
                                 {doc.hint && !(vehicleDocs as any)[doc.key] && (
                                     <Text style={[styles.docHint, { color: colors.subtextColor }]}>{t(doc.hint as any)}</Text>
@@ -603,7 +664,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                     </View>
                 )}
 
-                {/* ── Admin login flow ── */}
+                {/* --- Admin login flow --- */}
                 {step === 'admin_phone' && (
                     <>
                         <View style={[styles.adminBanner, { backgroundColor: '#0F2A1E', borderColor: '#1FAF63' }]}>
@@ -693,6 +754,13 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 </Text>
 
                 {/* Admin access link — small but readable */}
+                <TouchableOpacity
+                    onPress={() => setStep('admin_phone')}
+                    style={styles.adminAccessButton}>
+                    <Text style={{ fontSize: 11, color: colors.subtextColor, opacity: 0.5, letterSpacing: 1 }}>
+                        admin access
+                    </Text>
+                </TouchableOpacity>
 
             </View>
         </KeyboardAvoidingView>
@@ -854,6 +922,54 @@ const styles = StyleSheet.create({
         alignSelf: 'center',
         marginTop: 8,
         padding: 8,
+    },
+    consentContainer: {
+        flex: 1,
+        width: '100%',
+    },
+    consentBox: {
+        maxHeight: 300,
+        borderWidth: 1,
+        borderRadius: 12,
+        padding: 16,
+        marginBottom: 20,
+    },
+    consentTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        marginBottom: 12,
+        textAlign: 'center',
+    },
+    consentIntro: {
+        fontSize: 13,
+        fontWeight: '600',
+        marginBottom: 12,
+    },
+    consentPoint: {
+        marginBottom: 10,
+    },
+    consentPointText: {
+        fontSize: 12,
+        lineHeight: 18,
+    },
+    checkboxContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 24,
+    },
+    checkbox: {
+        width: 22,
+        height: 22,
+        borderRadius: 6,
+        borderWidth: 2,
+        marginRight: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    checkboxLabel: {
+        flex: 1,
+        fontSize: 13,
+        fontWeight: '500',
     },
 });
 

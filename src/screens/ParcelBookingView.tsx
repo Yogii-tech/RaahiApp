@@ -33,7 +33,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
     const { t } = useLanguage();
     const { token } = useAuth();
     const { width } = useWindowDimensions();
-    
+
     // Step state
     const [step, setStep] = useState<'search' | 'rides' | 'details' | 'calculator'>('search');
     const [loading, setLoading] = useState(false);
@@ -100,7 +100,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
         // Use real road distance if fetched, otherwise fallback to estimates
         const distance = roadDistance !== null ? roadDistance : 35;
         const durationHours = roadDuration !== null ? roadDuration : Math.ceil(distance / 30) + 1;
-        
+
         // Calculate Arrival Time
         let arrivalTime = '—';
         if (depTime) {
@@ -110,11 +110,11 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                 let [hours, minutes] = time.split(':').map(Number);
                 if (period === 'PM' && hours !== 12) hours += 12;
                 if (period === 'AM' && hours === 12) hours = 0;
-                
+
                 const depDate = new Date();
                 depDate.setHours(hours, minutes, 0, 0);
                 const arrDate = new Date(depDate.getTime() + durationHours * 60 * 60 * 1000);
-                
+
                 let arrHours = arrDate.getHours();
                 const arrMinutes = String(arrDate.getMinutes()).padStart(2, '0');
                 const arrPeriod = arrHours >= 12 ? 'PM' : 'AM';
@@ -202,7 +202,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
             Alert.alert(t('common.error'), 'Please fill in all required recipient details.');
             return;
         }
-        
+
         // After filling details, we now search for vehicles
         await fetchAvailableRides();
     };
@@ -217,7 +217,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
             console.error("No ride selected for booking");
             return;
         }
-        
+
         const stats = getTravelStats(pickup, dropoff, selectedRide.departureTime);
         const distNum = parseInt(stats.distance) || 0;
         const rate = selectedSize === 'small' ? 2 : selectedSize === 'medium' ? 2.5 : 3;
@@ -263,9 +263,9 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
             if (response.ok) {
                 const data = await response.json();
                 const displayId = data.bookingId ? `RA-P-${data.bookingId.slice(-4).toUpperCase()}` : 'Booked';
-                
+
                 Alert.alert(
-                    t('common.success'), 
+                    t('common.success'),
                     `Your parcel was successfully scheduled!\n\nBooking ID: ${displayId}\n\nYou can track this in your notifications.`,
                     [{ text: 'OK', onPress: () => onBack && onBack() }]
                 );
@@ -341,7 +341,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
 
                 <View style={styles.spacer40} />
 
-                <TouchableOpacity 
+                <TouchableOpacity
                     style={[styles.scheduleButton, { backgroundColor: colors.primary, zIndex: 9999 }, loading && { opacity: 0.7 }]}
                     onPress={() => {
                         console.log("OnPress Fired!");
@@ -458,7 +458,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
             {/* Photo Upload */}
             <Text style={[styles.fieldLabel, { color: colors.subtextColor }]}>{t('parcel.photoTitle')}</Text>
             <View style={styles.spacer12} />
-            <TouchableOpacity 
+            <TouchableOpacity
                 style={[styles.photoBox, { borderColor: colors.primary, backgroundColor: colors.inputFillColor }]}
                 onPress={handlePhotoUpload}
                 disabled={loading}>
@@ -477,7 +477,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
 
             <View style={styles.spacer40} />
 
-            <TouchableOpacity 
+            <TouchableOpacity
                 style={[styles.scheduleButton, { backgroundColor: colors.primary }, loading && { opacity: 0.7 }]}
                 onPress={handleConfirmDetails}
                 disabled={loading}>
@@ -515,7 +515,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                 <View style={{ alignItems: 'center', marginTop: 40 }}>
                     <Icon name="car-outline" size={64} color={colors.borderColor} />
                     <Text style={{ color: colors.subtextColor, marginTop: 16, fontSize: 16 }}>No vehicles available for this route.</Text>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         style={{ marginTop: 24, padding: 12 }}
                         onPress={() => setStep('search')}>
                         <Text style={{ color: colors.primary, fontWeight: 'bold' }}>GO BACK & CHANGE DETAILS</Text>
@@ -616,32 +616,34 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                     </Text>
 
                     <View style={styles.spacer24} />
-                    
+
                     {/* Step 1 Search UI - Existing */}
-                    <View style={[styles.inputCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}>
-                    <LocationInput
-                        label={t('parcel.pickupLabel')}
-                        value={pickup}
-                        onChangeText={setPickup}
-                        onSelect={(res) => {
-                            setPickup(res.display_name);
-                            setPickupCoords([parseFloat(res.lat), parseFloat(res.lon)]);
-                        }}
-                        labelColor={pickupLabelColor}
-                    />
-                    
-                    <View style={styles.spacer14} />
-                    
-                    <LocationInput
-                        label={t('parcel.dropoffLabel')}
-                        value={dropoff}
-                        onChangeText={setDropoff}
-                        onSelect={(res) => {
-                            setDropoff(res.display_name);
-                            setDropoffCoords([parseFloat(res.lat), parseFloat(res.lon)]);
-                        }}
-                        labelColor={dropoffLabelColor}
-                    />
+                    <View style={[styles.inputCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor, zIndex: 10 }]}>
+                        <LocationInput
+                            label={t('parcel.pickupLabel')}
+                            value={pickup}
+                            onChangeText={setPickup}
+                            onSelect={(res) => {
+                                setPickup(res.display_name);
+                                setPickupCoords([parseFloat(res.lat), parseFloat(res.lon)]);
+                            }}
+                            labelColor={pickupLabelColor}
+                            containerZIndex={3000}
+                        />
+
+                        <View style={styles.spacer14} />
+
+                        <LocationInput
+                            label={t('parcel.dropoffLabel')}
+                            value={dropoff}
+                            onChangeText={setDropoff}
+                            onSelect={(res) => {
+                                setDropoff(res.display_name);
+                                setDropoffCoords([parseFloat(res.lat), parseFloat(res.lon)]);
+                            }}
+                            labelColor={dropoffLabelColor}
+                            containerZIndex={2000}
+                        />
 
                         <View style={styles.spacer14} />
 
@@ -686,10 +688,10 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                                     }
                                 ]}
                                 onPress={() => setSelectedSize(size.id as any)}>
-                                <Icon 
-                                    name={size.icon} 
-                                    size={28} 
-                                    color={selectedSize === size.id ? colors.primary : (isDark ? '#FF4081' : colors.primary)} 
+                                <Icon
+                                    name={size.icon}
+                                    size={28}
+                                    color={selectedSize === size.id ? colors.primary : (isDark ? '#FF4081' : colors.primary)}
                                     style={styles.sizeIcon}
                                 />
                                 <Text style={[styles.sizeLabel, { color: selectedSize === size.id ? colors.primary : colors.textColor }]}>
@@ -704,7 +706,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
 
                     <View style={{ height: 40 }} />
 
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         style={[styles.scheduleButton, { backgroundColor: colors.primary }]}
                         activeOpacity={0.8}
                         onPress={async () => {
@@ -743,7 +745,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                                 } catch (e) {
                                     console.error('Failed to geocode or fetch route:', e);
                                 }
-                                
+
                                 setLoading(false);
                                 setStep('details');
                             } else {
@@ -816,7 +818,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                                 const isToday = day === current.getDate() && calendarMonth === current.getMonth() && calendarYear === current.getFullYear();
                                 const formattedDay = `${day < 10 ? '0' : ''}${day}/${calendarMonth + 1 < 10 ? '0' : ''}${calendarMonth + 1}/${calendarYear}`;
                                 const isSelected = selectedDate === formattedDay;
-                                
+
                                 const cellDate = new Date(calendarYear, calendarMonth, day);
                                 const todayDate = new Date(current.getFullYear(), current.getMonth(), current.getDate());
                                 const isPast = cellDate < todayDate;
