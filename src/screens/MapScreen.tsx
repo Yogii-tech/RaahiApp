@@ -14,12 +14,12 @@ const MapScreen: React.FC = () => {
     const params = route.params;
 
     return (
-        <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
             <View style={styles.mapContainer}>
                 {/* Embed the React DOM component directly since this is the .web entry or we are running on web */}
                 <ModernMapApp initialParams={params} />
             </View>
-        </SafeAreaView>
+        </View>
     );
 };
 

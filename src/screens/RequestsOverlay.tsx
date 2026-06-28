@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { API_BASE } from '../config/api';
+import { API_BASE } from '../apiConfig';
 import { useLanguage } from '../context/LanguageContext';
 import JeepLayout from '../components/JeepLayout';
 import { apiRequest } from '../utils/api';
@@ -122,8 +122,8 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
                                     takenSeats={item.status === 'accepted' ? (item.seatLayout || []) : []}
                                     pendingSeats={item.status === 'pending' ? (item.seatLayout || []) : []}
                                     numSeatsRequested={item.seatsRequested}
-                                    totalSeats={item.ride?.seatsTotal}
-                                    layoutType={item.ride?.seatingLayout || 'suv'}
+                                    totalSeats={item.ride?.seatsTotal || user?.vehicle?.seats || 4}
+                                    layoutType={item.ride?.seatingLayout || user?.vehicle?.seating_layout || 'sedan'}
                                 />
                             </View>
                         )}

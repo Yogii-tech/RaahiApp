@@ -1,9 +1,18 @@
-/**
- * Raahi App - React Native
- * Converted from Flutter/Dart codebase
- */
-
 import React, { useState, useEffect } from 'react';
+import * as Sentry from "@sentry/react-native";
+
+Sentry.init({
+  dsn: "https://08643806a6b5a3818e9508d0b2849b38@o4508492061245440.ingest.us.sentry.io/4508492067799040",
+  // Set tracesSampleRate to 1.0 to capture 100% of transactions for performance monitoring.
+  // We recommend adjusting this value in production.
+  tracesSampleRate: 1.0,
+  _experiments: {
+    // profilesSampleRate is relative to tracesSampleRate.
+    // Setting this to 1.0 will profile 100% of transactions.
+    profilesSampleRate: 1.0,
+  },
+});
+
 import {
   StatusBar,
   View,
@@ -34,6 +43,7 @@ import AccountScreen from './src/screens/AccountScreen';
 import MapScreen from './src/screens/MapScreen';
 import ChatScreen from './src/screens/ChatScreen';
 import Icon from 'react-native-vector-icons/Ionicons';
+import WelcomeScreen from './src/screens/WelcomeScreen';
 
 const linking = {
   prefixes: ['http://localhost:3000', 'raahi://'],
@@ -73,7 +83,7 @@ function AppHeader({ onToggleNotifications, notificationCount = 0 }: { onToggleN
         />
       </View>
       <Text style={[headerStyles.title, { color: colors.primary }]}>
-        Go Raahi
+        GoRaahi
       </Text>
 
       <View style={headerStyles.spacer} />
@@ -205,6 +215,7 @@ const tabIcons: Record<string, { default: string; focused: string }> = {
   Trips: { default: 'car-sport-outline', focused: 'car-sport' },
   ParcelTrips: { default: 'cube-outline', focused: 'cube' },
   Map: { default: 'map-outline', focused: 'map' },
+  History: { default: 'time-outline', focused: 'time' },
   Account: { default: 'person-outline', focused: 'person' },
 };
 
@@ -217,6 +228,7 @@ function MainTabs() {
   const [notificationCount, setNotificationCount] = useState(0);
   const [activeChat, setActiveChat] = useState<any>(null);
   const [parcelMode, setParcelMode] = useState(false);
+  const [currentRoute, setCurrentRoute] = useState('Home');
   const insets = useSafeAreaInsets();
 
   const isDriver = user?.role === 'driver';
@@ -264,21 +276,39 @@ function MainTabs() {
 
   return (
     <View style={{ flex: 1 }}>
-      <AppHeader
-        notificationCount={notificationCount}
-        onToggleNotifications={() => {
-          const newState = !notificationsVisible;
-          setNotificationsVisible(newState);
-          if (newState) handleMarkViewed();
-        }}
-      />
+      {currentRoute !== 'Map' && (
+        <AppHeader
+          notificationCount={notificationCount}
+          onToggleNotifications={() => {
+            const newState = !notificationsVisible;
+            setNotificationsVisible(newState);
+            if (newState) handleMarkViewed();
+          }}
+        />
+      )}
 
       <Tab.Navigator
+        screenListeners={{
+          state: (e) => {
+            const route = e.data.state.routes[e.data.state.index];
+            setCurrentRoute(route.name);
+          },
+        }}
         screenOptions={({ route }) => ({
           headerShown: false,
           tabBarIcon: ({ focused }) => {
-            const isParcel = route.name === 'Trips' && (user?.role === 'parceller' || parcelMode);
-            const icon = isParcel ? tabIcons.ParcelTrips : tabIcons[route.name];
+            const isParcelMode = user?.role === 'parceller' || parcelMode;
+            const isParcelTrips = route.name === 'Trips' && isParcelMode;
+
+            let icon;
+            if (isParcelTrips) {
+              icon = tabIcons.ParcelTrips;
+            } else if (route.name === 'Map' && isParcelMode) {
+              icon = tabIcons.History;
+            } else {
+              icon = tabIcons[route.name];
+            }
+
             return (
               <View>
                 <Icon
@@ -310,8 +340,14 @@ function MainTabs() {
         />
         <Tab.Screen
           name="Map"
-          component={MapScreen}
-          options={{ title: t('tab.map') }}
+          children={(props) => {
+            const isParcel = user?.role === 'parceller' || parcelMode;
+            if (isParcel) {
+              return <TripsScreen {...props} isParcelMode={false} isParcelHistory={true} title={t('tab.history')} />;
+            }
+            return <MapScreen />;
+          }}
+          options={{ title: (user?.role === 'parceller' || parcelMode) ? t('tab.history') : t('tab.map') }}
         />
         <Tab.Screen
           name="Account"
@@ -367,18 +403,29 @@ function SosScreenTab() {
 const tabStyles = StyleSheet.create({
   tabIcon: { fontSize: 22 },
   tabIconFocused: { fontSize: 24 },
+  sosPlaceholder: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  }
 });
 
 function RootApp() {
   const { isAuthenticated, user, isInitialLoading } = useAuth();
   const { isDark } = useTheme();
+  const [welcomeDone, setWelcomeDone] = useState(false);
 
   if (isInitialLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <Text style={{ color: '#fff' }}>Loading Go Raahi...</Text>
+        <WelcomeScreen onGetStarted={() => { }} />
       </View>
     );
+  }
+
+  if (!isAuthenticated && !welcomeDone) {
+    return <WelcomeScreen onGetStarted={() => setWelcomeDone(true)} />;
   }
 
   if (!isAuthenticated) {
@@ -426,4 +473,4 @@ function App() {
   );
 }
 
-export default App;
+export default Sentry.wrap(App);

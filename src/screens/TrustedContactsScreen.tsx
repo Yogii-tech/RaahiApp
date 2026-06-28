@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { API_BASE } from '../config/api';
+import { API_BASE } from '../apiConfig';
 import { useLanguage } from '../context/LanguageContext';
 
 interface Contact {

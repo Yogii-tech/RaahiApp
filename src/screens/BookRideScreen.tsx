@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { API_BASE } from '../config/api';
+import { API_BASE } from '../apiConfig';
 import JeepLayout from '../components/JeepLayout';
 import { useLanguage } from '../context/LanguageContext';
 import { apiRequest } from '../utils/api';
@@ -27,12 +27,18 @@ interface BookRideScreenProps {
         takenSeats?: number[];
         date?: string;
         departureTime?: string;
+        segmentPricePerSeat?: number;
+        segmentDistanceKm?: number;
+        matchedPickup?: string;
+        matchedDropoff?: string;
     };
+    searchPickup?: string;
+    searchDropoff?: string;
     onBack: () => void;
     onBookingComplete: () => void;
 }
 
-const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, onBack, onBookingComplete }) => {
+const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, searchPickup, searchDropoff, onBack, onBookingComplete }) => {
     const { colors, isDark } = useTheme();
     const { token, logout } = useAuth();
     const { t } = useLanguage();
@@ -51,7 +57,15 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, onBa
 
     const fetchRideDetails = async () => {
         try {
-            const response = await apiRequest(`/api/rides/${initialRide.id}`, {}, logout);
+            let url = `/api/rides/${initialRide.id}`;
+            const queryParams = [];
+            if (searchPickup) queryParams.push(`pickup=${encodeURIComponent(searchPickup)}`);
+            if (searchDropoff) queryParams.push(`dropoff=${encodeURIComponent(searchDropoff)}`);
+            if (queryParams.length > 0) {
+                url += `?${queryParams.join('&')}`;
+            }
+
+            const response = await apiRequest(url, {}, logout);
             if (response.ok) {
                 const data = await response.json();
                 setRide(data);
@@ -83,6 +97,8 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, onBa
             const response = await apiRequest(`/api/rides/${ride.id}/book`, {
                 method: 'POST',
                 body: JSON.stringify({
+                    pickup: searchPickup || '',
+                    dropoff: searchDropoff || '',
                     seatsRequested: selectedSeats.length,
                     seatLayout: selectedSeats,
                     roofCarrier,
@@ -148,7 +164,7 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, onBa
                     onPress={handleBook}
                     disabled={loading}>
                     <Text style={styles.bookBtnText}>
-                        {loading ? t('book.processing') : `${t('book.confirmBooking')} (₹ ${ride.pricePerSeat * selectedSeats.length})`}
+                        {loading ? t('book.processing') : `${t('book.confirmBooking')} (₹ ${Math.round((ride.segmentPricePerSeat || ride.pricePerSeat) * selectedSeats.length)})`}
                     </Text>
                 </TouchableOpacity>
             </View>
