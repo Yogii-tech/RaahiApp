@@ -2,14 +2,12 @@ import React, { useState, useEffect } from 'react';
 import * as Sentry from "@sentry/react-native";
 
 Sentry.init({
-  dsn: "https://08643806a6b5a3818e9508d0b2849b38@o4508492061245440.ingest.us.sentry.io/4508492067799040",
-  // Set tracesSampleRate to 1.0 to capture 100% of transactions for performance monitoring.
-  // We recommend adjusting this value in production.
-  tracesSampleRate: 1.0,
+  dsn: (typeof process !== 'undefined' && process.env && process.env.SENTRY_DSN) 
+    || "https://08643806a6b5a3818e9508d0b2849b38@o4508492061245440.ingest.us.sentry.io/4508492067799040",
+  // Set tracesSampleRate to 1.0 in development or 0.1 (10%) in production for performance.
+  tracesSampleRate: typeof __DEV__ !== 'undefined' && __DEV__ ? 1.0 : 0.1,
   _experiments: {
-    // profilesSampleRate is relative to tracesSampleRate.
-    // Setting this to 1.0 will profile 100% of transactions.
-    profilesSampleRate: 1.0,
+    profilesSampleRate: typeof __DEV__ !== 'undefined' && __DEV__ ? 1.0 : 0.1,
   },
 });
 

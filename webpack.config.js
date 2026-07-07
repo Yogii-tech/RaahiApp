@@ -99,6 +99,7 @@ module.exports = {
         // Metro bundler defines this automatically; webpack does not.
         new webpack.DefinePlugin({
             __DEV__: JSON.stringify(process.env.NODE_ENV !== 'production'),
+            'process.env.SENTRY_DSN': JSON.stringify(process.env.SENTRY_DSN || ''),
         }),
     ],
     devServer: {
@@ -110,7 +111,7 @@ module.exports = {
         historyApiFallback: true,
     },
     cache: false,
-    devtool: 'source-map',
+    devtool: process.env.NODE_ENV === 'production' ? 'nosources-source-map' : 'source-map',
     watchOptions: {
         ignored: ['**/node_modules', '**/android', '**/ios', '**/dist'],
     },

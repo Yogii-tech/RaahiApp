@@ -62,7 +62,7 @@ const DistanceDisplay = ({ pickup, dropoff, color }: { pickup?: string, dropoff?
                     setInfo(`${km} KM · ${hrs}h`);
                 }
             } catch (e) {
-                console.log(e);
+                // Ignore geocoding / routing network error quietly
             }
         };
         fetchDist();

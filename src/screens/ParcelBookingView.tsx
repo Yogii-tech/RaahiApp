@@ -223,12 +223,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
         const rate = selectedSize === 'small' ? 2 : selectedSize === 'medium' ? 2.5 : 3;
         const price = Math.ceil(distNum * rate);
 
-        console.log("Confirming booking:", {
-            rideId: selectedRide.id || selectedRide._id,
-            price,
-            pickup,
-            dropoff
-        });
+
 
         setLoading(true);
         try {
@@ -344,7 +339,6 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                 <TouchableOpacity
                     style={[styles.scheduleButton, { backgroundColor: colors.primary, zIndex: 9999 }, loading && { opacity: 0.7 }]}
                     onPress={() => {
-                        console.log("OnPress Fired!");
                         confirmBooking();
                     }}
                     disabled={loading}>
