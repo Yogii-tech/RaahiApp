@@ -25,6 +25,7 @@ jobs:
     - name: Build Web Application
       run: npm run build
       env:
+        NODE_ENV: production
         VITE_BACKEND_URL: https://raahi-api-137804375265.asia-south2.run.app
 
     - name: Deploy to Firebase
