@@ -78,6 +78,8 @@ module.exports = {
     resolve: {
         alias: {
             'react-native$': 'react-native-web',
+            'expo-updates': false,
+            'expo-router/build/global-state/router-store': false,
         },
         extensions: [
             '.web.tsx',
@@ -102,6 +104,12 @@ module.exports = {
         allowedHosts: 'all',
         hot: true,
         historyApiFallback: true,
+        client: {
+            overlay: {
+                errors: true,
+                warnings: false,
+            },
+        },
     },
     cache: false,
     devtool: 'source-map',
