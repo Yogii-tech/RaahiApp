@@ -51,11 +51,10 @@ const TrackPackageView: React.FC = () => {
     };
 
     const currentShipment = shipments.find(s => s.status === 'accepted' || s.status === 'pending');
-    const recentShipments = shipments.filter(s => s !== currentShipment);
 
     return (
-        <ScrollView 
-            style={[styles.container, { backgroundColor: colors.background }]} 
+        <ScrollView
+            style={[styles.container, { backgroundColor: colors.background }]}
             showsVerticalScrollIndicator={false}
             refreshControl={
                 <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
@@ -82,7 +81,6 @@ const TrackPackageView: React.FC = () => {
                     <QuickActionItem icon="receipt-outline" label="Check Rate" color="#4CAF50" isDark={isDark} colors={colors} />
                     <QuickActionItem icon="cube-outline" label="Pick Up" color="#FF9800" isDark={isDark} colors={colors} />
                     <QuickActionItem icon="location-outline" label="Drop Off" color="#2196F3" isDark={isDark} colors={colors} />
-                    <QuickActionItem icon="time-outline" label="History" color="#9C27B0" isDark={isDark} colors={colors} />
                 </View>
             </View>
 
@@ -148,27 +146,7 @@ const TrackPackageView: React.FC = () => {
                         )}
                     </View>
 
-                    {/* Recent Shipment */}
-                    <View style={styles.section}>
-                        <View style={styles.sectionHeader}>
-                            <Text style={[styles.sectionTitle, { color: colors.textColor }]}>Recent Shipment</Text>
-                        </View>
 
-                        {recentShipments.length > 0 ? (
-                            recentShipments.map((item) => (
-                                <RecentShipmentItem 
-                                    key={item.id}
-                                    id={`RA-P-${item.id.slice(-6).toUpperCase()}`} 
-                                    status={`${item.status.toUpperCase()} • ${new Date(item.createdAt).toLocaleDateString()}`} 
-                                    colors={colors} 
-                                    completed={item.status === 'completed'}
-                                    primaryColor={colors.primary} 
-                                />
-                            ))
-                        ) : (
-                            <Text style={{ color: colors.subtextColor, textAlign: 'center', marginTop: 10 }}>No recent history</Text>
-                        )}
-                    </View>
                 </>
             )}
 
@@ -206,18 +184,7 @@ const StepperLine = ({ active, dashed, colors }: { active: boolean; dashed?: boo
     ]} />
 );
 
-const RecentShipmentItem = ({ id, status, colors, completed, primaryColor }: { id: string; status: string; colors: any; completed?: boolean; primaryColor: string }) => (
-    <TouchableOpacity style={[styles.recentCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}>
-        <View style={[styles.shipmentIconContainer, { backgroundColor: completed ? 'rgba(76, 175, 80, 0.05)' : primaryColor + '10' }]}>
-             <Icon name="cube-outline" size={20} color={completed ? '#4CAF50' : primaryColor} />
-        </View>
-        <View style={styles.shipmentInfo}>
-            <Text style={[styles.shipmentId, { color: colors.textColor }]}>{id}</Text>
-            <Text style={[styles.shipmentStatus, { color: colors.subtextColor }]}>{status}</Text>
-        </View>
-        <Icon name="chevron-forward" size={18} color={colors.subtextColor} />
-    </TouchableOpacity>
-);
+
 
 const styles = StyleSheet.create({
     container: {

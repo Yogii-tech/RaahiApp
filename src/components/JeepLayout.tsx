@@ -9,6 +9,7 @@ interface JeepLayoutProps {
     takenSeats?: number[];
     pendingSeats?: number[];
     onSeatPress?: (index: number) => void;
+    onSeatDoublePress?: (index: number) => void;
     interactive?: boolean;
     numSeatsRequested?: number;
     totalSeats?: number;
@@ -26,6 +27,7 @@ const JeepLayout: React.FC<JeepLayoutProps> = ({
     takenSeats = [],
     pendingSeats = [],
     onSeatPress,
+    onSeatDoublePress,
     interactive = true,
     numSeatsRequested = 1,
     totalSeats = 9,
@@ -61,21 +63,44 @@ const JeepLayout: React.FC<JeepLayoutProps> = ({
         if (onSeatPress) onSeatPress(index);
     };
 
-    const renderSeat = (index: number) => (
-        <TouchableOpacity
-            key={`seat-${index}`}
-            style={[
-                styles.seatBox,
-                {
-                    backgroundColor: getSeatColor(index),
-                    borderColor: colors.borderColor,
-                },
-            ]}
-            onPress={() => handlePress(index)}
-            disabled={!interactive || takenSeats.includes(index)}>
-            <Text style={styles.seatIcon}>👤</Text>
-        </TouchableOpacity>
-    );
+    const lastPress = React.useRef<{ [key: number]: number }>({});
+
+    const handleDoublePress = (index: number) => {
+        if (!interactive) return;
+        if (onSeatDoublePress) onSeatDoublePress(index);
+    };
+
+    const renderSeat = (index: number) => {
+        const onPress = () => {
+            const now = Date.now();
+            if (lastPress.current[index] && (now - lastPress.current[index] < 400)) {
+                // Double tap detected
+                delete lastPress.current[index];
+                handleDoublePress(index);
+            } else {
+                lastPress.current[index] = now;
+                handlePress(index);
+            }
+        };
+
+        return (
+            <TouchableOpacity
+                key={`seat-${index}`}
+                style={[
+                    styles.seatBox,
+                    {
+                        backgroundColor: getSeatColor(index),
+                        borderColor: colors.borderColor,
+                    },
+                ]}
+                onPress={onPress}
+                disabled={!interactive}>
+                <Text style={styles.seatIcon}>
+                    {takenSeats.includes(index) ? '🚫' : '👤'}
+                </Text>
+            </TouchableOpacity>
+        );
+    };
 
     const renderDriver = () => (
         <View key="driver" style={[styles.seatBox, { backgroundColor: '#37474F' }]}>
@@ -191,13 +216,13 @@ const JeepLayout: React.FC<JeepLayoutProps> = ({
 
     return (
         <View style={[
-            styles.layoutCard, 
+            styles.layoutCard,
             { backgroundColor: isCompleted ? '#C8F7D2' : colors.cardColor, borderColor: isCompleted ? 'transparent' : colors.borderColor }
         ]}>
             {isCompleted ? (
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 }}>
                     <View style={{ flex: 1.2 }}>
-                        <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#5B4FFF' }}>SUV / JEEP</Text>
+                        <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#5B4FFF' }}>{getLayoutTitle()}</Text>
                         <Text style={{ fontSize: 9, color: '#7986A3', marginTop: 2 }}>BOOKING STATUS</Text>
                     </View>
                     <View style={{ flex: 0.6, alignItems: 'center', justifyContent: 'center' }}>

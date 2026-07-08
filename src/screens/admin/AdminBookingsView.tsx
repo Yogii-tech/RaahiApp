@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, ScrollView } from 'react-native';
 import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
+import { downloadCSV } from '../../utils/exportUtils';
 
 interface Booking {
     id: string;
@@ -20,7 +21,7 @@ const STATUS_COLORS: Record<string, string> = {
     'ON TRIP': '#F59E0B',
 };
 
-export default function AdminBookingsView({ token }: { token: string }) {
+export default function AdminBookingsView({ token, searchQuery = '' }: { token: string; searchQuery?: string }) {
     const [bookings, setBookings] = useState<Booking[]>([]);
     const [loading, setLoading] = useState(true);
     const { fetchWithAuth } = useAuth();
@@ -70,13 +71,25 @@ export default function AdminBookingsView({ token }: { token: string }) {
 
     return (
         <View style={styles.container}>
-            <Text style={styles.sectionLabel}>MANAGEMENT HUB</Text>
+            <View style={styles.headerRow}>
+                <Text style={styles.sectionLabel}>MANAGEMENT HUB</Text>
+                <TouchableOpacity
+                    style={styles.exportBtn}
+                    onPress={() => downloadCSV(bookings, 'Bookings_Report')}
+                >
+                    <Text style={styles.exportBtnText}>Excel Export</Text>
+                </TouchableOpacity>
+            </View>
             <View style={styles.tableCard}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ minWidth: '100%' }}>
                     <View style={{ minWidth: 800, flex: 1 }}>
                         {renderHeader()}
                         <FlatList
-                            data={bookings}
+                            data={bookings.filter(b =>
+                                b.passengerName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                b.id?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                b.ride?.toLowerCase().includes(searchQuery.toLowerCase())
+                            )}
                             keyExtractor={item => item.id}
                             renderItem={renderRow}
                             ListEmptyComponent={
@@ -130,4 +143,7 @@ const styles = StyleSheet.create({
     },
     deleteBtn: { backgroundColor: '#2A0F0F', borderColor: '#EF4444' },
     actionIcon: { color: '#1FAF63', fontSize: 14 },
+    headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+    exportBtn: { backgroundColor: '#3B82F6', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
+    exportBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 12 },
 });

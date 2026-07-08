@@ -19,6 +19,7 @@ interface User {
         vehicle_image_url: string;
         ownership_url: string;
         seating_layout: string;
+        rate_per_km?: number;
     };
 }
 
@@ -97,8 +98,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const logout = async () => {
         try {
-            await fetch(`${API_BASE}/api/auth/logout`, {
+            const currentToken = await AsyncStorage.getItem('auth_token');
+            await fetch(`${API_BASE}/api/user/logout`, {
                 method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${currentToken}`,
+                    'Content-Type': 'application/json'
+                },
                 credentials: 'include',
             });
         } catch (e) {

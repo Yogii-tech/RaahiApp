@@ -267,33 +267,6 @@ export default function ModernMapApp({ initialParams }: { initialParams?: any })
       )}
 
 
-      {/* Accuracy indicator (Floating small) */}
-      {location && (
-        <div style={{
-          position: 'absolute',
-          bottom: 20,
-          left: 20,
-          backgroundColor: 'rgba(0,0,0,0.6)',
-          backdropFilter: 'blur(10px)',
-          padding: '6px 12px',
-          borderRadius: '20px',
-          zIndex: 1000,
-          pointerEvents: 'none',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          border: '1px solid rgba(255,255,255,0.1)'
-        }}>
-          <span style={{ fontSize: 10, color: '#aaa', fontWeight: 'bold', letterSpacing: 0.5 }}>GPS ACCURACY</span>
-          <span style={{
-            fontSize: 11,
-            fontWeight: 'bold',
-            color: location.accuracy <= 50 ? '#22c55e' : location.accuracy <= 200 ? '#f59e0b' : '#ef4444'
-          }}>
-            ±{Math.round(location.accuracy)}m
-          </span>
-        </div>
-      )}
     </div>
   );
 }

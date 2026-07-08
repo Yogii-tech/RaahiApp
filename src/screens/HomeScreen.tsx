@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { API_BASE } from '../config/api';
+import { API_BASE } from '../apiConfig';
 import { useLanguage } from '../context/LanguageContext';
 import { apiRequest } from '../utils/api';
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -46,6 +46,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
     const { isDark, colors } = useTheme();
     const { token, user, logout } = useAuth();
     const { t } = useLanguage();
+
+
+    const isDriver = user?.role === 'driver';
+    const isParceller = user?.role === 'parceller';
+
     const [view, setView] = useState<string>('home');
     const [selectedRide, setSelectedRide] = useState<Ride | null>(null);
     const [rideType, setRideType] = useState<0 | 1>(0);
@@ -68,6 +73,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(false);
     const [showPostSuccess, setShowPostSuccess] = useState(false);
+    const [discoveredStops, setDiscoveredStops] = useState<any[]>([]);
+    const [pickupLandmarks, setPickupLandmarks] = useState<any[]>([]);
+    const [previewLoading, setPreviewLoading] = useState(false);
+    const [totalDistanceKm, setTotalDistanceKm] = useState<number | null>(null);
+
 
     useEffect(() => {
         fetchRecentRides();
@@ -77,7 +87,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
         try {
             setLoading(true);
             setError(false);
-            const response = await apiRequest('/api/rides/recent', {}, logout);
+            const role = isDriver ? 'driver' : 'passenger';
+            const response = await apiRequest(`/api/rides/recent?role=${role}`, {}, logout);
             if (response.ok) {
                 const data = await response.json();
                 setRecentRides(data);
@@ -90,6 +101,35 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
             setLoading(false);
         }
     };
+
+    const fetchRoutePreview = async (p: string, d: string) => {
+        if (!p.trim() || !d.trim() || !isDriver) return;
+        setPreviewLoading(true);
+        try {
+            const response = await apiRequest(`/api/rides/route-preview?pickup=${encodeURIComponent(p.trim())}&dropoff=${encodeURIComponent(d.trim())}`, {}, logout);
+            if (response.ok) {
+                const data = await response.json();
+                setDiscoveredStops(data.stops || []);
+                setTotalDistanceKm(data.totalDistanceKm || null);
+            }
+        } catch (err) {
+            console.error('Route preview error:', err);
+        } finally {
+            setPreviewLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (pickup && dropoff && isDriver) {
+            const timer = setTimeout(() => {
+                fetchRoutePreview(pickup, dropoff);
+            }, 2000); // Increased debounce to 2s to reduce lag during typing
+            return () => clearTimeout(timer);
+        } else {
+            setDiscoveredStops([]);
+            setTotalDistanceKm(null);
+        }
+    }, [pickup, dropoff, isDriver]);
 
     const handleTimeChange = (text: string) => {
         // Remove non-numeric characters
@@ -187,6 +227,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                 }
             }
 
+            const userRate = user?.vehicle?.rate_per_km || 5;
+            const calculatedPrice = totalDistanceKm
+                ? Math.round(totalDistanceKm * userRate)
+                : 350;
+
             const response = await apiRequest('/api/rides/create', {
                 method: 'POST',
                 body: JSON.stringify({
@@ -194,11 +239,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                     dropoff: dropoff.trim(),
                     date: date.trim(),
                     departureTime: finalTime,
-                    vehicleModel: user?.vehicle?.vehicle_name || "Mountain SUV",
-                    vehicleNumber: user?.vehicle?.vehicle_number || "UK07-AX-4421",
-                    seatsTotal: user?.vehicle?.seats || 5,
-                    seatingLayout: user?.vehicle?.seating_layout || "suv",
-                    pricePerSeat: 350,
+                    vehicleModel: user?.vehicle?.vehicle_name || "Vehicle",
+                    vehicleNumber: user?.vehicle?.vehicle_number || "UK-00-0000",
+                    seatsTotal: user?.vehicle?.seats || 4,
+                    seatingLayout: user?.vehicle?.seating_layout || "sedan",
+                    pricePerSeat: calculatedPrice,
                 }),
             });
 
@@ -223,9 +268,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
         }
     };
 
-    const isDriver = user?.role === 'driver';
-    const isParceller = user?.role === 'parceller';
-
     if (isParceller || view === 'parcel') {
         return <ParcelBookingView onBack={() => {
             if (isParceller) {
@@ -245,6 +287,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
             <AvailableRidesScreen
                 searchPickup={pickup.trim()}
                 searchDropoff={dropoff.trim()}
+                searchDate={date.trim()}
                 onBack={() => setView('home')}
                 onSelectRide={(ride) => {
                     setSelectedRide(ride);
@@ -258,6 +301,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
         return (
             <BookRideScreen
                 ride={selectedRide}
+                searchPickup={pickup.trim()}
+                searchDropoff={dropoff.trim()}
                 onBack={() => setView('available')}
                 onBookingComplete={() => setView('home')}
             />
@@ -292,6 +337,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                         backgroundColor: colors.cardColor,
                         borderColor: colors.borderColor,
                         shadowColor: isDark ? '#000' : '#5B4FFF',
+                        zIndex: 9999, // Ensure absolute children of this card overlap subsequent elements
                     },
                 ]}>
 
@@ -299,9 +345,53 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                     label={t('home.pickupLabel')}
                     value={pickup}
                     onChangeText={setPickup}
-                    onSelect={(res) => setPickup(res.display_name)}
+                    onSelect={async (res) => {
+                        setPickup(res.display_name.split(',')[0].trim());
+                        // Fetch the 3km local landmarks using our new Overpass API!
+                        if (!isDriver && res.lat && res.lon) {
+                            try {
+                                const response = await apiRequest(`/api/location/landmarks?lat=${res.lat}&lon=${res.lon}`);
+                                if (response.ok) {
+                                    const data = await response.json();
+                                    setPickupLandmarks(data);
+                                }
+                            } catch (e) { }
+                        }
+                    }}
                     labelColor={pickupLabelColor}
+                    containerZIndex={3000}
                 />
+
+                {!isDriver && pickupLandmarks.length > 0 && (
+                    <View style={{ marginTop: 12, marginBottom: 4 }}>
+                        <Text style={{ fontSize: 11, fontWeight: 'bold', color: colors.subtextColor, marginBottom: 8, letterSpacing: 1 }}>
+                            SUGGESTED NEARBY LANDMARKS
+                        </Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                            {pickupLandmarks.slice(0, 5).map((l, idx) => (
+                                <TouchableOpacity
+                                    key={idx}
+                                    style={{
+                                        backgroundColor: isDark ? 'rgba(0,255,255,0.06)' : 'rgba(91,79,255,0.06)',
+                                        paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, marginRight: 8,
+                                        borderWidth: 1, borderColor: isDark ? 'rgba(0,255,255,0.1)' : 'rgba(91,79,255,0.1)'
+                                    }}
+                                    onPress={() => setPickup(l.name)}
+                                >
+                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                        <Text style={{ marginRight: 4 }}>
+                                            {l.type.includes('bus') ? '🚌' : l.type.includes('viewpoint') ? '⛰️' : l.type.includes('worship') ? '⛩️' : '📍'}
+                                        </Text>
+                                        <View>
+                                            <Text style={{ color: colors.textColor, fontSize: 12, fontWeight: 'bold' }}>{l.name}</Text>
+                                            <Text style={{ color: colors.subtextColor, fontSize: 10 }}>{l.distanceM}m away</Text>
+                                        </View>
+                                    </View>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    </View>
+                )}
 
                 <View style={styles.spacer14} />
 
@@ -309,9 +399,55 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                     label={t('home.dropoffLabel')}
                     value={dropoff}
                     onChangeText={setDropoff}
-                    onSelect={(res) => setDropoff(res.display_name)}
+                    onSelect={(res) => setDropoff(res.display_name.split(',')[0].trim())}
                     labelColor={dropoffLabelColor}
+                    containerZIndex={2000}
                 />
+
+                {isDriver && (pickup.trim() && dropoff.trim()) && (
+                    <View style={{
+                        marginTop: 18,
+                        padding: 12,
+                        borderRadius: 14,
+                        borderWidth: 1,
+                        borderColor: isDark ? 'rgba(0,255,255,0.1)' : 'rgba(91,79,255,0.1)',
+                        backgroundColor: isDark ? 'rgba(0,0,0,0.2)' : 'rgba(91,79,255,0.03)',
+                    }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                            <Text style={{ fontSize: 11, fontWeight: 'bold', color: isDark ? '#00FFFF' : '#5B4FFF', letterSpacing: 1 }}>
+                                🛣️ AUTOMATIC ROUTE DISCOVERY
+                            </Text>
+                            {previewLoading && <ActivityIndicator size="small" color={colors.primary} />}
+                        </View>
+
+                        {discoveredStops.length > 0 ? (
+                            <View>
+                                <Text style={{ fontSize: 13, color: colors.textColor, fontWeight: '600', marginBottom: 4 }}>
+                                    Found {discoveredStops.length} intermediate stops
+                                </Text>
+                                <Text style={{ fontSize: 12, color: colors.subtextColor, lineHeight: 18 }}>
+                                    Your ride passes through: <Text style={{ color: colors.textColor, fontWeight: '500' }}>
+                                        {discoveredStops.map(s => s.name).join(' → ')}
+                                    </Text>
+                                </Text>
+                                {totalDistanceKm && (
+                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
+                                        <Text style={{ fontSize: 11, color: '#00C853', fontWeight: 'bold' }}>
+                                            Total road distance: {Math.round(totalDistanceKm)} km
+                                        </Text>
+                                        <Text style={{ fontSize: 11, color: colors.primary, fontWeight: 'bold' }}>
+                                            {t('home.estFullSeat')}{Math.round(totalDistanceKm * (user?.vehicle?.rate_per_km || 5))}
+                                        </Text>
+                                    </View>
+                                )}
+                            </View>
+                        ) : !previewLoading ? (
+                            <Text style={{ fontSize: 12, color: colors.subtextColor, fontStyle: 'italic' }}>
+                                Searching for villages along this route...
+                            </Text>
+                        ) : null}
+                    </View>
+                )}
 
                 <View style={styles.spacer14} />
                 <View style={{ flexDirection: 'row', zIndex: 10, elevation: 10 }}>
@@ -361,9 +497,9 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                                                 color: colors.textColor,
                                                 backgroundColor: 'transparent',
                                                 borderWidth: 0,
-                                                // @ts-ignore
-                                                outlineStyle: 'none',
-                                            }}
+                                                // @ts-ignore - web specific
+                                                outlineWidth: 0,
+                                            } as any}
                                             value={departureTime}
                                             onChangeText={handleTimeChange}
                                             placeholder="10:00"
@@ -432,6 +568,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                         </>
                     )}
                 </View>
+
+
 
                 <View style={styles.spacer18} />
 
@@ -507,10 +645,10 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                             {isDriver && ride.seatsTotal !== undefined && (
                                 <View style={{ marginTop: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <Text style={{ fontSize: 12, color: colors.subtextColor, fontWeight: '500' }}>
-                                        {t('home.availableSeats')}: {Math.max(0, ride.seatsTotal - (ride.seatsBooked || 0))}
+                                        {t('home.availableSeats')}: {Math.max(0, ride.seatsTotal - (ride.takenSeats?.length || 0))}
                                     </Text>
                                     <Text style={{ fontSize: 12, color: isDark ? '#FF4081' : '#D81B60', fontWeight: 'bold' }}>
-                                        {t('home.takenSeats')}: {ride.seatsBooked || 0}
+                                        {t('home.takenSeats')}: {ride.takenSeats?.length || 0}
                                     </Text>
                                 </View>
                             )}

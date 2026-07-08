@@ -1,5 +1,6 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+const webpack = require('webpack');
 
 const appDirectory = __dirname;
 
@@ -96,6 +97,12 @@ module.exports = {
         new HtmlWebpackPlugin({
             template: path.resolve(appDirectory, 'public/index.html'),
         }),
+        // Inject __DEV__ so React Native code works on web.
+        // Metro bundler defines this automatically; webpack does not.
+        new webpack.DefinePlugin({
+            __DEV__: JSON.stringify(process.env.NODE_ENV !== 'production'),
+            'process.env.SENTRY_DSN': JSON.stringify(process.env.SENTRY_DSN || ''),
+        }),
     ],
     devServer: {
         static: path.resolve(appDirectory, 'public'),
@@ -112,9 +119,9 @@ module.exports = {
         },
     },
     cache: false,
-    devtool: 'source-map',
+    devtool: process.env.NODE_ENV === 'production' ? 'nosources-source-map' : 'source-map',
     watchOptions: {
         ignored: ['**/node_modules', '**/android', '**/ios', '**/dist'],
     },
-    mode: 'development',
+    mode: process.env.NODE_ENV === 'production' ? 'production' : 'development',
 };

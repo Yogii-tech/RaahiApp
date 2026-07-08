@@ -2,11 +2,12 @@
 export const translations = {
   en: {
     // App Header & Tabs
-    'app.title': 'Go Raahi',
+    'app.title': 'GoRaahi',
     'tab.home': 'Home',
     'tab.trips': 'Trips',
     'tab.trackPackage': 'Track Package',
     'tab.map': 'Map',
+    'tab.history': 'History',
     'tab.account': 'Account',
 
     // Shared
@@ -22,7 +23,7 @@ export const translations = {
 
     // Login Screen
     'login.welcome': 'Welcome. Log in to continue.',
-    'login.title': 'Go Raahi',
+    'login.title': 'GoRaahi',
     'login.subtitle': 'Sharing rides, building trust.',
     'login.phoneLabel': 'PHONE NUMBER',
     'login.phonePlaceholder': '+91 99999 99999',
@@ -38,7 +39,7 @@ export const translations = {
     'login.chooseRole': "Choose your\nrole",
     'login.moveFreely': "Move freely\nin the hills.",
     'login.helpDrivers': 'Help drivers recognize you when they arrive.',
-    'login.howUseRaahi': 'How would you like to use Go Raahi?',
+    'login.howUseRaahi': 'How would you like to use GoRaahi?',
     'login.localTrusted': 'Local, trusted rides.\nLogin to start your journey.',
     'login.sendOtp': 'Send OTP',
     'login.enterOtp': 'Enter 6-digit OTP',
@@ -64,11 +65,11 @@ export const translations = {
 
     // Vehicle Registration (Driver)
     'login.vehicleRegistration': 'Vehicle Registration',
-    'login.vehicleName': 'Vehicle Name (e.g. Maruti Alto)',
+    'login.vehicleName': 'Vehicle Name',
     'login.vehicleType': 'Vehicle Type',
     'login.vehicleTypePlaceholder': 'Enter Type (e.g. Van, SUV)',
     'login.vehicleSeats': 'Number of Seats',
-    'login.vehicleNumber': 'Vehicle Number (e.g. UK07 AB 1234)',
+    'login.vehicleNumber': 'Vehicle Number',
     'login.uploadDL': 'Upload Driving License',
     'login.uploadRC': 'Upload RC (Registration)',
     'login.uploadPollution': 'Upload Pollution Certificate',
@@ -125,13 +126,15 @@ export const translations = {
     'home.from': 'From',
     'home.availableSeats': 'Available',
     'home.takenSeats': 'Taken',
-    'home.whyChoose': 'WHY CHOOSE GO RAAHI?',
+    'home.whyChoose': 'WHY CHOOSE GoRaahi?',
     'home.safeTravel': 'Safe Travel',
     'home.verifiedExperts': 'Verified experts.',
     'home.shareSave': 'Share & Save',
     'home.splitCosts': 'Split costs.',
     'home.ridePostedTitle': 'RIDE POSTED!',
     'home.ridePostedSub': 'Your ride is now live! Passengers can now see and book your cab.',
+    'home.ratePerKm': 'Rate per KM (₹)',
+    'home.estFullSeat': 'Est. Full Seat: ₹',
 
     // Available Rides
     'available.routeDetails': 'ROUTE DETAILS',
@@ -196,6 +199,7 @@ export const translations = {
     'trips.needsRoofCarrier': 'Needs Roof Carrier',
     'trips.bookedOn': 'Booked on: ',
     'trips.postedOn': 'Posted on: ',
+    'trips.noHistory': 'No recent history',
 
     // Account
     'account.passenger': 'PASSENGER',
@@ -217,6 +221,10 @@ export const translations = {
     'account.callSupport': 'Call Support',
     'account.whatsappSupport': 'WhatsApp Support',
     'account.noNumber': 'No number',
+    'account.pricingSettings': 'Pricing Settings',
+    'account.pricingDesc': 'Set your default rate per kilometer. This will be used to automatically calculate the seat price based on the road distance for every ride you post.',
+    'account.savePricing': 'SAVE PRICING',
+    'account.pricingTip': '💡 Pro Tip: Competitive rates (₹5 - ₹8 per km) help in getting more passengers quickly.',
 
     // Trusted Contacts
     'trusted.title': 'Trusted Contacts',
@@ -263,7 +271,7 @@ export const translations = {
     'sos.locationUnavailable': 'Location unavailable',
     'sos.geoNotSupported': 'Geolocation not supported',
     'sos.messagePrefix': 'EMERGENCY SOS: I need help! My current location is: ',
-    'sos.messageSuffix': '. Please check on me immediately. - Go Raahi App',
+    'sos.messageSuffix': '. Please check on me immediately. - GoRaahi App',
     'sos.sentToPrefix': 'The following message has been sent to ',
 
     // Requests Overlay
@@ -340,11 +348,12 @@ export const translations = {
   },
   hi: {
     // App Header & Tabs
-    'app.title': 'Go Raahi',
+    'app.title': 'GoRaahi',
     'tab.home': 'होम',
     'tab.trips': 'यात्राएँ',
     'tab.trackPackage': 'पैकेज ट्रैक करें',
     'tab.map': 'मैप',
+    'tab.history': 'इतिहास',
     'tab.account': 'अकाउंट',
 
     // Shared
@@ -360,7 +369,7 @@ export const translations = {
 
     // Login Screen
     'login.welcome': 'नमस्ते। जारी रखने के लिए लॉग इन करें।',
-    'login.title': 'Go Raahi',
+    'login.title': 'GoRaahi',
     'login.subtitle': 'यात्रा साझा करें, विश्वास बनाएं।',
     'login.phoneLabel': 'फ़ोन नंबर',
     'login.phonePlaceholder': '+91 99999 99999',
@@ -376,7 +385,7 @@ export const translations = {
     'login.chooseRole': 'अपनी भूमिका\nचुनें',
     'login.moveFreely': 'पहाड़ियों में\nबेझिझक घूमें।',
     'login.helpDrivers': 'जब ड्राइवर आएं तो उन्हें आपको पहचानने में मदद करें।',
-    'login.howUseRaahi': 'आप Go Raahi का उपयोग कैसे करना चाहेंगे?',
+    'login.howUseRaahi': 'आप GoRaahi का उपयोग कैसे करना चाहेंगे?',
     'login.localTrusted': 'स्थानीय, विश्वसनीय सवारी।\nअपनी यात्रा शुरू करने के लिए लॉगिन करें।',
     'login.sendOtp': 'OTP भेजें',
     'login.enterOtp': '6-अंकीय OTP दर्ज करें',
@@ -402,11 +411,11 @@ export const translations = {
 
     // Vehicle Registration (Driver)
     'login.vehicleRegistration': 'वाहन पंजीकरण',
-    'login.vehicleName': 'वाहन का नाम (उदा. मारुति ऑल्टो)',
+    'login.vehicleName': 'वाहन का नाम',
     'login.vehicleType': 'वाहन का प्रकार',
     'login.vehicleTypePlaceholder': 'प्रकार दर्ज करें (उदा. वैन, एसयूवी)',
     'login.vehicleSeats': 'सीटों की संख्या',
-    'login.vehicleNumber': 'वाहन नंबर (उदा. UK07 AB 1234)',
+    'login.vehicleNumber': 'वाहन नंबर',
     'login.uploadDL': 'ड्राइविंग लाइसेंस अपलोड करें',
     'login.uploadRC': 'RC (पंजीकरण) अपलोड करें',
     'login.uploadPollution': 'प्रदूषण प्रमाण पत्र अपलोड करें',
@@ -463,13 +472,15 @@ export const translations = {
     'home.from': 'से',
     'home.availableSeats': 'उपलब्ध',
     'home.takenSeats': 'बुक की गई',
-    'home.whyChoose': 'Go Raahi क्यों चुनें?',
+    'home.whyChoose': 'GoRaahi क्यों चुनें?',
     'home.safeTravel': 'सुरक्षित यात्रा',
     'home.verifiedExperts': 'सत्यापित विशेषज्ञ।',
     'home.shareSave': 'साझा करें और बचाएं',
     'home.splitCosts': 'लागत विभाजित करें।',
     'home.ridePostedTitle': 'सवारी पोस्ट कर दी गई!',
     'home.ridePostedSub': 'आपकी सवारी अब लाइव है! यात्री अब आपकी कैब देख और बुक कर सकते हैं।',
+    'home.ratePerKm': 'प्रति किलोमीटर दर (₹)',
+    'home.estFullSeat': 'अनुमानित कुल सीट: ₹',
     // Available Rides
     'available.routeDetails': 'मार्ग विवरण',
     'available.title': 'उपलब्ध कैब',
@@ -533,6 +544,7 @@ export const translations = {
     'trips.needsRoofCarrier': 'रूफ कैरियर की जरूरत',
     'trips.bookedOn': 'बुकिंग की तारीख: ',
     'trips.postedOn': 'पोस्ट की तारीख: ',
+    'trips.noHistory': 'कोई हालिया इतिहास नहीं',
 
     // Account
     'account.passenger': 'यात्री',
@@ -554,6 +566,10 @@ export const translations = {
     'account.callSupport': 'सहायता को कॉल करें',
     'account.whatsappSupport': 'WhatsApp सहायता',
     'account.noNumber': 'कोई नंबर नहीं',
+    'account.pricingSettings': 'प्राइजिंग सेटिंग्स',
+    'account.pricingDesc': 'अपनी डिफ़ॉल्ट प्रति किलोमीटर दर निर्धारित करें। इसका उपयोग आपके द्वारा पोस्ट की जाने वाली प्रत्येक सवारी के लिए सड़क की दूरी के आधार पर सीट की कीमत की गणना करने के लिए किया जाएगा।',
+    'account.savePricing': 'प्राइजिंग सेव करें',
+    'account.pricingTip': '💡 प्रो टिप: प्रतिस्पर्धी दरें (₹5 - ₹8 प्रति किमी) अधिक यात्रियों को जल्दी प्राप्त करने में मदद करती हैं।',
 
     // Trusted Contacts
     'trusted.title': 'विश्वसनीय संपर्क',
@@ -600,7 +616,7 @@ export const translations = {
     'sos.locationUnavailable': 'स्थान अनुपलब्ध',
     'sos.geoNotSupported': 'जियोलोकेशन समर्थित नहीं है',
     'sos.messagePrefix': 'आपातकालीन SOS: मुझे मदद चाहिए! मेरा वर्तमान स्थान है: ',
-    'sos.messageSuffix': '। कृपया तुरंत मेरी जाँच करें। - Go Raahi App',
+    'sos.messageSuffix': '। कृपया तुरंत मेरी जाँच करें। - GoRaahi App',
     'sos.sentToPrefix': 'निम्नलिखित संदेश इन संपर्कों को भेजा गया है: ',
 
     // Requests Overlay

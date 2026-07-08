@@ -21,11 +21,11 @@ interface UseUserLocationReturn {
 }
 
 const ACCURACY_TARGET = 100;     // meters — lock in at this level
-const HUNT_TIMEOUT    = 15_000;  // ms — give up after 15 seconds
+const HUNT_TIMEOUT = 15_000;  // ms — give up after 15 seconds
 
 export function useUserLocation(): UseUserLocationReturn {
   const [location, setLocation] = useState<UserLocation | null>(null);
-  const [error, setError]       = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [isLocating, setIsLocating] = useState(false);
   const watchRef = useRef<number | null>(null);
 
@@ -70,14 +70,19 @@ export function useUserLocation(): UseUserLocationReturn {
     const startWatch = (isHighAccuracy: boolean) => {
       const watchId = navigator.geolocation.watchPosition(
         (pos: any) => {
-          // Ignore extremely poor accuracy (e.g. 50km) if we want real GPS
+          const { latitude, longitude, accuracy, heading } = pos.coords;
+
+          // Show location immediately, even if accuracy isn't perfect yet
+          setLocation({ lat: latitude, lng: longitude, accuracy, heading: heading ?? 0 });
+
+          // Ignore extremely poor accuracy (e.g. 50km) for "best" tracking
           if (isHighAccuracy && pos.coords.accuracy > 5000) return;
 
           // Track the best reading
           if (!bestResult || pos.coords.accuracy < bestResult.coords.accuracy) {
             bestResult = pos;
           }
-          // Lock in immediately if we hit our target (50m-200m)
+          // Lock in at high quality
           if (pos.coords.accuracy <= ACCURACY_TARGET) {
             clearTimeout(timeoutId);
             done(pos);
@@ -90,7 +95,7 @@ export function useUserLocation(): UseUserLocationReturn {
             startWatch(false);
             return;
           }
-          
+
           clearTimeout(timeoutId);
           setIsLocating(false);
           if (watchRef.current !== null) {
@@ -119,8 +124,8 @@ export function useUserLocation(): UseUserLocationReturn {
   }, []);
 
   // Auto-locate on mount
-  useEffect(() => { 
-    relocate(); 
+  useEffect(() => {
+    relocate();
     return () => {
       if (watchRef.current !== null) {
         navigator.geolocation.clearWatch(watchRef.current);

@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { API_BASE } from '../apiConfig';
+import { apiRequest } from '../utils/api';
+import { useAuth } from '../context/AuthContext';
 
 interface GeoResult {
     place_id: string | number;
@@ -27,6 +29,7 @@ interface LocationInputProps {
     onSelect: (result: GeoResult) => void;
     placeholder?: string;
     labelColor?: string;
+    containerZIndex?: number;
 }
 
 const LocationInput: React.FC<LocationInputProps> = ({
@@ -36,8 +39,10 @@ const LocationInput: React.FC<LocationInputProps> = ({
     onSelect,
     placeholder,
     labelColor,
+    containerZIndex,
 }) => {
     const { colors, isDark } = useTheme();
+    const { logout } = useAuth();
     const [suggestions, setSuggestions] = useState<GeoResult[]>([]);
     const [popular, setPopular] = useState<GeoResult[]>([]);
     const [loading, setLoading] = useState(false);
@@ -69,27 +74,64 @@ const LocationInput: React.FC<LocationInputProps> = ({
             }
         } catch (err) {
             console.error('Failed to fetch popular locations:', err);
+            setPopular([
+                { place_id: 'p1', display_name: 'Rishikesh, Uttarakhand', lat: '30.0869', lon: '78.2676', type: 'popular' },
+                { place_id: 'p2', display_name: 'Dehradun, Uttarakhand', lat: '30.3165', lon: '78.0322', type: 'popular' },
+                { place_id: 'p3', display_name: 'Bageshwar, Uttarakhand', lat: '29.8404', lon: '79.7694', type: 'popular' },
+                { place_id: 'p4', display_name: 'Haldwani, Uttarakhand', lat: '29.2183', lon: '79.5130', type: 'popular' },
+            ]);
         }
     };
 
     const fetchSuggestions = async (query: string) => {
-        if (query.length < 3) {
+        if (query.length < 1) {
             setSuggestions([]);
             return;
         }
 
         setLoading(true);
         try {
-            // Using the modern geocoding endpoint if available, or a public one
-            // For simplicity, we'll try to use the Nominatim through the tracking server if it's up
-            // Or just use the tracking server's geocode endpoint
-            const res = await fetch(`http://localhost:4000/api/geocode?q=${encodeURIComponent(query)}`);
+            // Use our new backend proxy to bypass CORS and User-Agent issues
+            const res = await apiRequest(`/api/location/search?q=${encodeURIComponent(query + ', Uttarakhand, India')}`, {}, logout);
+
             if (res.ok) {
                 const data = await res.json();
-                setSuggestions(data);
+                if (data && data.length > 0) {
+                    setSuggestions(data.map((d: any) => ({
+                        place_id: d.place_id,
+                        display_name: d.display_name,
+                        lat: d.lat,
+                        lon: d.lon,
+                        type: d.type
+                    })));
+                } else {
+                    setSuggestions([{
+                        place_id: "custom",
+                        display_name: `${query}, Uttarakhand (Custom)`,
+                        lat: "30.0869",
+                        lon: "78.2676",
+                        type: "custom"
+                    }]);
+                }
+            } else {
+                // If backend search fails, we show at least the custom entry
+                setSuggestions([{
+                    place_id: "custom",
+                    display_name: `${query}, Uttarakhand (Custom)`,
+                    lat: "30.0869",
+                    lon: "78.2676",
+                    type: "custom"
+                }]);
             }
         } catch (err) {
-            console.error('Geocoding error:', err);
+            console.error('Geocoding search error:', err);
+            setSuggestions([{
+                place_id: "custom",
+                display_name: `${query}, Uttarakhand (Custom)`,
+                lat: "30.0869",
+                lon: "78.2676",
+                type: "custom"
+            }]);
         } finally {
             setLoading(false);
         }
@@ -98,11 +140,11 @@ const LocationInput: React.FC<LocationInputProps> = ({
     const handleTextChange = (text: string) => {
         onChangeText(text);
         if (timerRef.current) clearTimeout(timerRef.current);
-        
-        if (text.length >= 3) {
+
+        if (text.length >= 1) {
             timerRef.current = setTimeout(() => {
                 fetchSuggestions(text);
-            }, 500);
+            }, 300);
         } else {
             setSuggestions([]);
         }
@@ -112,7 +154,7 @@ const LocationInput: React.FC<LocationInputProps> = ({
         onSelect(item);
         setShowDropdown(false);
         setIsFocused(false);
-        
+
         // Record the selection
         try {
             await fetch(`${API_BASE}/api/locations/record`, {
@@ -134,22 +176,22 @@ const LocationInput: React.FC<LocationInputProps> = ({
     const shouldShow = showDropdown && (displayList.length > 0 || loading);
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, { zIndex: containerZIndex !== undefined ? containerZIndex : 100 }]}>
             <Text style={[styles.label, { color: labelColor || colors.subtextColor }]}>
                 {label.toUpperCase()}
             </Text>
             <View style={styles.spacer6} />
             <View style={[
                 styles.inputWrapper,
-                { 
-                    backgroundColor: colors.inputFillColor, 
+                {
+                    backgroundColor: colors.inputFillColor,
                     borderColor: isFocused ? colors.primary : colors.inputBorderColor,
-                    borderWidth: isFocused ? 2 : 1 
+                    borderWidth: isFocused ? 2 : 1
                 }
             ]}>
                 <TextInput
                     style={[
-                        styles.input, 
+                        styles.input,
                         { color: colors.textColor },
                         // @ts-ignore
                         Platform.OS === 'web' && { outlineStyle: 'none', borderWidth: 0 }
@@ -176,11 +218,11 @@ const LocationInput: React.FC<LocationInputProps> = ({
 
             {shouldShow && (
                 <View style={[
-                    styles.dropdown, 
-                    { 
-                        backgroundColor: colors.cardColor, 
+                    styles.dropdown,
+                    {
+                        backgroundColor: colors.cardColor,
                         borderColor: colors.borderColor,
-                        shadowColor: isDark ? '#000' : colors.primary 
+                        shadowColor: isDark ? '#000' : colors.primary
                     }
                 ]}>
                     {popular.length > 0 && suggestions.length === 0 && (

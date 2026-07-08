@@ -71,19 +71,19 @@ function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
 }
 
-const isValidLngLat = (lng: any, lat: any) => 
+const isValidLngLat = (lng: any, lat: any) =>
   typeof lng === 'number' && typeof lat === 'number' && !isNaN(lng) && !isNaN(lat);
 
 const MapView = forwardRef<MapViewHandle, MapViewProps>(
   ({ userLocation, driverLocation, theme, pickupCoords, dropCoords, routeCoords, pinModeActive, onMapClick }, ref) => {
     const containerRef = useRef<HTMLDivElement>(null);
-    const mapRef       = useRef<Map | null>(null);
-    const userMarkerRef   = useRef<Marker | null>(null);
+    const mapRef = useRef<Map | null>(null);
+    const userMarkerRef = useRef<Marker | null>(null);
     const driverMarkerRef = useRef<Marker | null>(null);
     const pickupMarkerRef = useRef<Marker | null>(null);
-    const dropMarkerRef   = useRef<Marker | null>(null);
-    const animFrameRef    = useRef<number>(0);
-    const driverPosRef    = useRef<DriverLocation | null>(null);
+    const dropMarkerRef = useRef<Marker | null>(null);
+    const animFrameRef = useRef<number>(0);
+    const driverPosRef = useRef<DriverLocation | null>(null);
 
     // ── Expose imperative methods ──
     useImperativeHandle(ref, () => ({
@@ -169,7 +169,18 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
       });
 
       mapRef.current = map;
-      return () => { map.remove(); mapRef.current = null; };
+
+      // ── Handle resizing to fix "bottom land" issues ──
+      const resizeObserver = new ResizeObserver(() => {
+        map.resize();
+      });
+      resizeObserver.observe(containerRef.current);
+
+      return () => {
+        resizeObserver.disconnect();
+        map.remove();
+        mapRef.current = null;
+      };
     }, []);
 
     // ── Click-to-pin: override location when GPS is inaccurate ──
@@ -203,6 +214,13 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
       if (!userMarkerRef.current) {
         const el = document.createElement('div');
         el.className = styles.userDot;
+        // Inline fallbacks to ensure visibility
+        el.style.width = '18px';
+        el.style.height = '18px';
+        el.style.borderRadius = '50%';
+        el.style.backgroundColor = '#007AFF';
+        el.style.border = '2px solid white';
+
         userMarkerRef.current = new maplibregl.Marker({ element: el, anchor: 'center' })
           .setLngLat([lng, lat])
           .addTo(map);
@@ -232,7 +250,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
         // ── 70-80% Animation Logic ──
         // Smoothly interpolate over 5000ms (to create illusion of constant movement)
         const from = driverPosRef.current ?? driverLocation;
-        const to   = driverLocation;
+        const to = driverLocation;
         const start = performance.now();
         const DURATION = 5000; // Increased to 5s for smoother, continuous animation
 
@@ -241,21 +259,21 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
         function animate(now: number) {
           const t = Math.min((now - start) / DURATION, 1);
           // Ease-out so it slows down near the end if no new data arrives
-          const easedT = 1 - Math.pow(1 - t, 3); 
-          
+          const easedT = 1 - Math.pow(1 - t, 3);
+
           const lat = lerp(from.lat, to.lat, easedT);
           const lng = lerp(from.lng, to.lng, easedT);
-          
+
           // Apply heading rotation if provided
           if (to.heading !== undefined) {
-             const markerEl = driverMarkerRef.current?.getElement();
-             if (markerEl) markerEl.style.transform = `rotate(${to.heading}deg)`;
+            const markerEl = driverMarkerRef.current?.getElement();
+            if (markerEl) markerEl.style.transform = `rotate(${to.heading}deg)`;
           }
 
           if (isValidLngLat(lng, lat)) {
             driverMarkerRef.current?.setLngLat([lng, lat]);
           }
-          
+
           if (t < 1) {
             animFrameRef.current = requestAnimationFrame(animate);
           } else {

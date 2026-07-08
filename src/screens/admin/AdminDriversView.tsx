@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, ScrollView, TouchableOpacity } from 'react-native';
 import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
+import { downloadCSV } from '../../utils/exportUtils';
 
 interface Driver {
     id: string;
@@ -16,7 +17,7 @@ interface Driver {
     currentRide?: string;
 }
 
-export default function AdminDriversView({ token }: { token: string }) {
+export default function AdminDriversView({ token, searchQuery = '' }: { token: string; searchQuery?: string }) {
     const [drivers, setDrivers] = useState<Driver[]>([]);
     const [loading, setLoading] = useState(true);
     const { fetchWithAuth } = useAuth();
@@ -82,14 +83,26 @@ export default function AdminDriversView({ token }: { token: string }) {
                     <Text style={styles.countText}>{drivers.length} Registered</Text>
                 </View>
             </View>
-            <Text style={styles.pageTitle}>Drivers</Text>
+            <View style={styles.headerRow}>
+                <Text style={styles.pageTitle}>Drivers</Text>
+                <TouchableOpacity
+                    style={styles.exportBtn}
+                    onPress={() => downloadCSV(drivers, 'Drivers_Report')}
+                >
+                    <Text style={styles.exportBtnText}>Export CSV</Text>
+                </TouchableOpacity>
+            </View>
 
             <View style={styles.tableCard}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ minWidth: '100%' }}>
                     <View style={{ minWidth: 1000, flex: 1 }}>
                         {renderHeader()}
                         <FlatList
-                            data={drivers}
+                            data={drivers.filter(d =>
+                                d.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                d.phone?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                d.vehicleNumber?.toLowerCase().includes(searchQuery.toLowerCase())
+                            )}
                             keyExtractor={item => item.id}
                             renderItem={renderRow}
                             ListEmptyComponent={
@@ -158,4 +171,7 @@ const styles = StyleSheet.create({
     },
     ridesText: { color: '#1FAF63', fontSize: 12, fontWeight: 'bold' },
     emptyText: { color: '#6B7280', textAlign: 'center', padding: 40, fontSize: 14 },
+    headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+    exportBtn: { backgroundColor: '#1FAF63', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
+    exportBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
 });
