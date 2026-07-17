@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import * as Sentry from "@sentry/react-native";
+import { ErrorBoundary } from './src/components/ErrorBoundary';
 
+// DSN is injected via __DEV__ webpack DefinePlugin / Metro env — never hardcoded
+const sentryDsn = (typeof process !== 'undefined' && process.env?.SENTRY_DSN) || '';
 Sentry.init({
-  dsn: (typeof process !== 'undefined' && process.env && process.env.SENTRY_DSN) 
-    || "https://08643806a6b5a3818e9508d0b2849b38@o4508492061245440.ingest.us.sentry.io/4508492067799040",
-  // Set tracesSampleRate to 1.0 in development or 0.1 (10%) in production for performance.
+  dsn: sentryDsn,
+  enabled: sentryDsn !== '',
   tracesSampleRate: typeof __DEV__ !== 'undefined' && __DEV__ ? 1.0 : 0.1,
   _experiments: {
     profilesSampleRate: typeof __DEV__ !== 'undefined' && __DEV__ ? 1.0 : 0.1,
@@ -30,7 +32,7 @@ import {
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { LanguageProvider, useLanguage } from './src/context/LanguageContext';
-import { API_BASE } from './src/apiConfig';
+// API_BASE is imported per-screen from './src/config/api' — not needed here
 import { apiRequest } from './src/utils/api';
 import LoginScreen from './src/screens/LoginScreen';
 import AdminDashboardScreen from './src/screens/admin/AdminDashboardScreen';
@@ -455,19 +457,21 @@ function RootApp() {
 
 function App() {
   return (
-    <SafeAreaProvider
-      style={{ flex: 1, ...(Platform.OS === 'web' ? ({ height: '100dvh' } as any) : {}) }}
-      initialMetrics={Platform.OS === 'web' ? { frame: { x: 0, y: 0, width: 0, height: 0 }, insets: { top: 0, left: 0, right: 0, bottom: 0 } } : initialWindowMetrics || undefined}>
-      <AuthProvider>
-        <ThemeProvider>
-          <LanguageProvider>
-            <View style={{ flex: 1, backgroundColor: '#181F2A', ...(Platform.OS === 'web' ? ({ height: '100dvh' } as any) : {}) }}>
-              <RootApp />
-            </View>
-          </LanguageProvider>
-        </ThemeProvider>
-      </AuthProvider>
-    </SafeAreaProvider>
+    <ErrorBoundary>
+      <SafeAreaProvider
+        style={{ flex: 1, ...(Platform.OS === 'web' ? ({ height: '100dvh' } as any) : {}) }}
+        initialMetrics={Platform.OS === 'web' ? { frame: { x: 0, y: 0, width: 0, height: 0 }, insets: { top: 0, left: 0, right: 0, bottom: 0 } } : initialWindowMetrics || undefined}>
+        <AuthProvider>
+          <ThemeProvider>
+            <LanguageProvider>
+              <View style={{ flex: 1, backgroundColor: '#181F2A', ...(Platform.OS === 'web' ? ({ height: '100dvh' } as any) : {}) }}>
+                <RootApp />
+              </View>
+            </LanguageProvider>
+          </ThemeProvider>
+        </AuthProvider>
+      </SafeAreaProvider>
+    </ErrorBoundary>
   );
 }
 
