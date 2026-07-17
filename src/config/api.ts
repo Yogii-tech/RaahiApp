@@ -1,7 +1,6 @@
-// Central configuration for API endpoints
-// Change this URL when deploying to a new environment
-
-export const API_BASE = 'http://192.168.0.107:8080';
+// Re-export from the canonical apiConfig to avoid duplication.
+// Do not add a separate hardcoded URL here — update src/apiConfig.ts instead.
+export { API_BASE } from '../apiConfig';
 
 // Helper for building API URLs
-export const getApiUrl = (endpoint: string) => `${API_BASE}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+export const getApiUrl = (endpoint: string) => `${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;

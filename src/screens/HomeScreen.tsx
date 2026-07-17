@@ -63,6 +63,16 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
         const yyyy = today.getFullYear();
         return `${dd}/${mm}/${yyyy}`;
     });
+
+    // Convert display date DD/MM/YYYY → API format YYYY-MM-DD
+    const toApiDate = (displayDate: string): string => {
+        const parts = displayDate.trim().split('/');
+        if (parts.length === 3) {
+            const [dd, mm, yyyy] = parts;
+            return `${yyyy}-${mm}-${dd}`;
+        }
+        return displayDate; // fallback: return as-is
+    };
     const [departureTime, setDepartureTime] = useState('');
     const [timePeriod, setTimePeriod] = useState<'AM' | 'PM'>('AM');
     const [showCalendar, setShowCalendar] = useState(false);
@@ -76,6 +86,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
     const [discoveredStops, setDiscoveredStops] = useState<any[]>([]);
     const [pickupLandmarks, setPickupLandmarks] = useState<any[]>([]);
     const [previewLoading, setPreviewLoading] = useState(false);
+    const [previewAttempted, setPreviewAttempted] = useState(false);
     const [totalDistanceKm, setTotalDistanceKm] = useState<number | null>(null);
 
 
@@ -105,29 +116,38 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
     const fetchRoutePreview = async (p: string, d: string) => {
         if (!p.trim() || !d.trim() || !isDriver) return;
         setPreviewLoading(true);
+        setPreviewAttempted(false);
         try {
             const response = await apiRequest(`/api/rides/route-preview?pickup=${encodeURIComponent(p.trim())}&dropoff=${encodeURIComponent(d.trim())}`, {}, logout);
             if (response.ok) {
                 const data = await response.json();
                 setDiscoveredStops(data.stops || []);
                 setTotalDistanceKm(data.totalDistanceKm || null);
+            } else {
+                setDiscoveredStops([]);
+                setTotalDistanceKm(null);
             }
         } catch (err) {
             console.error('Route preview error:', err);
+            setDiscoveredStops([]);
+            setTotalDistanceKm(null);
         } finally {
             setPreviewLoading(false);
+            setPreviewAttempted(true);
         }
     };
 
     useEffect(() => {
         if (pickup && dropoff && isDriver) {
+            setPreviewAttempted(false);
             const timer = setTimeout(() => {
                 fetchRoutePreview(pickup, dropoff);
-            }, 2000); // Increased debounce to 2s to reduce lag during typing
+            }, 2000); // 2s debounce — wait for user to finish typing
             return () => clearTimeout(timer);
         } else {
             setDiscoveredStops([]);
             setTotalDistanceKm(null);
+            setPreviewAttempted(false);
         }
     }, [pickup, dropoff, isDriver]);
 
@@ -191,6 +211,10 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
 
     const handlePostRide = async () => {
         if (!pickup.trim() || !dropoff.trim()) return;
+        if (!departureTime.trim()) {
+            Alert.alert(t('common.error'), 'Please enter a departure time.');
+            return;
+        }
         if (!timePeriod) {
             Alert.alert(t('common.error'), 'Please select AM or PM for your departure time.');
             return;
@@ -237,7 +261,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                 body: JSON.stringify({
                     pickup: pickup.trim(),
                     dropoff: dropoff.trim(),
-                    date: date.trim(),
+                    date: toApiDate(date.trim()), // Convert DD/MM/YYYY → YYYY-MM-DD for backend
                     departureTime: finalTime,
                     vehicleModel: user?.vehicle?.vehicle_name || "Vehicle",
                     vehicleNumber: user?.vehicle?.vehicle_number || "UK-00-0000",
@@ -441,11 +465,15 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                                     </View>
                                 )}
                             </View>
-                        ) : !previewLoading ? (
+                        ) : previewLoading ? null : previewAttempted ? (
                             <Text style={{ fontSize: 12, color: colors.subtextColor, fontStyle: 'italic' }}>
-                                Searching for villages along this route...
+                                No intermediate stops found — route goes directly {pickup} → {dropoff}
                             </Text>
-                        ) : null}
+                        ) : (
+                            <Text style={{ fontSize: 12, color: colors.subtextColor, fontStyle: 'italic' }}>
+                                Village stops will appear here after a moment...
+                            </Text>
+                        )}
                     </View>
                 )}
 
