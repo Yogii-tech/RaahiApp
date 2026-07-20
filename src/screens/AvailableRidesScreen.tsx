@@ -7,9 +7,11 @@ import {
     TouchableOpacity,
     ActivityIndicator,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
+import { API_BASE } from '../apiConfig';
 
 // Hardcoded coordinates for villages missing from OSM/Nominatim
 const KNOWN_LOCATIONS: Record<string, { lat: string; lon: string }> = {
@@ -17,15 +19,23 @@ const KNOWN_LOCATIONS: Record<string, { lat: string; lon: string }> = {
     rima: { lat: '29.833', lon: '79.800' },
 };
 
+// Route geocode requests through the backend proxy (avoids BUG-019 direct Nominatim violation)
 const geocodeLocation = async (name: string): Promise<{ lat: string; lon: string } | null> => {
     const key = name.toLowerCase().trim();
     if (KNOWN_LOCATIONS[key]) return KNOWN_LOCATIONS[key];
-    // Always append region to avoid resolving to wrong continent
-    const query = `${name}, Uttarakhand, India`;
-    const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`);
-    const data = await res.json();
-    if (!data || data.length === 0) return null;
-    return { lat: data[0].lat, lon: data[0].lon };
+    try {
+        const token = await AsyncStorage.getItem('auth_token');
+        const query = `${name}, Uttarakhand, India`;
+        const res = await fetch(`${API_BASE}/api/location/search?q=${encodeURIComponent(query)}`, {
+            headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        });
+        if (!res.ok) return null;
+        const data = await res.json();
+        if (!data || data.length === 0) return null;
+        return { lat: data[0].lat, lon: data[0].lon };
+    } catch {
+        return null;
+    }
 };
 
 const DistanceDisplay = ({ pickup, dropoff, color }: { pickup?: string, dropoff?: string, color: string }) => {
@@ -60,7 +70,6 @@ const DistanceDisplay = ({ pickup, dropoff, color }: { pickup?: string, dropoff?
     return <Text style={{ fontSize: 12, fontWeight: 'bold', color: color, marginTop: 4 }}>{info}</Text>;
 };
 
-import { API_BASE } from '../apiConfig';
 import { apiRequest } from '../utils/api';
 
 interface StopInfo {
@@ -116,7 +125,14 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ searchPicku
             const queryParams = [];
             if (searchPickup) queryParams.push(`pickup=${encodeURIComponent(searchPickup)}`);
             if (searchDropoff) queryParams.push(`dropoff=${encodeURIComponent(searchDropoff)}`);
-            if (searchDate) queryParams.push(`date=${encodeURIComponent(searchDate)}`);
+            if (searchDate) {
+                // Convert display format DD/MM/YYYY to API format YYYY-MM-DD (BUG-022 fix)
+                const parts = searchDate.trim().split('/');
+                const apiDate = parts.length === 3
+                    ? `${parts[2]}-${parts[1]}-${parts[0]}`
+                    : searchDate;
+                queryParams.push(`date=${encodeURIComponent(apiDate)}`);
+            }
             if (queryParams.length > 0) {
                 url += `?${queryParams.join('&')}`;
             }
