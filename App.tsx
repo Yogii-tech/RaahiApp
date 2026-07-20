@@ -2,17 +2,6 @@ import React, { useState, useEffect } from 'react';
 import * as Sentry from "@sentry/react-native";
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 
-// DSN is injected via __DEV__ webpack DefinePlugin / Metro env — never hardcoded
-const sentryDsn = (typeof process !== 'undefined' && process.env?.SENTRY_DSN) || '';
-Sentry.init({
-  dsn: sentryDsn,
-  enabled: sentryDsn !== '',
-  tracesSampleRate: typeof __DEV__ !== 'undefined' && __DEV__ ? 1.0 : 0.1,
-  _experiments: {
-    profilesSampleRate: typeof __DEV__ !== 'undefined' && __DEV__ ? 1.0 : 0.1,
-  },
-});
-
 import {
   StatusBar,
   View,
@@ -44,6 +33,19 @@ import MapScreen from './src/screens/MapScreen';
 import ChatScreen from './src/screens/ChatScreen';
 import Icon from 'react-native-vector-icons/Ionicons';
 import WelcomeScreen from './src/screens/WelcomeScreen';
+
+// DSN is injected via __DEV__ webpack DefinePlugin / Metro env — never hardcoded
+const sentryDsn = (typeof process !== 'undefined' && process.env?.SENTRY_DSN) || '';
+if (Platform.OS !== 'web') {
+  Sentry.init({
+    dsn: sentryDsn,
+    enabled: sentryDsn !== '',
+    tracesSampleRate: typeof __DEV__ !== 'undefined' && __DEV__ ? 1.0 : 0.1,
+    _experiments: {
+      profilesSampleRate: typeof __DEV__ !== 'undefined' && __DEV__ ? 1.0 : 0.1,
+    },
+  });
+}
 
 const linking = {
   prefixes: ['http://localhost:3000', 'raahi://'],
@@ -475,4 +477,4 @@ function App() {
   );
 }
 
-export default Sentry.wrap(App);
+export default Platform.OS === 'web' ? App : Sentry.wrap(App);

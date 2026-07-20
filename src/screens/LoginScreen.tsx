@@ -88,7 +88,15 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
             }
 
             setStep(isAdmin ? 'admin_otp' : 'otp');
-            Alert.alert(t('login.otpSent'), t('login.otpSentMessage'));
+            if (data.otp) {
+                setOtp(data.otp);
+                Alert.alert(
+                    isAdmin ? 'Admin OTP (Dev Mode)' : 'OTP (Dev Mode)',
+                    `Your OTP is: ${data.otp}. It has been autofilled for you.`
+                );
+            } else {
+                Alert.alert(t('login.otpSent'), t('login.otpSentMessage'));
+            }
         } catch {
             Alert.alert(t('common.error'), t('login.connectionError'));
         } finally {
@@ -304,6 +312,229 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
         }
     };
 
+    // ─── Full-page KYC form for the vehicle step ───────────────────────────
+    if (step === 'vehicle') {
+        return (
+            <KeyboardAvoidingView
+                style={[styles.container, { backgroundColor: isDark ? '#0F172A' : '#F8FAFC' }]}
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+                <ScrollView
+                    style={{ flex: 1 }}
+                    contentContainerStyle={{ paddingBottom: 48 }}
+                    showsVerticalScrollIndicator={false}>
+
+                    {/* Header */}
+                    <View style={[kycStyles.pageHeader, { backgroundColor: colors.primary }]}>
+                        <TouchableOpacity onPress={() => setStep('role')} style={kycStyles.backBtn}>
+                            <Text style={{ color: '#fff', fontSize: 22, lineHeight: 26 }}>←</Text>
+                        </TouchableOpacity>
+                        <View style={{ flex: 1, alignItems: 'center' }}>
+                            <Text style={kycStyles.pageHeaderTitle}>Driver KYC</Text>
+                            <Text style={kycStyles.pageHeaderSub}>Vehicle & Document Verification</Text>
+                        </View>
+                        <View style={{ width: 40 }} />
+                    </View>
+
+                    <View style={{ paddingHorizontal: 20, paddingTop: 24 }}>
+
+                        {/* Progress indicator */}
+                        <View style={kycStyles.progressRow}>
+                            {['Vehicle Info', 'Seating', 'Documents'].map((label, i) => (
+                                <View key={i} style={{ alignItems: 'center', flex: 1 }}>
+                                    <View style={[kycStyles.progressDot, { backgroundColor: colors.primary }]}>
+                                        <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>{i + 1}</Text>
+                                    </View>
+                                    <Text style={[kycStyles.progressLabel, { color: colors.subtextColor }]}>{label}</Text>
+                                </View>
+                            ))}
+                            <View style={[kycStyles.progressLine, { backgroundColor: colors.primary, left: '17%' }]} />
+                            <View style={[kycStyles.progressLine, { backgroundColor: colors.primary, left: '50%' }]} />
+                        </View>
+
+                        {/* Section 1: Vehicle Info */}
+                        <View style={[kycStyles.card, { backgroundColor: isDark ? '#1E293B' : '#FFFFFF' }]}>
+                            <View style={kycStyles.cardHeader}>
+                                <Text style={kycStyles.cardIcon}>🚗</Text>
+                                <Text style={[kycStyles.cardTitle, { color: colors.textColor }]}>Vehicle Information</Text>
+                            </View>
+
+                            <TextInput
+                                style={[kycStyles.kycInput, {
+                                    backgroundColor: isDark ? '#0F172A' : '#F1F5F9',
+                                    color: colors.textColor,
+                                    borderColor: vehicleDocs.name ? colors.primary : (isDark ? '#334155' : '#E2E8F0')
+                                }]}
+                                placeholder="Vehicle Name (e.g. Tata Sumo Gold)"
+                                placeholderTextColor={isDark ? '#475569' : '#94A3B8'}
+                                value={vehicleDocs.name}
+                                onChangeText={text => setVehicleDocs(p => ({ ...p, name: text }))}
+                            />
+                            <TextInput
+                                style={[kycStyles.kycInput, {
+                                    backgroundColor: isDark ? '#0F172A' : '#F1F5F9',
+                                    color: colors.textColor,
+                                    borderColor: vehicleDocs.type ? colors.primary : (isDark ? '#334155' : '#E2E8F0')
+                                }]}
+                                placeholder="Vehicle Type (e.g. SUV, Van, Sedan, Bus)"
+                                placeholderTextColor={isDark ? '#475569' : '#94A3B8'}
+                                autoCapitalize="words"
+                                value={vehicleDocs.type}
+                                onChangeText={text => setVehicleDocs(p => ({ ...p, type: text }))}
+                            />
+                            <View style={{ flexDirection: 'row', gap: 12 }}>
+                                <TextInput
+                                    style={[kycStyles.kycInput, {
+                                        flex: 1,
+                                        backgroundColor: isDark ? '#0F172A' : '#F1F5F9',
+                                        color: colors.textColor,
+                                        borderColor: vehicleDocs.seats ? colors.primary : (isDark ? '#334155' : '#E2E8F0')
+                                    }]}
+                                    placeholder="Seats"
+                                    placeholderTextColor={isDark ? '#475569' : '#94A3B8'}
+                                    keyboardType="number-pad"
+                                    value={vehicleDocs.seats}
+                                    onChangeText={text => setVehicleDocs(p => ({ ...p, seats: text.replace(/[^0-9]/g, '') }))}
+                                />
+                                <TextInput
+                                    style={[kycStyles.kycInput, {
+                                        flex: 2,
+                                        backgroundColor: isDark ? '#0F172A' : '#F1F5F9',
+                                        color: colors.textColor,
+                                        borderColor: vehicleDocs.number ? colors.primary : (isDark ? '#334155' : '#E2E8F0')
+                                    }]}
+                                    placeholder="Vehicle Number (e.g. HP12AB3456)"
+                                    placeholderTextColor={isDark ? '#475569' : '#94A3B8'}
+                                    autoCapitalize="characters"
+                                    value={vehicleDocs.number}
+                                    onChangeText={text => setVehicleDocs(p => ({ ...p, number: text }))}
+                                />
+                            </View>
+                        </View>
+
+                        {/* Section 2: Seating Layout */}
+                        <View style={[kycStyles.card, { backgroundColor: isDark ? '#1E293B' : '#FFFFFF' }]}>
+                            <View style={kycStyles.cardHeader}>
+                                <Text style={kycStyles.cardIcon}>💺</Text>
+                                <Text style={[kycStyles.cardTitle, { color: colors.textColor }]}>Seating Arrangement</Text>
+                            </View>
+                            <View style={{ flexDirection: 'row', gap: 10 }}>
+                                {[
+                                    { id: 'sedan', icon: '🚗', label: 'Small Car\nSedan' },
+                                    { id: 'suv', icon: '🚙', label: 'SUV / Jeep\n4×4' },
+                                    { id: 'bus_2x2', icon: '🚌', label: 'Bus\n2×2 Layout' },
+                                ].map(layout => (
+                                    <TouchableOpacity
+                                        key={layout.id}
+                                        style={[
+                                            kycStyles.layoutCard,
+                                            {
+                                                backgroundColor: vehicleDocs.layout === layout.id
+                                                    ? colors.primary
+                                                    : (isDark ? '#0F172A' : '#F1F5F9'),
+                                                borderColor: vehicleDocs.layout === layout.id
+                                                    ? colors.primary
+                                                    : (isDark ? '#334155' : '#E2E8F0'),
+                                            }
+                                        ]}
+                                        onPress={() => setVehicleDocs(p => ({ ...p, layout: layout.id as any }))}
+                                    >
+                                        <Text style={{ fontSize: 28, marginBottom: 6 }}>{layout.icon}</Text>
+                                        <Text style={[
+                                            kycStyles.layoutLabel,
+                                            { color: vehicleDocs.layout === layout.id ? '#FFFFFF' : colors.textColor }
+                                        ]}>{layout.label}</Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        </View>
+
+                        {/* Section 3: Documents */}
+                        <View style={[kycStyles.card, { backgroundColor: isDark ? '#1E293B' : '#FFFFFF' }]}>
+                            <View style={kycStyles.cardHeader}>
+                                <Text style={kycStyles.cardIcon}>📋</Text>
+                                <Text style={[kycStyles.cardTitle, { color: colors.textColor }]}>Required Documents</Text>
+                            </View>
+                            <Text style={{ color: isDark ? '#64748B' : '#94A3B8', fontSize: 12, marginBottom: 16 }}>
+                                All documents must be clear and legible. Accepted: JPG, PNG, PDF
+                            </Text>
+
+                            {[
+                                { key: 'dl', icon: '🪪', label: 'Driving License', sub: 'Front and back of your DL', required: true },
+                                { key: 'rc', icon: '📄', label: 'RC Book', sub: 'Vehicle Registration Certificate', required: true },
+                                { key: 'pollution', icon: '🌿', label: 'Pollution Certificate', sub: 'Valid PUC Certificate', required: true },
+                                { key: 'image', icon: '📷', label: 'Vehicle Photo', sub: 'Number plate must be clearly visible', required: true },
+                                { key: 'ownership', icon: '📝', label: 'Ownership Proof', sub: 'Any document establishing owner-vehicle relation', required: false },
+                            ].map(doc => {
+                                const isUploaded = !!(vehicleDocs as any)[doc.key];
+                                return (
+                                    <TouchableOpacity
+                                        key={doc.key}
+                                        style={[
+                                            kycStyles.docRow,
+                                            {
+                                                backgroundColor: isUploaded
+                                                    ? (isDark ? 'rgba(34,197,94,0.1)' : '#F0FDF4')
+                                                    : (isDark ? '#0F172A' : '#F8FAFC'),
+                                                borderColor: isUploaded
+                                                    ? '#22C55E'
+                                                    : (isDark ? '#334155' : '#E2E8F0'),
+                                            }
+                                        ]}
+                                        onPress={() => handleFileUpload(doc.key as any)}
+                                        activeOpacity={0.7}
+                                    >
+                                        <View style={[kycStyles.docIconBox, { backgroundColor: isUploaded ? '#22C55E' : colors.primary + '20' }]}>
+                                            <Text style={{ fontSize: 20 }}>{isUploaded ? '✅' : doc.icon}</Text>
+                                        </View>
+                                        <View style={{ flex: 1 }}>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                                <Text style={[kycStyles.docLabel, { color: colors.textColor }]}>{doc.label}</Text>
+                                                {doc.required && !isUploaded && (
+                                                    <View style={kycStyles.reqBadge}><Text style={{ color: '#EF4444', fontSize: 9, fontWeight: '700' }}>REQUIRED</Text></View>
+                                                )}
+                                            </View>
+                                            <Text style={[kycStyles.docSub, { color: isDark ? '#64748B' : '#94A3B8' }]}>
+                                                {isUploaded ? '✓ Uploaded successfully' : doc.sub}
+                                            </Text>
+                                        </View>
+                                        <View style={[kycStyles.uploadChip, {
+                                            backgroundColor: isUploaded ? '#22C55E' : colors.primary,
+                                        }]}>
+                                            <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>
+                                                {isUploaded ? 'Change' : 'Upload'}
+                                            </Text>
+                                        </View>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </View>
+
+                        {/* Submit */}
+                        <TouchableOpacity
+                            style={[
+                                kycStyles.submitBtn,
+                                { backgroundColor: colors.primary },
+                                loading && { opacity: 0.7 }
+                            ]}
+                            onPress={() => handleCompleteRegistration('driver')}
+                            activeOpacity={0.85}
+                            disabled={loading}>
+                            {loading ? (
+                                <ActivityIndicator color="#FFFFFF" />
+                            ) : (
+                                <>
+                                    <Text style={kycStyles.submitBtnText}>Submit & Complete Registration</Text>
+                                    <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, marginTop: 4 }}>Your documents will be verified within 24 hours</Text>
+                                </>
+                            )}
+                        </TouchableOpacity>
+
+                    </View>
+                </ScrollView>
+            </KeyboardAvoidingView>
+        );
+    }
+
     return (
         <KeyboardAvoidingView
             style={[styles.container, { backgroundColor: colors.background }]}
@@ -312,9 +543,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 <Text style={[styles.title, { color: colors.textColor }]}>
                     {step === 'name' ? t('login.enterName') :
                         step === 'role' ? t('login.chooseRole') :
-                            step === 'vehicle' ? t('login.vehicleRegistration') :
-                                step === 'consent' ? 'User Consent' :
-                                    t('login.moveFreely')}
+                            step === 'consent' ? 'User Consent' :
+                                t('login.moveFreely')}
                 </Text>
 
                 <View style={styles.spacer16} />
@@ -324,11 +554,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                         ? t('login.helpDrivers')
                         : step === 'role'
                             ? t('login.howUseRaahi')
-                            : step === 'vehicle'
-                                ? ''
-                                : step === 'consent'
-                                    ? 'Please review our terms of use'
-                                    : t('login.localTrusted')}
+                            : step === 'consent'
+                                ? 'Please review our terms of use'
+                                : t('login.localTrusted')}
                 </Text>
 
                 <View style={styles.spacer40} />
@@ -519,141 +747,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                         </TouchableOpacity>
 
                         <TouchableOpacity onPress={() => setStep('name')} style={styles.backButton}>
-                            <Text style={[styles.switchText, { color: colors.primary }]}>{t('common.back')}</Text>
-                        </TouchableOpacity>
-                    </View>
-                )}
-
-                {step === 'vehicle' && (
-                    <View style={styles.vehicleDocContainer}>
-                        <TextInput
-                            style={[styles.input, styles.docInput, {
-                                backgroundColor: colors.inputFillColor,
-                                color: colors.textColor,
-                                borderColor: colors.inputBorderColor
-                            }]}
-                            placeholder={t('login.vehicleName')}
-                            placeholderTextColor={isDark ? 'rgba(255,255,255,0.24)' : 'rgba(34,34,96,0.3)'}
-                            value={vehicleDocs.name}
-                            onChangeText={(text) => setVehicleDocs(prev => ({ ...prev, name: text }))}
-                        />
-
-                        <TextInput
-                            style={[styles.input, styles.docInput, {
-                                backgroundColor: colors.inputFillColor,
-                                color: colors.textColor,
-                                borderColor: colors.inputBorderColor
-                            }]}
-                            placeholder={t('login.vehicleTypePlaceholder')}
-                            placeholderTextColor={isDark ? 'rgba(255,255,255,0.24)' : 'rgba(34,34,96,0.3)'}
-                            autoCapitalize="words"
-                            value={vehicleDocs.type}
-                            onChangeText={(text) => setVehicleDocs(prev => ({ ...prev, type: text }))}
-                        />
-
-                        <View style={styles.row}>
-                            <TextInput
-                                style={[styles.input, styles.docInput, {
-                                    flex: 1,
-                                    backgroundColor: colors.inputFillColor,
-                                    color: colors.textColor,
-                                    borderColor: colors.inputBorderColor
-                                }]}
-                                placeholder={t('login.vehicleSeats')}
-                                placeholderTextColor={isDark ? 'rgba(255,255,255,0.24)' : 'rgba(34,34,96,0.3)'}
-                                keyboardType="number-pad"
-                                value={vehicleDocs.seats}
-                                onChangeText={(text) => setVehicleDocs(prev => ({ ...prev, seats: text.replace(/[^0-9]/g, '') }))}
-                            />
-                            <View style={{ width: 12 }} />
-                            <TextInput
-                                style={[styles.input, styles.docInput, {
-                                    flex: 2,
-                                    backgroundColor: colors.inputFillColor,
-                                    color: colors.textColor,
-                                    borderColor: colors.inputBorderColor
-                                }]}
-                                placeholder={t('login.vehicleNumber')}
-                                placeholderTextColor={isDark ? 'rgba(255,255,255,0.24)' : 'rgba(34,34,96,0.3)'}
-                                autoCapitalize="characters"
-                                value={vehicleDocs.number}
-                                onChangeText={(text) => setVehicleDocs(prev => ({ ...prev, number: text }))}
-                            />
-                        </View>
-
-                        <Text style={[styles.sectionTitle, { color: colors.subtextColor, marginTop: 12, marginBottom: 8 }]}>
-                            {t('login.seatingArrangement').toUpperCase()}
-                        </Text>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.layoutSelector}>
-                            {[
-                                { id: 'sedan', icon: '🚗' },
-                                { id: 'suv', icon: '🚙' },
-                                { id: 'bus_2x2', icon: '🚌' },
-                            ].map((layout) => (
-                                <TouchableOpacity
-                                    key={layout.id}
-                                    style={[
-                                        styles.layoutCard,
-                                        {
-                                            backgroundColor: vehicleDocs.layout === layout.id ? colors.primary : colors.cardColor,
-                                            borderColor: colors.borderColor,
-                                        }
-                                    ]}
-                                    onPress={() => setVehicleDocs(prev => ({ ...prev, layout: layout.id as any }))}
-                                >
-                                    <Text style={styles.layoutIcon}>{layout.icon}</Text>
-                                    <Text style={[
-                                        styles.layoutLabel,
-                                        { color: vehicleDocs.layout === layout.id ? '#FFFFFF' : colors.textColor }
-                                    ]}>
-                                        {t(`layout.${layout.id}` as any)}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
-
-                        <View style={styles.spacer12} />
-                        {[
-                            { key: 'dl', label: 'login.uploadDL' },
-                            { key: 'rc', label: 'login.uploadRC' },
-                            { key: 'pollution', label: 'login.uploadPollution' },
-                            { key: 'image', label: 'login.uploadVehicleImg', hint: 'login.vehicleImgHint' },
-                            { key: 'ownership', label: 'login.uploadOwnership', hint: 'login.ownershipHint' },
-                        ].map((doc) => (
-                            <View key={doc.key} style={styles.docItem}>
-                                <TouchableOpacity
-                                    style={[styles.uploadButton, { borderColor: colors.borderColor, backgroundColor: colors.inputFillColor }]}
-                                    onPress={() => handleFileUpload(doc.key as any)}>
-                                    <View style={{ flexDirection: 'row', alignItems: 'center', width: '100%', justifyContent: 'center' }}>
-                                        <Text style={[styles.uploadButtonText, { color: colors.textColor, textAlign: 'center', flex: 1 }]}>
-                                            {(vehicleDocs as any)[doc.key] ? `${t('login.uploadSuccess')}${(vehicleDocs as any)[doc.key].split('/').pop()?.substring(0, 20)}...` : t(doc.label as any)}
-                                        </Text>
-                                        {(vehicleDocs as any)[doc.key] && (
-                                            <Text style={{ fontSize: 18, position: 'absolute', right: 0 }}>✅</Text>
-                                        )}
-                                    </View>
-                                </TouchableOpacity>
-                                {doc.hint && !(vehicleDocs as any)[doc.key] && (
-                                    <Text style={[styles.docHint, { color: colors.subtextColor }]}>{t(doc.hint as any)}</Text>
-                                )}
-                            </View>
-                        ))}
-
-                        <View style={styles.spacer24} />
-
-                        <TouchableOpacity
-                            style={[styles.button, { backgroundColor: colors.primary }, loading && styles.buttonDisabled]}
-                            onPress={() => handleCompleteRegistration('driver')}
-                            activeOpacity={0.85}
-                            disabled={loading}>
-                            {loading ? (
-                                <ActivityIndicator color="#FFFFFF" />
-                            ) : (
-                                <Text style={styles.buttonText}>{t('login.submitDocs')}</Text>
-                            )}
-                        </TouchableOpacity>
-
-                        <TouchableOpacity onPress={() => setStep('role')} style={styles.backButton}>
                             <Text style={[styles.switchText, { color: colors.primary }]}>{t('common.back')}</Text>
                         </TouchableOpacity>
                     </View>
@@ -968,4 +1061,160 @@ const styles = StyleSheet.create({
     },
 });
 
+const kycStyles = StyleSheet.create({
+    pageHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingTop: Platform.OS === 'web' ? 20 : 52,
+        paddingBottom: 20,
+        paddingHorizontal: 20,
+    },
+    backBtn: {
+        width: 40,
+        height: 40,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    pageHeaderTitle: {
+        color: '#FFFFFF',
+        fontSize: 18,
+        fontWeight: '700',
+    },
+    pageHeaderSub: {
+        color: 'rgba(255,255,255,0.75)',
+        fontSize: 12,
+        marginTop: 2,
+    },
+    progressRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        marginBottom: 24,
+        position: 'relative',
+    },
+    progressDot: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 6,
+    },
+    progressLabel: {
+        fontSize: 10,
+        fontWeight: '600',
+        textAlign: 'center',
+    },
+    progressLine: {
+        position: 'absolute',
+        top: 14,
+        width: '33%',
+        height: 2,
+        opacity: 0.4,
+    },
+    card: {
+        borderRadius: 16,
+        padding: 20,
+        marginBottom: 16,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+        elevation: 3,
+    },
+    cardHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 16,
+        gap: 10,
+    },
+    cardIcon: {
+        fontSize: 22,
+    },
+    cardTitle: {
+        fontSize: 15,
+        fontWeight: '700',
+    },
+    kycInput: {
+        fontSize: 14,
+        paddingVertical: 13,
+        paddingHorizontal: 14,
+        borderRadius: 10,
+        borderWidth: 1.5,
+        marginBottom: 12,
+    },
+    layoutCard: {
+        flex: 1,
+        borderRadius: 12,
+        borderWidth: 1.5,
+        padding: 14,
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: 90,
+    },
+    layoutLabel: {
+        fontSize: 11,
+        fontWeight: '700',
+        textAlign: 'center',
+        lineHeight: 15,
+    },
+    docRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderRadius: 12,
+        borderWidth: 1.5,
+        padding: 14,
+        marginBottom: 10,
+        gap: 12,
+    },
+    docIconBox: {
+        width: 44,
+        height: 44,
+        borderRadius: 10,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    docLabel: {
+        fontSize: 14,
+        fontWeight: '600',
+        marginBottom: 2,
+    },
+    docSub: {
+        fontSize: 11,
+        lineHeight: 15,
+    },
+    reqBadge: {
+        backgroundColor: 'rgba(239,68,68,0.1)',
+        borderRadius: 4,
+        paddingHorizontal: 5,
+        paddingVertical: 2,
+        borderWidth: 1,
+        borderColor: 'rgba(239,68,68,0.3)',
+    },
+    uploadChip: {
+        paddingHorizontal: 12,
+        paddingVertical: 7,
+        borderRadius: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
+        minWidth: 62,
+    },
+    submitBtn: {
+        borderRadius: 14,
+        paddingVertical: 18,
+        alignItems: 'center',
+        marginTop: 8,
+        shadowColor: '#6366f1',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 5,
+    },
+    submitBtnText: {
+        color: '#FFFFFF',
+        fontWeight: '700',
+        fontSize: 16,
+    },
+});
+
 export default LoginScreen;
+
