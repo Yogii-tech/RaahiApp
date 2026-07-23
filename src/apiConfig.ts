@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 
 // Production Cloud Run URL — used for all non-local environments
-const PROD_URL = 'https://api.goraahi.in';
+const PROD_URL = 'https://raahi-api-137804375265.asia-south2.run.app';
 
 // Only used during local development on native (Android/iOS emulator or physical device)
 // Set this to your local machine's LAN IP when running the backend locally
