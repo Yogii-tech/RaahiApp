@@ -550,13 +550,13 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 <View style={styles.spacer16} />
 
                 <Text style={[styles.subtitle, { color: colors.subtextColor }]}>
-                    {step === 'name'
-                        ? t('login.helpDrivers')
-                        : step === 'role'
-                            ? t('login.howUseRaahi')
-                            : step === 'consent'
-                                ? 'Please review our terms of use'
-                                : t('login.localTrusted')}
+                    {step === 'role'
+                        ? t('login.howUseRaahi')
+                        : step === 'consent'
+                            ? 'Please review our terms of use'
+                            : step !== 'name'
+                                ? t('login.localTrusted')
+                                : null}
                 </Text>
 
                 <View style={styles.spacer40} />

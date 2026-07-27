@@ -97,6 +97,7 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
             const response = await apiRequest(`/api/rides/${ride.id}/book`, {
                 method: 'POST',
                 body: JSON.stringify({
+                    type: 'seat',
                     pickup: searchPickup || '',
                     dropoff: searchDropoff || '',
                     seatsRequested: selectedSeats.length,

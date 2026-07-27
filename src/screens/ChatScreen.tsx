@@ -60,7 +60,7 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
     const { user, logout } = useAuth();
     const { t } = useLanguage();
     const navigation = useNavigation<any>();
-    
+
     const [messages, setMessages] = useState<Message[]>([]);
     const [inputText, setInputText] = useState('');
     const [isLoading, setIsLoading] = useState(true);
@@ -118,7 +118,7 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
     };
 
     const renderMessage = ({ item }: { item: Message }) => {
-        const isMe = item.senderId === user?.id;
+        const isMe = item.senderId === user?.id || item.senderId === (user as any)?._id;
         return (
             <View style={[styles.messageRow, isMe ? styles.myMessageRow : styles.theirMessageRow]}>
                 {!isMe && (
@@ -177,7 +177,7 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
                 </View>
 
                 <View style={styles.headerActions}>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         style={styles.actionCircle}
                         onPress={() => {
                             if (recipientPhone) {
@@ -191,8 +191,8 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
                     >
                         <Text>📞</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity 
-                        style={styles.actionCircle} 
+                    <TouchableOpacity
+                        style={styles.actionCircle}
                         onPress={() => {
                             onBack(); // Close chat overlay
                             navigation.navigate('Map', {
