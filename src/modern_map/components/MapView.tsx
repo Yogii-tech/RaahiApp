@@ -36,8 +36,12 @@ const TILE_STYLES = {
     sources: {
       osm: {
         type: 'raster' as const,
+        // Correct Carto Dark Matter URL with subdomains (a/b/c/d)
         tiles: [
-          'https://basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png',
+          'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+          'https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+          'https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+          'https://d.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
         ],
         tileSize: 256,
         attribution: '© CARTO © OpenStreetMap contributors',
@@ -199,8 +203,47 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
     }, [pinModeActive, onMapClick]);
 
     // ── Update tile style when theme changes ──
+    // After setStyle(), all custom sources/layers are wiped by MapLibre.
+    // We re-add the route source & layers once the new style has fully loaded.
     useEffect(() => {
-      mapRef.current?.setStyle(TILE_STYLES[theme]);
+      const map = mapRef.current;
+      if (!map) return;
+
+      map.setStyle(TILE_STYLES[theme]);
+
+      const onStyleData = () => {
+        // Guard: only run once the style is fully ready
+        if (!map.isStyleLoaded()) return;
+
+        if (!map.getSource('route')) {
+          map.addSource('route', {
+            type: 'geojson',
+            data: { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [] } },
+          });
+        }
+        if (!map.getLayer('route-line-glow')) {
+          map.addLayer({
+            id: 'route-line-glow',
+            type: 'line',
+            source: 'route',
+            layout: { 'line-join': 'round', 'line-cap': 'round' },
+            paint: { 'line-color': '#007AFF', 'line-width': 14, 'line-opacity': 0.15 },
+          });
+        }
+        if (!map.getLayer('route-line')) {
+          map.addLayer({
+            id: 'route-line',
+            type: 'line',
+            source: 'route',
+            layout: { 'line-join': 'round', 'line-cap': 'round' },
+            paint: { 'line-color': '#007AFF', 'line-width': 6, 'line-opacity': 0.9 },
+          });
+        }
+        map.off('styledata', onStyleData);
+      };
+
+      map.on('styledata', onStyleData);
+      return () => { map.off('styledata', onStyleData); };
     }, [theme]);
 
     // ── User location pulsing marker ──
