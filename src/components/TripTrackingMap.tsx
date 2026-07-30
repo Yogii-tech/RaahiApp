@@ -26,11 +26,27 @@ const TripTrackingMap: React.FC<TripTrackingMapProps> = ({ bookingId, pickup, dr
     useEffect(() => {
         if (Platform.OS !== 'web' || !mapContainerRef.current) return;
 
+        const mapStyle = {
+            version: 8 as const,
+            sources: {
+                osm: {
+                    type: 'raster' as const,
+                    tiles: [
+                        isDark 
+                            ? 'https://basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png'
+                            : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
+                    ],
+                    tileSize: 256,
+                    attribution: isDark ? '© CARTO © OpenStreetMap contributors' : '© OpenStreetMap contributors',
+                    maxzoom: 19,
+                },
+            },
+            layers: [{ id: 'osm', type: 'raster' as const, source: 'osm' }],
+        };
+
         const map = new maplibregl.Map({
             container: mapContainerRef.current,
-            style: isDark ? 
-                'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}.png' : 
-                'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+            style: mapStyle,
             center: [pickupCoords[1], pickupCoords[0]],
             zoom: 12,
         });

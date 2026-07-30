@@ -37,10 +37,10 @@ const TILE_STYLES = {
       osm: {
         type: 'raster' as const,
         tiles: [
-          'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}.png',
+          'https://basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png',
         ],
         tileSize: 256,
-        attribution: '© Stadia Maps © OpenStreetMap contributors',
+        attribution: '© CARTO © OpenStreetMap contributors',
         maxzoom: 20,
       },
     },
