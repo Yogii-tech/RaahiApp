@@ -21,6 +21,9 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import { API_BASE } from '../apiConfig';
 import LocationInput from '../components/LocationInput';
 import { apiRequest } from '../utils/api';
+import { saveFormDraft, loadFormDraft, clearFormDraft } from '../utils/formDraftStorage';
+import { pushSubViewHistory, popSubViewHistory, useBrowserBack } from '../utils/browserHistory';
+
 const { width } = Dimensions.get('window');
 
 
@@ -41,18 +44,21 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
     const [selectedRide, setSelectedRide] = useState<any | null>(null);
 
     // Form state - Step 1
-    const [pickup, setPickup] = useState('');
-    const [dropoff, setDropoff] = useState('');
+    const [pickup, setPickup] = useState(() => loadFormDraft('parcel_pickup', ''));
+    const [dropoff, setDropoff] = useState(() => loadFormDraft('parcel_dropoff', ''));
     const [pickupCoords, setPickupCoords] = useState<[number, number] | null>(null);
     const [dropoffCoords, setDropoffCoords] = useState<[number, number] | null>(null);
     const [roadDistance, setRoadDistance] = useState<number | null>(null);
     const [roadDuration, setRoadDuration] = useState<number | null>(null);
     const [selectedDate, setSelectedDate] = useState(() => {
-        const today = new Date();
-        const dd = String(today.getDate()).padStart(2, '0');
-        const mm = String(today.getMonth() + 1).padStart(2, '0');
-        const yyyy = today.getFullYear();
-        return `${dd}/${mm}/${yyyy}`;
+        const defaultDate = (() => {
+            const today = new Date();
+            const dd = String(today.getDate()).padStart(2, '0');
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const yyyy = today.getFullYear();
+            return `${dd}/${mm}/${yyyy}`;
+        })();
+        return loadFormDraft('parcel_date', defaultDate);
     });
     const [showCalendar, setShowCalendar] = useState(false);
     const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
@@ -60,11 +66,46 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
     const [selectedSize, setSelectedSize] = useState<'small' | 'medium' | 'large'>('medium');
 
     // Form state - Step 2 (Recipient Details)
-    const [recipientName, setRecipientName] = useState('');
-    const [contactNumber, setContactNumber] = useState('');
-    const [dropLocation, setDropLocation] = useState('');
-    const [notes, setNotes] = useState('');
+    const [recipientName, setRecipientName] = useState(() => loadFormDraft('parcel_recipientName', ''));
+    const [contactNumber, setContactNumber] = useState(() => loadFormDraft('parcel_contactNumber', ''));
+    const [dropLocation, setDropLocation] = useState(() => loadFormDraft('parcel_dropLocation', ''));
+    const [notes, setNotes] = useState(() => loadFormDraft('parcel_notes', ''));
     const [parcelPhoto, setParcelPhoto] = useState<string | null>(null);
+
+    // Save draft state to sessionStorage
+    React.useEffect(() => { saveFormDraft('parcel_pickup', pickup); }, [pickup]);
+    React.useEffect(() => { saveFormDraft('parcel_dropoff', dropoff); }, [dropoff]);
+    React.useEffect(() => { saveFormDraft('parcel_date', selectedDate); }, [selectedDate]);
+    React.useEffect(() => { saveFormDraft('parcel_recipientName', recipientName); }, [recipientName]);
+    React.useEffect(() => { saveFormDraft('parcel_contactNumber', contactNumber); }, [contactNumber]);
+    React.useEffect(() => { saveFormDraft('parcel_dropLocation', dropLocation); }, [dropLocation]);
+    React.useEffect(() => { saveFormDraft('parcel_notes', notes); }, [notes]);
+
+    const clearParcelDrafts = () => {
+        clearFormDraft('parcel_pickup');
+        clearFormDraft('parcel_dropoff');
+        clearFormDraft('parcel_recipientName');
+        clearFormDraft('parcel_contactNumber');
+        clearFormDraft('parcel_dropLocation');
+        clearFormDraft('parcel_notes');
+    };
+
+    const navigateToStep = (newStep: 'search' | 'rides' | 'details' | 'calculator') => {
+        if (newStep !== 'search') {
+            pushSubViewHistory(`parcel_${newStep}`);
+        }
+        setStep(newStep);
+    };
+
+    useBrowserBack(step !== 'search', () => {
+        if (step === 'calculator') {
+            setStep('rides');
+        } else if (step === 'rides') {
+            setStep('details');
+        } else if (step === 'details') {
+            setStep('search');
+        }
+    });
 
     const sizes = [
         { id: 'small', label: 'parcel.sizeSmall', desc: 'parcel.sizeSmallDesc', icon: 'mail-open-outline' }, // Mailbox-like
@@ -147,7 +188,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
             const data = await response.json();
             if (response.ok) {
                 setAvailableRides(data);
-                setStep('rides');
+                navigateToStep('rides');
             } else {
                 Alert.alert(t('common.error'), data.error || 'Failed to fetch vehicles');
             }
@@ -209,7 +250,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
 
     const handleFinalBooking = (ride: any) => {
         setSelectedRide(ride);
-        setStep('calculator');
+        navigateToStep('calculator');
     };
 
     const confirmBooking = async () => {
@@ -259,6 +300,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                 const data = await response.json();
                 const displayId = data.bookingId ? `RA-P-${data.bookingId.slice(-4).toUpperCase()}` : 'Booked';
 
+                clearParcelDrafts();
                 Alert.alert(
                     t('common.success'),
                     `Your parcel was successfully scheduled!\n\nBooking ID: ${displayId}\n\nYou can track this in your notifications.`,
@@ -288,7 +330,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
 
         return (
             <View style={styles.content}>
-                <TouchableOpacity onPress={() => setStep('rides')} style={styles.backButton}>
+                <TouchableOpacity onPress={() => { if (!popSubViewHistory()) setStep('rides'); }} style={styles.backButton}>
                     <Text style={[styles.backText, { color: colors.primary }]}>← {t('common.back')}</Text>
                 </TouchableOpacity>
 
@@ -363,7 +405,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
 
     const renderRecipientDetails = () => (
         <View style={styles.content}>
-            <TouchableOpacity onPress={() => setStep('search')} style={styles.backButton}>
+            <TouchableOpacity onPress={() => { if (!popSubViewHistory()) setStep('search'); }} style={styles.backButton}>
                 <Text style={[styles.backText, { color: colors.primary }]}>
                     ← {t('common.back')}
                 </Text>
@@ -489,7 +531,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
 
     const renderRideSelection = () => (
         <View style={styles.content}>
-            <TouchableOpacity onPress={() => setStep('search')} style={styles.backButton}>
+            <TouchableOpacity onPress={() => { if (!popSubViewHistory()) setStep('search'); }} style={styles.backButton}>
                 <Text style={[styles.backText, { color: colors.primary }]}>
                     ← {t('common.back')}
                 </Text>

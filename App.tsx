@@ -33,6 +33,7 @@ import MapScreen from './src/screens/MapScreen';
 import ChatScreen from './src/screens/ChatScreen';
 import Icon from 'react-native-vector-icons/Ionicons';
 import WelcomeScreen from './src/screens/WelcomeScreen';
+import { pushSubViewHistory, popSubViewHistory, useBrowserBack } from './src/utils/browserHistory';
 
 // DSN is injected via __DEV__ webpack DefinePlugin / Metro env — never hardcoded
 const sentryDsn = (typeof process !== 'undefined' && process.env?.SENTRY_DSN) || '';
@@ -235,6 +236,14 @@ function MainTabs() {
 
   const isDriver = user?.role === 'driver';
 
+  useBrowserBack(Boolean(notificationsVisible || activeChat), () => {
+    if (activeChat) {
+      setActiveChat(null);
+    } else if (notificationsVisible) {
+      setNotificationsVisible(false);
+    }
+  });
+
   useEffect(() => {
     fetchNotificationCount();
     const interval = setInterval(fetchNotificationCount, 10000);
@@ -283,8 +292,13 @@ function MainTabs() {
           notificationCount={notificationCount}
           onToggleNotifications={() => {
             const newState = !notificationsVisible;
+            if (newState) {
+              pushSubViewHistory('notifications');
+              handleMarkViewed();
+            } else {
+              popSubViewHistory();
+            }
             setNotificationsVisible(newState);
-            if (newState) handleMarkViewed();
           }}
         />
       )}
@@ -361,8 +375,11 @@ function MainTabs() {
       {notificationsVisible && (
         <View style={[StyleSheet.absoluteFill, { top: insets.top + 64, bottom: 0, backgroundColor: colors.background, zIndex: 100, elevation: 10 }]}>
           <RequestsOverlay
-            onClose={() => setNotificationsVisible(false)}
+            onClose={() => {
+              if (!popSubViewHistory()) setNotificationsVisible(false);
+            }}
             onOpenChat={(booking) => {
+              pushSubViewHistory('chat');
               setActiveChat(booking);
               setNotificationsVisible(false);
             }}
@@ -383,7 +400,9 @@ function MainTabs() {
             dropoffLat={activeChat.ride?.dropoffLat}
             dropoffLng={activeChat.ride?.dropoffLng}
             departureTime={activeChat.ride?.departureTime}
-            onBack={() => setActiveChat(null)}
+            onBack={() => {
+              if (!popSubViewHistory()) setActiveChat(null);
+            }}
           />
         </View>
       )}

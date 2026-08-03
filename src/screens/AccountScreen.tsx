@@ -20,6 +20,7 @@ import { apiRequest } from '../utils/api';
 import TrustedContactsScreen from './TrustedContactsScreen';
 import VehicleDetailsScreen from './VehicleDetailsScreen';
 import PricingSettingsScreen from './PricingSettingsScreen';
+import { pushSubViewHistory, popSubViewHistory, useBrowserBack } from '../utils/browserHistory';
 
 
 interface AccountScreenProps {
@@ -36,6 +37,17 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
     const [supportVisible, setSupportVisible] = useState(false);
     const supportNumber = '8434405463';
     const ratingColor = isDark ? '#FFC107' : '#FFB300';
+
+    const navigateToSubView = (v: 'main' | 'trusted' | 'vehicle' | 'pricing') => {
+        if (v !== 'main') {
+            pushSubViewHistory(`account_${v}`);
+        }
+        setView(v);
+    };
+
+    useBrowserBack(view !== 'main', () => {
+        setView('main');
+    });
 
     // New functions for logout modal
     const confirmLogout = () => {
@@ -88,24 +100,24 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
 
     const optionItems = [
         { icon: 'card-outline', title: t('account.paymentMethods') },
-        ...(!isParcelMode ? [{ icon: 'id-card-outline', title: t('account.trustedContacts'), action: () => setView('trusted') }] : []),
+        ...(!isParcelMode ? [{ icon: 'id-card-outline', title: t('account.trustedContacts'), action: () => navigateToSubView('trusted') }] : []),
         { icon: 'globe-outline', title: t('account.language'), action: handleLanguagePress },
-        ...(user?.role === 'driver' && !isParcelMode ? [{ icon: 'car-sport-outline', title: t('account.vehicleDetails'), action: () => setView('vehicle') }] : []),
-        ...(user?.role === 'driver' && !isParcelMode ? [{ icon: 'cash-outline', title: 'Pricing & Rates', action: () => setView('pricing') }] : []),
+        ...(user?.role === 'driver' && !isParcelMode ? [{ icon: 'car-sport-outline', title: t('account.vehicleDetails'), action: () => navigateToSubView('vehicle') }] : []),
+        ...(user?.role === 'driver' && !isParcelMode ? [{ icon: 'cash-outline', title: 'Pricing & Rates', action: () => navigateToSubView('pricing') }] : []),
         { icon: 'headset-outline', title: t('account.support'), action: handleSupportPress },
         { icon: 'log-out-outline', title: t('account.logout'), action: handleLogoutPress, color: '#C62828' },
     ];
 
     if (view === 'trusted') {
-        return <TrustedContactsScreen onBack={() => setView('main')} />;
+        return <TrustedContactsScreen onBack={() => { if (!popSubViewHistory()) setView('main'); }} />;
     }
 
     if (view === 'vehicle') {
-        return <VehicleDetailsScreen onBack={() => setView('main')} />;
+        return <VehicleDetailsScreen onBack={() => { if (!popSubViewHistory()) setView('main'); }} />;
     }
 
     if (view === 'pricing') {
-        return <PricingSettingsScreen onBack={() => setView('main')} />;
+        return <PricingSettingsScreen onBack={() => { if (!popSubViewHistory()) setView('main'); }} />;
     }
 
     return (

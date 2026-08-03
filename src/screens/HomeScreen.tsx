@@ -21,6 +21,8 @@ import AvailableRidesScreen from './AvailableRidesScreen';
 import BookRideScreen from './BookRideScreen';
 import ParcelBookingView from './ParcelBookingView';
 import LocationInput from '../components/LocationInput';
+import { saveFormDraft, loadFormDraft, clearFormDraft } from '../utils/formDraftStorage';
+import { pushSubViewHistory, popSubViewHistory, useBrowserBack } from '../utils/browserHistory';
 
 interface HomeScreenProps {
     onSosPressed?: () => void;
@@ -54,14 +56,17 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
     const [view, setView] = useState<string>('home');
     const [selectedRide, setSelectedRide] = useState<Ride | null>(null);
     const [rideType, setRideType] = useState<0 | 1>(0);
-    const [pickup, setPickup] = useState('');
-    const [dropoff, setDropoff] = useState('');
+    const [pickup, setPickup] = useState(() => loadFormDraft('home_pickup', ''));
+    const [dropoff, setDropoff] = useState(() => loadFormDraft('home_dropoff', ''));
     const [date, setDate] = useState(() => {
-        const today = new Date();
-        const dd = String(today.getDate()).padStart(2, '0');
-        const mm = String(today.getMonth() + 1).padStart(2, '0');
-        const yyyy = today.getFullYear();
-        return `${dd}/${mm}/${yyyy}`;
+        const defaultDate = (() => {
+            const today = new Date();
+            const dd = String(today.getDate()).padStart(2, '0');
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const yyyy = today.getFullYear();
+            return `${dd}/${mm}/${yyyy}`;
+        })();
+        return loadFormDraft('home_date', defaultDate);
     });
 
     // Convert display date DD/MM/YYYY → API format YYYY-MM-DD
@@ -73,8 +78,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
         }
         return displayDate; // fallback: return as-is
     };
-    const [departureTime, setDepartureTime] = useState('');
-    const [timePeriod, setTimePeriod] = useState<'AM' | 'PM'>('AM');
+    const [departureTime, setDepartureTime] = useState(() => loadFormDraft('home_departureTime', ''));
+    const [timePeriod, setTimePeriod] = useState<'AM' | 'PM'>(() => loadFormDraft('home_timePeriod', 'AM'));
     const [showCalendar, setShowCalendar] = useState(false);
     const [showTimePeriodDropdown, setShowTimePeriodDropdown] = useState(false);
     const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
@@ -88,6 +93,30 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
     const [previewLoading, setPreviewLoading] = useState(false);
     const [previewAttempted, setPreviewAttempted] = useState(false);
     const [totalDistanceKm, setTotalDistanceKm] = useState<number | null>(null);
+    const [postingRide, setPostingRide] = useState(false);
+
+    // Save draft state to sessionStorage
+    useEffect(() => { saveFormDraft('home_pickup', pickup); }, [pickup]);
+    useEffect(() => { saveFormDraft('home_dropoff', dropoff); }, [dropoff]);
+    useEffect(() => { saveFormDraft('home_date', date); }, [date]);
+    useEffect(() => { saveFormDraft('home_departureTime', departureTime); }, [departureTime]);
+    useEffect(() => { saveFormDraft('home_timePeriod', timePeriod); }, [timePeriod]);
+
+    const navigateToView = (newView: string) => {
+        if (newView !== 'home') {
+            pushSubViewHistory(newView);
+        }
+        setView(newView);
+    };
+
+    useBrowserBack(view !== 'home', () => {
+        if (view === 'book') {
+            setView('available');
+        } else if (view === 'available' || view === 'parcel') {
+            setView('home');
+            if (setParcelMode) setParcelMode(false);
+        }
+    });
 
 
     useEffect(() => {
@@ -201,15 +230,16 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                 }),
             });
 
-            setView('available');
+            navigateToView('available');
         } catch (err) {
             console.error('Failed to save recent ride:', err);
-            setView('available');
+            navigateToView('available');
         }
     };
 
 
     const handlePostRide = async () => {
+        if (postingRide) return;
         if (!pickup.trim() || !dropoff.trim()) return;
         if (!departureTime.trim()) {
             Alert.alert(t('common.error'), 'Please enter a departure time.');
@@ -220,6 +250,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
             return;
         }
 
+        setPostingRide(true);
         try {
             const finalTime = departureTime.trim().toUpperCase().includes('AM') || departureTime.trim().toUpperCase().includes('PM')
                 ? departureTime.trim()
@@ -274,6 +305,9 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
             if (response.ok) {
                 setPickup('');
                 setDropoff('');
+                clearFormDraft('home_pickup');
+                clearFormDraft('home_dropoff');
+                clearFormDraft('home_departureTime');
                 const today = new Date();
                 const dd = String(today.getDate()).padStart(2, '0');
                 const mm = String(today.getMonth() + 1).padStart(2, '0');
@@ -284,22 +318,22 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                 fetchRecentRides(); // Refresh recent list
             } else {
                 const data = await response.json();
-                Alert.alert(t('common.error'), data.error || 'Failed to post ride');
+                Alert.alert(
+                    response.status === 429 ? 'Please Wait' : t('common.error'),
+                    data.error || 'Failed to post ride'
+                );
             }
         } catch (err) {
             console.error('Post ride error:', err);
             Alert.alert(t('common.error'), t('login.connectionError'));
+        } finally {
+            setPostingRide(false);
         }
     };
 
     if (isParceller || view === 'parcel') {
         return <ParcelBookingView onBack={() => {
-            if (isParceller) {
-                // If they are a parceller role, maybe logout or switch role? 
-                // But for now, just stay on home if they are parceller role.
-                setView('home');
-                if (setParcelMode) setParcelMode(false);
-            } else {
+            if (!popSubViewHistory()) {
                 setView('home');
                 if (setParcelMode) setParcelMode(false);
             }
@@ -312,10 +346,12 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                 searchPickup={pickup.trim()}
                 searchDropoff={dropoff.trim()}
                 searchDate={date.trim()}
-                onBack={() => setView('home')}
+                onBack={() => {
+                    if (!popSubViewHistory()) setView('home');
+                }}
                 onSelectRide={(ride) => {
                     setSelectedRide(ride);
-                    setView('book');
+                    navigateToView('book');
                 }}
             />
         );
@@ -327,8 +363,15 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                 ride={selectedRide}
                 searchPickup={pickup.trim()}
                 searchDropoff={dropoff.trim()}
-                onBack={() => setView('available')}
-                onBookingComplete={() => setView('home')}
+                onBack={() => {
+                    if (!popSubViewHistory()) setView('available');
+                }}
+                onBookingComplete={() => {
+                    clearFormDraft('home_pickup');
+                    clearFormDraft('home_dropoff');
+                    clearFormDraft('home_departureTime');
+                    setView('home');
+                }}
             />
         );
     }
@@ -602,12 +645,17 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                 <View style={styles.spacer18} />
 
                 <TouchableOpacity
-                    style={[styles.findButton, { backgroundColor: colors.primary }]}
+                    style={[styles.findButton, { backgroundColor: colors.primary }, (isDriver && postingRide) && { opacity: 0.6 }]}
                     onPress={isDriver ? handlePostRide : handleFindRides}
-                    activeOpacity={0.85}>
-                    <Text style={styles.findButtonText}>
-                        {isDriver ? t('home.postRide') : t('home.findRides')}
-                    </Text>
+                    activeOpacity={0.85}
+                    disabled={isDriver && postingRide}>
+                    {isDriver && postingRide ? (
+                        <ActivityIndicator color="#FFF" size="small" />
+                    ) : (
+                        <Text style={styles.findButtonText}>
+                            {isDriver ? t('home.postRide') : t('home.findRides')}
+                        </Text>
+                    )}
                 </TouchableOpacity>
 
             </View>
@@ -722,7 +770,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                         },
                     ]}
                     onPress={() => {
-                        setView('parcel');
+                        navigateToView('parcel');
                         if (setParcelMode) setParcelMode(true);
                     }}
                     activeOpacity={0.8}>
