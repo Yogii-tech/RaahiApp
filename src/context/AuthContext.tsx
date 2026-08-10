@@ -157,6 +157,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     headers: { ...headers, Authorization: `Bearer ${newToken}` },
                 });
             }
+            // If still 401 after retry or if refresh was not possible, force logout
+            if (res.status === 401) {
+                await setAuth(null, null, null);
+            }
         }
         return res;
     };
