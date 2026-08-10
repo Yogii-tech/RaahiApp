@@ -471,54 +471,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                     containerZIndex={2000}
                 />
 
-                {isDriver && (pickup.trim() && dropoff.trim()) && (
-                    <View style={{
-                        marginTop: 18,
-                        padding: 12,
-                        borderRadius: 14,
-                        borderWidth: 1,
-                        borderColor: isDark ? 'rgba(0,255,255,0.1)' : 'rgba(91,79,255,0.1)',
-                        backgroundColor: isDark ? 'rgba(0,0,0,0.2)' : 'rgba(91,79,255,0.03)',
-                    }}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                            <Text style={{ fontSize: 11, fontWeight: 'bold', color: isDark ? '#00FFFF' : '#5B4FFF', letterSpacing: 1 }}>
-                                🛣️ AUTOMATIC ROUTE DISCOVERY
-                            </Text>
-                            {previewLoading && <ActivityIndicator size="small" color={colors.primary} />}
-                        </View>
 
-                        {discoveredStops.length > 0 ? (
-                            <View>
-                                <Text style={{ fontSize: 13, color: colors.textColor, fontWeight: '600', marginBottom: 4 }}>
-                                    Found {discoveredStops.length} intermediate stops
-                                </Text>
-                                <Text style={{ fontSize: 12, color: colors.subtextColor, lineHeight: 18 }}>
-                                    Your ride passes through: <Text style={{ color: colors.textColor, fontWeight: '500' }}>
-                                        {discoveredStops.map(s => s.name).join(' → ')}
-                                    </Text>
-                                </Text>
-                                {totalDistanceKm && (
-                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
-                                        <Text style={{ fontSize: 11, color: '#00C853', fontWeight: 'bold' }}>
-                                            Total road distance: {Math.round(totalDistanceKm)} km
-                                        </Text>
-                                        <Text style={{ fontSize: 11, color: colors.primary, fontWeight: 'bold' }}>
-                                            {t('home.estFullSeat')}{Math.round(totalDistanceKm * (user?.vehicle?.rate_per_km || 5))}
-                                        </Text>
-                                    </View>
-                                )}
-                            </View>
-                        ) : previewLoading ? null : previewAttempted ? (
-                            <Text style={{ fontSize: 12, color: colors.subtextColor, fontStyle: 'italic' }}>
-                                No intermediate stops found — route goes directly {pickup} → {dropoff}
-                            </Text>
-                        ) : (
-                            <Text style={{ fontSize: 12, color: colors.subtextColor, fontStyle: 'italic' }}>
-                                Village stops will appear here after a moment...
-                            </Text>
-                        )}
-                    </View>
-                )}
 
                 <View style={styles.spacer14} />
                 <View style={{ flexDirection: 'row', zIndex: 10, elevation: 10 }}>
