@@ -28,7 +28,7 @@ export interface Driver {
     totalRides?: number;
 }
 
-export default function AdminDriversView({ token, searchQuery = '' }: { token: string; searchQuery?: string }) {
+export default function AdminDriversView({ token, searchQuery = '', initialFilter = 'all' }: { token: string; searchQuery?: string; initialFilter?: 'all' | 'pending' | 'verified' | 'rejected' }) {
     const [drivers, setDrivers] = useState<Driver[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
@@ -36,7 +36,7 @@ export default function AdminDriversView({ token, searchQuery = '' }: { token: s
     const [previewImage, setPreviewImage] = useState<string | null>(null);
     const [rejectionReason, setRejectionReason] = useState('');
     const [submittingAction, setSubmittingAction] = useState(false);
-    const [activeFilter, setActiveFilter] = useState<'all' | 'pending' | 'verified' | 'rejected'>('all');
+    const [activeFilter, setActiveFilter] = useState<'all' | 'pending' | 'verified' | 'rejected'>(initialFilter);
 
     const { fetchWithAuth } = useAuth();
 

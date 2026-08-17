@@ -11,6 +11,7 @@ interface AdminStatsData {
     users: { total: number; drivers: number; passengers: number };
     routes: number;
     monthlyTrend: { month: string; rides: number }[];
+    trends?: { month: string; count: number }[];
 }
 
 export default function AdminDashboardView({ token, onNavigateToRides, onNavigateToParcels, onNavigateToVisitors, onNavigateToRoutes }: {
@@ -136,8 +137,8 @@ export default function AdminDashboardView({ token, onNavigateToRides, onNavigat
         },
     ];
 
-    const trendLabels = stats?.monthlyTrend?.map(m => m.month) ?? [];
-    const trendData = stats?.monthlyTrend?.map(m => m.rides) ?? [];
+    const trendLabels = (stats?.monthlyTrend || stats?.trends || []).map((m: any) => m.month || '');
+    const trendData = (stats?.monthlyTrend || stats?.trends || []).map((m: any) => typeof m.rides === 'number' ? m.rides : (typeof m.count === 'number' ? m.count : 0));
 
     const exportData = statCards.map(c => ({ label: c.label, value: c.value, sub: c.sub }));
 

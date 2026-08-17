@@ -21,6 +21,7 @@ interface RideRow {
 interface StatsData {
      rides: { total: number; available: number; completed: number; cancelled: number };
      monthlyTrend: { month: string; rides: number }[];
+     trends?: { month: string; count: number }[];
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -31,11 +32,11 @@ const STATUS_COLORS: Record<string, string> = {
      cancelled: '#DC3545',
 };
 
-export default function AdminRidesDetailView({ isDark, searchQuery = '' }: { isDark: boolean; searchQuery?: string }) {
+export default function AdminRidesDetailView({ isDark, searchQuery = '', initialTab = 'all' }: { isDark: boolean; searchQuery?: string; initialTab?: 'available' | 'completed' | 'cancelled' | 'all' }) {
      const [rides, setRides] = useState<RideRow[]>([]);
      const [statsData, setStatsData] = useState<StatsData | null>(null);
      const [loading, setLoading] = useState(true);
-     const [selectedTab, setSelectedTab] = useState<'available' | 'completed' | 'cancelled' | 'all'>('all');
+     const [selectedTab, setSelectedTab] = useState<'available' | 'completed' | 'cancelled' | 'all'>(initialTab);
      const [timeFrame, setTimeFrame] = useState<'Monthly' | 'Daily'>('Monthly');
      const { fetchWithAuth } = useAuth();
      const { width } = useWindowDimensions();
@@ -78,8 +79,8 @@ export default function AdminRidesDetailView({ isDark, searchQuery = '' }: { isD
      const completed = statsData?.rides.completed ?? rides.filter(r => r.status === 'completed').length;
      const cancelled = statsData?.rides.cancelled ?? rides.filter(r => r.status === 'cancelled').length;
 
-     const trendData = statsData?.monthlyTrend?.map(m => m.rides) ?? [];
-     const trendLabels = statsData?.monthlyTrend?.map(m => m.month) ?? [];
+     const trendData = (statsData?.monthlyTrend || statsData?.trends || []).map((m: any) => typeof m.rides === 'number' ? m.rides : (typeof m.count === 'number' ? m.count : 0));
+     const trendLabels = (statsData?.monthlyTrend || statsData?.trends || []).map((m: any) => m.month || '');
 
      const tabs = [
           { id: 'all', label: 'All Rides', count: totalRides, color: '#3B7DDD', icon: '🚙' },
