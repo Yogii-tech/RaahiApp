@@ -208,7 +208,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
 
     const handleFileUpload = (type: keyof typeof vehicleDocs) => {
         const activeToken = tempToken || token;
-        if (Platform.OS === 'web') {
+        if (Platform.OS === 'web' || typeof document !== 'undefined') {
             // @ts-ignore
             const input = document.createElement('input');
             input.type = 'file';
@@ -244,7 +244,22 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
             };
             input.click();
         } else {
-            Alert.alert('Mobile Upload', 'Image picker would be triggered here.');
+            Alert.prompt(
+                'Upload Document',
+                'Enter document image URL or tap OK to upload demo document:',
+                [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                        text: 'Upload',
+                        onPress: (url) => {
+                            const finalUrl = url && url.trim() ? url.trim() : 'https://via.placeholder.com/600x400.png?text=Document+Uploaded';
+                            setVehicleDocs(prev => ({ ...prev, [type]: finalUrl }));
+                        }
+                    }
+                ],
+                'plain-text',
+                'https://via.placeholder.com/600x400.png?text=Document+Uploaded'
+            );
         }
     };
 

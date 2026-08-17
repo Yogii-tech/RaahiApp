@@ -45,7 +45,14 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
             const response = await apiRequest(endpoint, {}, logout);
             if (response.ok) {
                 const data = await response.json();
-                setBookings(data || []);
+                const list = Array.isArray(data) ? data : [];
+                // Sort newest requests first (top) and older requests last (bottom)
+                list.sort((a: any, b: any) => {
+                    const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                    const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+                    return tB - tA;
+                });
+                setBookings(list);
             }
         } catch (err) {
             console.error('Fetch error:', err);
