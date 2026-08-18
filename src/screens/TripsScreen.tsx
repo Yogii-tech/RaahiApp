@@ -100,15 +100,32 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
                 if (isParcelHistory) {
                     data = data.filter((b: any) => b.type === 'parcel' || b.ride?.type === 'parcel');
                 }
-                // If this is the ride history tab (non-parcel), show completed rides/bookings
+                // If this is the ride history tab (non-parcel), show completed/cancelled rides/bookings
                 else if (isRideHistory) {
                     if (isDriver) {
-                        // Driver: show all rides (recent rides endpoint already returns driver's rides)
-                        data = data.filter((b: any) => b.type !== 'parcel');
+                        // Driver: show completed or cancelled rides (non-parcel)
+                        data = data.filter((b: any) => b.type !== 'parcel' && (b.status === 'completed' || b.status === 'cancelled'));
                     } else {
-                        // Passenger: show completed or past bookings (non-parcel)
+                        // Passenger: show completed or cancelled bookings (non-parcel)
                         data = data.filter((b: any) =>
-                            b.type !== 'parcel' && b.ride?.type !== 'parcel'
+                            b.type !== 'parcel' && 
+                            b.ride?.type !== 'parcel' && 
+                            (b.status === 'completed' || b.status === 'rejected' || b.ride?.status === 'completed' || b.ride?.status === 'cancelled')
+                        );
+                    }
+                }
+                // Regular active Trips view: show available/pending ones
+                else {
+                    if (isDriver) {
+                        // Driver: show active/available rides (non-parcel)
+                        data = data.filter((b: any) => b.type !== 'parcel' && b.status === 'available');
+                    } else {
+                        // Passenger: show pending or accepted bookings where the ride itself is still available
+                        data = data.filter((b: any) =>
+                            b.type !== 'parcel' &&
+                            b.ride?.type !== 'parcel' &&
+                            (b.status === 'pending' || b.status === 'accepted') &&
+                            b.ride?.status === 'available'
                         );
                     }
                 }
