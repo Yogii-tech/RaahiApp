@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, Alert, Platform } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE } from '../apiConfig';
@@ -75,10 +75,11 @@ const DistanceDisplay = ({ pickup, dropoff, color }: { pickup?: string, dropoff?
 interface TripsScreenProps {
     isParcelMode?: boolean;
     isParcelHistory?: boolean;
+    isRideHistory?: boolean;
     title?: string;
 }
 
-const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory, title }) => {
+const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory, isRideHistory, title }) => {
     const { colors, isDark } = useTheme();
     const { user, token, logout } = useAuth();
     const { t } = useLanguage();
@@ -96,8 +97,20 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
                 let data = await response.json() || [];
 
                 // If this is the "History" tab in parcel mode, filter for parcels only
-                if (isParcelHistory || title === t('tab.history')) {
+                if (isParcelHistory) {
                     data = data.filter((b: any) => b.type === 'parcel' || b.ride?.type === 'parcel');
+                }
+                // If this is the ride history tab (non-parcel), show completed rides/bookings
+                else if (isRideHistory) {
+                    if (isDriver) {
+                        // Driver: show all rides (recent rides endpoint already returns driver's rides)
+                        data = data.filter((b: any) => b.type !== 'parcel');
+                    } else {
+                        // Passenger: show completed or past bookings (non-parcel)
+                        data = data.filter((b: any) =>
+                            b.type !== 'parcel' && b.ride?.type !== 'parcel'
+                        );
+                    }
                 }
 
                 setBookings(data);
@@ -107,7 +120,7 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
         } finally {
             setLoading(false);
         }
-    }, [isDriver, isParcelHistory, title, t, logout]);
+    }, [isDriver, isParcelHistory, isRideHistory, title, t, logout]);
 
     useEffect(() => {
         fetchData();
@@ -516,7 +529,7 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
                     contentContainerStyle={styles.list}
                     ListEmptyComponent={
                         <Text style={[styles.empty, { color: colors.subtextColor }]}>
-                            {isParcelHistory || title === t('tab.history') ? t('trips.noHistory') : (isDriver ? t('trips.noPublished') : t('trips.noTrips'))}
+                            {isParcelHistory || isRideHistory || title === t('tab.history') ? t('trips.noHistory') : (isDriver ? t('trips.noPublished') : t('trips.noTrips'))}
                         </Text>
                     }
                 />

@@ -287,7 +287,7 @@ function MainTabs() {
 
   return (
     <View style={{ flex: 1 }}>
-      {currentRoute !== 'Map' && (
+      {(
         <AppHeader
           notificationCount={notificationCount}
           onToggleNotifications={() => {
@@ -319,7 +319,7 @@ function MainTabs() {
             let icon;
             if (isParcelTrips) {
               icon = tabIcons.ParcelTrips;
-            } else if (route.name === 'Map' && isParcelMode) {
+            } else if (route.name === 'History') {
               icon = tabIcons.History;
             } else {
               icon = tabIcons[route.name];
@@ -355,15 +355,12 @@ function MainTabs() {
           options={{ title: (user?.role === 'parceller' || parcelMode) ? t('tab.trackPackage') : t('tab.trips') }}
         />
         <Tab.Screen
-          name="Map"
+          name="History"
           children={(props) => {
             const isParcel = user?.role === 'parceller' || parcelMode;
-            if (isParcel) {
-              return <TripsScreen {...props} isParcelMode={false} isParcelHistory={true} title={t('tab.history')} />;
-            }
-            return <MapScreen />;
+            return <TripsScreen {...props} isParcelMode={false} isParcelHistory={isParcel} isRideHistory={!isParcel} title={t('tab.history')} />;
           }}
-          options={{ title: (user?.role === 'parceller' || parcelMode) ? t('tab.history') : t('tab.map') }}
+          options={{ title: t('tab.history') }}
         />
         <Tab.Screen
           name="Account"
