@@ -238,7 +238,7 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
                         </>
                     ) : (
                         <Text style={[styles.detailText, { color: colors.subtextColor }]}>
-                            {isDriver ? `${t('trips.seatsBooked')}: ${item.seatsBooked || 0} / ${item.seatsTotal}` : `${t('trips.seatsRequested')}: ${item.seatsRequested}`}
+                            {isDriver ? `${t('trips.seatsBooked')}: ${item.takenSeats?.length || 0} / ${item.seatsTotal}` : `${t('trips.seatsRequested')}: ${item.seatsRequested}`}
                         </Text>
                     )}
                     {item.roofCarrier && <Text style={[styles.detailText, { color: colors.subtextColor }]}>• {t('trips.needsRoofCarrier')}</Text>}
