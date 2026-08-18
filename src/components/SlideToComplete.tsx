@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, Animated, PanResponder, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Animated, PanResponder, Dimensions, TouchableOpacity, Platform } from 'react-native';
 
 const SLIDER_WIDTH = Dimensions.get('window').width > 400 ? 320 : 280;
 const SLIDER_HEIGHT = 50;
@@ -13,6 +13,19 @@ interface SlideToCompleteProps {
 const SlideToComplete: React.FC<SlideToCompleteProps> = ({ onComplete, title = "SLIDE TO COMPLETE" }) => {
     const pan = useRef(new Animated.ValueXY()).current;
     const [triggered, setTriggered] = useState(false);
+
+    const handleTrigger = () => {
+        if (triggered) return;
+        setTriggered(true);
+        const maxX = SLIDER_WIDTH - THUMB_SIZE - 10;
+        Animated.timing(pan, {
+            toValue: { x: maxX, y: 0 },
+            duration: 150,
+            useNativeDriver: false,
+        }).start(() => {
+            onComplete();
+        });
+    };
 
     const panResponder = useRef(
         PanResponder.create({
@@ -28,16 +41,8 @@ const SlideToComplete: React.FC<SlideToCompleteProps> = ({ onComplete, title = "
             },
             onPanResponderRelease: (e, gesture) => {
                 const maxX = SLIDER_WIDTH - THUMB_SIZE - 10;
-                if (gesture.dx >= maxX * 0.75) {
-                    // Triggered
-                    setTriggered(true);
-                    Animated.timing(pan, {
-                        toValue: { x: maxX, y: 0 },
-                        duration: 150,
-                        useNativeDriver: false,
-                    }).start(() => {
-                        onComplete();
-                    });
+                if (gesture.dx >= maxX * 0.4 || gesture.dx >= 100) {
+                    handleTrigger();
                 } else {
                     // Snap back
                     Animated.spring(pan, {
@@ -51,7 +56,12 @@ const SlideToComplete: React.FC<SlideToCompleteProps> = ({ onComplete, title = "
 
     return (
         <View style={styles.container}>
-            <View style={[styles.track, triggered && styles.trackCompleted]}>
+            <TouchableOpacity 
+                activeOpacity={0.85}
+                onPress={handleTrigger}
+                disabled={triggered}
+                style={[styles.track, triggered && styles.trackCompleted]}
+            >
                 <Text style={styles.text}>{triggered ? "COMPLETED ✓" : title}</Text>
                 
                 <Animated.View
@@ -60,7 +70,7 @@ const SlideToComplete: React.FC<SlideToCompleteProps> = ({ onComplete, title = "
                 >
                     <Text style={styles.thumbArrow}>{triggered ? "✓" : ">>"}</Text>
                 </Animated.View>
-            </View>
+            </TouchableOpacity>
         </View>
     );
 };

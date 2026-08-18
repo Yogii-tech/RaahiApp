@@ -140,11 +140,21 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
                 method: 'PUT',
             }, logout);
             if (response.ok) {
-                Alert.alert(t('common.success') || 'Success', t('trips.tripCompleted') || 'Trip marked successfully');
+                const msg = t('trips.tripCompleted') || 'Trip marked successfully';
+                if (Platform.OS === 'web') {
+                    window.alert(msg);
+                } else {
+                    Alert.alert(t('common.success') || 'Success', msg);
+                }
                 fetchData();
             } else {
                 const data = await response.json();
-                Alert.alert(t('common.error') || 'Error', data.error || 'Failed to complete trip');
+                const errorMsg = data.error || 'Failed to complete trip';
+                if (Platform.OS === 'web') {
+                    window.alert(errorMsg);
+                } else {
+                    Alert.alert(t('common.error') || 'Error', errorMsg);
+                }
             }
         } catch (err) {
             console.error('Error completing trip:', err);
