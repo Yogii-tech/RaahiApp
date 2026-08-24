@@ -19,8 +19,8 @@ import { API_BASE } from '../apiConfig';
 import { apiRequest } from '../utils/api';
 import TrustedContactsScreen from './TrustedContactsScreen';
 import VehicleDetailsScreen from './VehicleDetailsScreen';
-import PricingSettingsScreen from './PricingSettingsScreen';
 import { pushSubViewHistory, popSubViewHistory, useBrowserBack } from '../utils/browserHistory';
+import { useIsFocused } from '@react-navigation/native';
 
 
 interface AccountScreenProps {
@@ -31,14 +31,15 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
     const { isDark, colors } = useTheme();
     const { user, token, logout, setAuth } = useAuth();
     const { t, language, setLanguage } = useLanguage();
-    const [view, setView] = useState<'main' | 'trusted' | 'vehicle' | 'pricing'>('main');
+    const [view, setView] = useState<'main' | 'trusted' | 'vehicle'>('main');
+    const isFocused = useIsFocused();
     const [logoutVisible, setLogoutVisible] = useState(false);
     const [languageVisible, setLanguageVisible] = useState(false);
     const [supportVisible, setSupportVisible] = useState(false);
     const supportNumber = '8434405463';
     const ratingColor = isDark ? '#FFC107' : '#FFB300';
 
-    const navigateToSubView = (v: 'main' | 'trusted' | 'vehicle' | 'pricing') => {
+    const navigateToSubView = (v: 'main' | 'trusted' | 'vehicle') => {
         if (v !== 'main') {
             pushSubViewHistory(`account_${v}`);
         }
@@ -47,7 +48,7 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
 
     useBrowserBack(view !== 'main', () => {
         setView('main');
-    });
+    }, isFocused);
 
     // New functions for logout modal
     const confirmLogout = () => {
@@ -103,7 +104,6 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
         ...(!isParcelMode ? [{ icon: 'id-card-outline', title: t('account.trustedContacts'), action: () => navigateToSubView('trusted') }] : []),
         { icon: 'globe-outline', title: t('account.language'), action: handleLanguagePress },
         ...(user?.role === 'driver' && !isParcelMode ? [{ icon: 'car-sport-outline', title: t('account.vehicleDetails'), action: () => navigateToSubView('vehicle') }] : []),
-        ...(user?.role === 'driver' && !isParcelMode ? [{ icon: 'cash-outline', title: 'Pricing & Rates', action: () => navigateToSubView('pricing') }] : []),
         { icon: 'headset-outline', title: t('account.support'), action: handleSupportPress },
         { icon: 'log-out-outline', title: t('account.logout'), action: handleLogoutPress, color: '#C62828' },
     ];
@@ -114,10 +114,6 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
 
     if (view === 'vehicle') {
         return <VehicleDetailsScreen onBack={() => { if (!popSubViewHistory()) setView('main'); }} />;
-    }
-
-    if (view === 'pricing') {
-        return <PricingSettingsScreen onBack={() => { if (!popSubViewHistory()) setView('main'); }} />;
     }
 
     return (

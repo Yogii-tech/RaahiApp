@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE } from '../apiConfig';
+import { setGlobalAuthenticated } from '../utils/browserHistory';
 
 interface User {
     id: string;
@@ -66,6 +67,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     setToken(storedToken);
                     if (storedRefresh) setRefreshToken(storedRefresh);
                     setUser(JSON.parse(storedUser));
+                    setGlobalAuthenticated(true);
                 }
             } catch (e) {
                 console.error('Failed to load credentials', e);
@@ -81,6 +83,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setToken(newToken);
         setRefreshToken(newRefresh);
         setUser(newUser);
+        setGlobalAuthenticated(!!newToken);
 
         if (newToken && newUser) {
             await AsyncStorage.setItem('auth_token', newToken);

@@ -17,6 +17,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
 import { API_BASE } from '../apiConfig';
 import Icon from 'react-native-vector-icons/Ionicons';
+import { pushSubViewHistory, popSubViewHistory, useBrowserBack } from '../utils/browserHistory';
 
 interface LoginScreenProps {
     onAuthenticated: () => void;
@@ -51,6 +52,39 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
     const [tempToken, setTempToken] = useState<string | null>(null);
     const [tempRefreshToken, setTempRefreshToken] = useState<string | null>(null);
     const [tempUser, setTempUser] = useState<any | null>(null);
+
+    const navigateToStep = (newStep: typeof step) => {
+        if (newStep !== 'phone') {
+            pushSubViewHistory(`login_${newStep}`);
+        }
+        setStep(newStep);
+    };
+
+    const handleBackStep = (fallbackStep: typeof step) => {
+        if (!popSubViewHistory()) {
+            setStep(fallbackStep);
+        }
+    };
+
+    useBrowserBack(step !== 'phone', () => {
+        if (step === 'otp') {
+            setStep('phone');
+        } else if (step === 'name') {
+            setStep('otp');
+        } else if (step === 'consent') {
+            setStep('name');
+        } else if (step === 'role') {
+            setStep('consent');
+        } else if (step === 'vehicle') {
+            setStep('role');
+        } else if (step === 'admin_phone') {
+            setStep('phone');
+        } else if (step === 'admin_otp') {
+            setStep('admin_phone');
+        } else if (step === 'admin_secret') {
+            setStep('admin_otp');
+        }
+    });
 
     useEffect(() => {
         if (Platform.OS === 'web') {
@@ -87,7 +121,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 return;
             }
 
-            setStep(isAdmin ? 'admin_otp' : 'otp');
+            navigateToStep(isAdmin ? 'admin_otp' : 'otp');
             if (data.otp) {
                 setOtp(data.otp);
                 Alert.alert(
@@ -117,7 +151,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
             if (!response.ok) { Alert.alert('Error', data.error || 'Invalid OTP'); return; }
             setAdminTempToken(data.token);
             setAdminTempUser(data.user);
-            setStep('admin_secret');
+            navigateToStep('admin_secret');
         } catch {
             Alert.alert('Error', 'Connection error');
         } finally { setLoading(false); }
@@ -173,11 +207,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 setTempUser(data.user);
 
                 if (!data.user.name) {
-                    setStep('name');
+                    navigateToStep('name');
                 } else {
                     // Has name but no role
                     setName(data.user.name);
-                    setStep('consent');
+                    navigateToStep('consent');
                 }
             } else {
                 await setAuth(data.token, data.refresh_token, data.user);
@@ -195,14 +229,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
             Alert.alert(t('common.error'), t('login.enterNameError'));
             return;
         }
-        setStep('consent');
+        navigateToStep('consent');
     };
 
     const handleRoleSelect = (role: 'passenger' | 'driver' | 'parceller') => {
         if (role === 'passenger' || role === 'parceller') {
             handleCompleteRegistration(role);
         } else {
-            setStep('vehicle');
+            navigateToStep('vehicle');
         }
     };
 
@@ -340,7 +374,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
 
                     {/* Header */}
                     <View style={[kycStyles.pageHeader, { backgroundColor: colors.primary }]}>
-                        <TouchableOpacity onPress={() => setStep('role')} style={kycStyles.backBtn}>
+                        <TouchableOpacity onPress={() => handleBackStep('role')} style={kycStyles.backBtn}>
                             <Text style={{ color: '#fff', fontSize: 22, lineHeight: 26 }}>←</Text>
                         </TouchableOpacity>
                         <View style={{ flex: 1, alignItems: 'center' }}>
@@ -628,7 +662,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
 
                         <View style={styles.spacer12} />
 
-                        <TouchableOpacity onPress={() => setStep('phone')}>
+                        <TouchableOpacity onPress={() => handleBackStep('phone')}>
                             <Text style={[styles.switchText, { color: colors.primary }]}>{t('login.changePhone')}</Text>
                         </TouchableOpacity>
 
@@ -756,12 +790,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
 
                         <TouchableOpacity
                             style={[styles.button, { backgroundColor: colors.primary }, !consentChecked && styles.buttonDisabled]}
-                            onPress={() => setStep('role')}
+                            onPress={() => navigateToStep('role')}
                             disabled={!consentChecked}>
                             <Text style={styles.buttonText}>{t('login.continue')}</Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity onPress={() => setStep('name')} style={styles.backButton}>
+                        <TouchableOpacity onPress={() => handleBackStep('name')} style={styles.backButton}>
                             <Text style={[styles.switchText, { color: colors.primary }]}>{t('common.back')}</Text>
                         </TouchableOpacity>
                     </View>
@@ -790,7 +824,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                             disabled={loading}>
                             {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Send OTP</Text>}
                         </TouchableOpacity>
-                        <TouchableOpacity style={{ marginTop: 16 }} onPress={() => setStep('phone')}>
+                        <TouchableOpacity style={{ marginTop: 16 }} onPress={() => handleBackStep('phone')}>
                             <Text style={[styles.switchText, { color: colors.subtextColor }]}>← Back to regular login</Text>
                         </TouchableOpacity>
                     </>
@@ -818,7 +852,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                             disabled={loading}>
                             {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Verify OTP</Text>}
                         </TouchableOpacity>
-                        <TouchableOpacity style={{ marginTop: 16 }} onPress={() => setStep('admin_phone')}>
+                        <TouchableOpacity style={{ marginTop: 16 }} onPress={() => handleBackStep('admin_phone')}>
                             <Text style={[styles.switchText, { color: colors.subtextColor }]}>← Change number</Text>
                         </TouchableOpacity>
                     </>
@@ -858,7 +892,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
 
                 {/* Admin access link — small but readable */}
                 <TouchableOpacity
-                    onPress={() => setStep('admin_phone')}
+                    onPress={() => navigateToStep('admin_phone')}
                     style={styles.adminAccessButton}>
                     <Text style={{ fontSize: 11, color: colors.subtextColor, opacity: 0.5, letterSpacing: 1 }}>
                         admin access

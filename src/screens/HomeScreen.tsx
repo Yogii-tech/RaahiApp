@@ -16,6 +16,7 @@ import { API_BASE } from '../apiConfig';
 import { useLanguage } from '../context/LanguageContext';
 import { apiRequest } from '../utils/api';
 import Icon from 'react-native-vector-icons/Ionicons';
+import { useIsFocused } from '@react-navigation/native';
 
 import AvailableRidesScreen from './AvailableRidesScreen';
 import BookRideScreen from './BookRideScreen';
@@ -48,6 +49,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
     const { isDark, colors } = useTheme();
     const { token, user, logout } = useAuth();
     const { t } = useLanguage();
+    const isFocused = useIsFocused();
 
 
     const isDriver = user?.role === 'driver';
@@ -94,6 +96,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
     const [previewAttempted, setPreviewAttempted] = useState(false);
     const [totalDistanceKm, setTotalDistanceKm] = useState<number | null>(null);
     const [postingRide, setPostingRide] = useState(false);
+    const [pricePerSeat, setPricePerSeat] = useState(() => loadFormDraft('home_pricePerSeat', ''));
 
     // Save draft state to sessionStorage
     useEffect(() => { saveFormDraft('home_pickup', pickup); }, [pickup]);
@@ -101,6 +104,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
     useEffect(() => { saveFormDraft('home_date', date); }, [date]);
     useEffect(() => { saveFormDraft('home_departureTime', departureTime); }, [departureTime]);
     useEffect(() => { saveFormDraft('home_timePeriod', timePeriod); }, [timePeriod]);
+    useEffect(() => { saveFormDraft('home_pricePerSeat', pricePerSeat); }, [pricePerSeat]);
 
     const navigateToView = (newView: string) => {
         if (newView !== 'home') {
@@ -116,7 +120,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
             setView('home');
             if (setParcelMode) setParcelMode(false);
         }
-    });
+    }, isFocused);
 
 
     useEffect(() => {
@@ -282,10 +286,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                 }
             }
 
-            const userRate = user?.vehicle?.rate_per_km || 5;
-            const calculatedPrice = totalDistanceKm
-                ? Math.round(totalDistanceKm * userRate)
-                : 350;
+            const priceNum = parseInt(pricePerSeat.trim(), 10);
+            if (isNaN(priceNum) || priceNum <= 0) {
+                Alert.alert(t('common.error'), 'Please enter a valid passenger cost per seat.');
+                return;
+            }
 
             const response = await apiRequest('/api/rides/create', {
                 method: 'POST',
@@ -298,16 +303,18 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                     vehicleNumber: user?.vehicle?.vehicle_number || "UK-00-0000",
                     seatsTotal: user?.vehicle?.seats || 4,
                     seatingLayout: user?.vehicle?.seating_layout || "sedan",
-                    pricePerSeat: calculatedPrice,
+                    pricePerSeat: priceNum,
                 }),
             });
 
             if (response.ok) {
                 setPickup('');
                 setDropoff('');
+                setPricePerSeat('');
                 clearFormDraft('home_pickup');
                 clearFormDraft('home_dropoff');
                 clearFormDraft('home_departureTime');
+                clearFormDraft('home_pricePerSeat');
                 const today = new Date();
                 const dd = String(today.getDate()).padStart(2, '0');
                 const mm = String(today.getMonth() + 1).padStart(2, '0');
@@ -471,7 +478,30 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                     containerZIndex={2000}
                 />
 
-
+                {isDriver && (
+                    <>
+                        <View style={styles.spacer14} />
+                        <Text style={[styles.fieldLabel, { color: colors.primary }]}>
+                            {t('home.pricePerSeat').toUpperCase()}
+                        </Text>
+                        <View style={styles.spacer6} />
+                        <TextInput
+                            style={[
+                                styles.textInput,
+                                {
+                                    backgroundColor: colors.inputFillColor,
+                                    borderColor: pricePerSeat ? colors.primary : colors.inputBorderColor,
+                                    color: colors.textColor
+                                }
+                            ]}
+                            value={pricePerSeat}
+                            onChangeText={setPricePerSeat}
+                            placeholder="e.g. 350"
+                            placeholderTextColor={colors.subtextColor}
+                            keyboardType="numeric"
+                        />
+                    </>
+                )}
 
                 <View style={styles.spacer14} />
                 <View style={{ flexDirection: 'row', zIndex: 10, elevation: 10 }}>
@@ -592,8 +622,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                         </>
                     )}
                 </View>
-
-
 
                 <View style={styles.spacer18} />
 

@@ -434,6 +434,10 @@ function RootApp() {
   const { isDark } = useTheme();
   const [welcomeDone, setWelcomeDone] = useState(false);
 
+  useBrowserBack(welcomeDone && !isAuthenticated, () => {
+    setWelcomeDone(false);
+  });
+
   if (isInitialLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -443,7 +447,10 @@ function RootApp() {
   }
 
   if (!isAuthenticated && !welcomeDone) {
-    return <WelcomeScreen onGetStarted={() => setWelcomeDone(true)} />;
+    return <WelcomeScreen onGetStarted={() => {
+      pushSubViewHistory('login');
+      setWelcomeDone(true);
+    }} />;
   }
 
   if (!isAuthenticated) {
