@@ -32,6 +32,33 @@ interface LocationInputProps {
     containerZIndex?: number;
 }
 
+const COMMON_UTTARAKHAND_TOWNS: GeoResult[] = [
+    { place_id: 't1', display_name: 'Almora, Uttarakhand', lat: '29.5892', lon: '79.6467', type: 'town' },
+    { place_id: 't2', display_name: 'Bageshwar, Uttarakhand', lat: '29.8404', lon: '79.7694', type: 'town' },
+    { place_id: 't3', display_name: 'Dehradun, Uttarakhand', lat: '30.3165', lon: '78.0322', type: 'city' },
+    { place_id: 't4', display_name: 'Rishikesh, Uttarakhand', lat: '30.0869', lon: '78.2676', type: 'town' },
+    { place_id: 't5', display_name: 'Haldwani, Uttarakhand', lat: '29.2183', lon: '79.5130', type: 'city' },
+    { place_id: 't6', display_name: 'Nainital, Uttarakhand', lat: '29.3919', lon: '79.4542', type: 'town' },
+    { place_id: 't7', display_name: 'Haridwar, Uttarakhand', lat: '29.9457', lon: '78.1642', type: 'city' },
+    { place_id: 't8', display_name: 'Roorkee, Uttarakhand', lat: '29.8543', lon: '77.8880', type: 'city' },
+    { place_id: 't9', display_name: 'Rudrapur, Uttarakhand', lat: '28.9816', lon: '79.4059', type: 'city' },
+    { place_id: 't10', display_name: 'Kashipur, Uttarakhand', lat: '29.2104', lon: '78.9619', type: 'city' },
+    { place_id: 't11', display_name: 'Pithoragarh, Uttarakhand', lat: '29.5829', lon: '80.2182', type: 'town' },
+    { place_id: 't12', display_name: 'Ramnagar, Uttarakhand', lat: '29.3948', lon: '79.1271', type: 'town' },
+    { place_id: 't13', display_name: 'Kotdwar, Uttarakhand', lat: '29.7491', lon: '78.5255', type: 'town' },
+    { place_id: 't14', display_name: 'Mussoorie, Uttarakhand', lat: '30.4598', lon: '78.0664', type: 'town' },
+    { place_id: 't15', display_name: 'Ranikhet, Uttarakhand', lat: '29.6434', lon: '79.4322', type: 'town' },
+    { place_id: 't16', display_name: 'Chamoli, Uttarakhand', lat: '30.2736', lon: '79.3234', type: 'town' },
+    { place_id: 't17', display_name: 'Uttarkashi, Uttarakhand', lat: '30.7268', lon: '78.4354', type: 'town' },
+    { place_id: 't18', display_name: 'Pauri, Uttarakhand', lat: '30.1458', lon: '78.7758', type: 'town' },
+    { place_id: 't19', display_name: 'Tehri, Uttarakhand', lat: '30.3807', lon: '78.4800', type: 'town' },
+    { place_id: 't20', display_name: 'Joshimath, Uttarakhand', lat: '30.5506', lon: '79.5660', type: 'town' },
+    { place_id: 't21', display_name: 'Badrinath, Uttarakhand', lat: '30.7433', lon: '79.4938', type: 'town' },
+    { place_id: 't22', display_name: 'Kedarnath, Uttarakhand', lat: '30.7352', lon: '79.0669', type: 'town' },
+    { place_id: 't23', display_name: 'Gangotri, Uttarakhand', lat: '30.9947', lon: '78.9398', type: 'town' },
+    { place_id: 't24', display_name: 'Yamunotri, Uttarakhand', lat: '31.0140', lon: '78.4600', type: 'town' },
+];
+
 const LocationInput: React.FC<LocationInputProps> = ({
     label,
     value,
@@ -87,6 +114,18 @@ const LocationInput: React.FC<LocationInputProps> = ({
         if (query.length < 1) {
             setSuggestions([]);
             return;
+        }
+
+        const lowerQuery = query.toLowerCase();
+        
+        // 1. First, check local matches for instant autocomplete
+        const localMatches = COMMON_UTTARAKHAND_TOWNS.filter(town => 
+            town.display_name.toLowerCase().includes(lowerQuery)
+        );
+
+        if (localMatches.length > 0) {
+            setSuggestions(localMatches);
+            return; // Return immediately with local results for instant feedback
         }
 
         setLoading(true);
