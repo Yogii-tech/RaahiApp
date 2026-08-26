@@ -47,7 +47,7 @@ interface Ride {
 
 const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) => {
     const { isDark, colors } = useTheme();
-    const { token, user, logout } = useAuth();
+    const { token, user, logout, setAuth } = useAuth();
     const { t } = useLanguage();
     const isFocused = useIsFocused();
 
@@ -125,7 +125,30 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
 
     useEffect(() => {
         fetchRecentRides();
+        if (isDriver) refreshDriverProfile();
     }, []);
+
+    // Re-sync verification status whenever screen comes into focus
+    useEffect(() => {
+        if (isFocused && isDriver) refreshDriverProfile();
+    }, [isFocused]);
+
+    const refreshDriverProfile = async () => {
+        try {
+            const response = await apiRequest('/api/user/profile', {}, logout);
+            if (response.ok) {
+                const fresh = await response.json();
+                if (fresh.verification_status !== user?.verification_status ||
+                    fresh.rejection_reason !== user?.rejection_reason) {
+                    await setAuth(token, null, {
+                        ...user,
+                        verification_status: fresh.verification_status,
+                        rejection_reason: fresh.rejection_reason,
+                    } as any);
+                }
+            }
+        } catch (_) { /* silent — not critical */ }
+    };
 
     const fetchRecentRides = async () => {
         try {
@@ -244,6 +267,23 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
 
     const handlePostRide = async () => {
         if (postingRide) return;
+
+        // Guard: driver must be verified before posting
+        if (isDriver && user?.verification_status !== 'verified') {
+            if (user?.verification_status === 'rejected') {
+                Alert.alert(
+                    '🚫 Documents Rejected',
+                    `Your documents were rejected.\n\nReason: ${user?.rejection_reason || 'Please contact support.'}\n\nPlease resubmit your documents to continue.`
+                );
+            } else {
+                Alert.alert(
+                    '⏳ Verification Pending',
+                    'Your documents are under admin review. You will be notified once your account is approved and you can start posting rides.'
+                );
+            }
+            return;
+        }
+
         if (!pickup.trim() || !dropoff.trim()) return;
         if (!departureTime.trim()) {
             Alert.alert(t('common.error'), 'Please enter a departure time.');
@@ -402,6 +442,47 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
             </Text>
 
             <View style={styles.spacer24} />
+
+            {/* ── Verification Status Banner (drivers only) ─────────────── */}
+            {isDriver && user?.verification_status !== 'verified' && (
+                <View style={{
+                    borderRadius: 14,
+                    borderWidth: 1.5,
+                    marginBottom: 20,
+                    overflow: 'hidden',
+                    ...(user?.verification_status === 'rejected'
+                        ? { backgroundColor: isDark ? 'rgba(244,67,54,0.1)' : '#FFF5F5', borderColor: '#F44336' }
+                        : { backgroundColor: isDark ? 'rgba(255,193,7,0.08)' : '#FFFBEC', borderColor: '#FFC107' }
+                    ),
+                }}>
+                    {/* Coloured top strip */}
+                    <View style={{
+                        height: 4,
+                        backgroundColor: user?.verification_status === 'rejected' ? '#F44336' : '#FFC107',
+                    }} />
+                    <View style={{ padding: 16, flexDirection: 'row', alignItems: 'flex-start' }}>
+                        <Text style={{ fontSize: 26, marginRight: 12 }}>
+                            {user?.verification_status === 'rejected' ? '❌' : '🕐'}
+                        </Text>
+                        <View style={{ flex: 1 }}>
+                            <Text style={{
+                                fontWeight: '800', fontSize: 14,
+                                color: user?.verification_status === 'rejected' ? '#F44336' : '#F59E0B',
+                                marginBottom: 4, letterSpacing: 0.3,
+                            }}>
+                                {user?.verification_status === 'rejected'
+                                    ? 'Documents Rejected — Action Required'
+                                    : 'Documents Under Review'}
+                            </Text>
+                            <Text style={{ fontSize: 13, color: isDark ? '#CBD5E1' : '#475569', lineHeight: 19 }}>
+                                {user?.verification_status === 'rejected'
+                                    ? `Reason: ${user?.rejection_reason || 'Please contact support for details.'}\n\nPlease resubmit your documents or contact support.`
+                                    : 'Our admin team is reviewing your vehicle documents. You will be notified once approved. Ride posting will be enabled after verification.'}
+                            </Text>
+                        </View>
+                    </View>
+                </View>
+            )}
 
             {/* Ride Card */}
             <View

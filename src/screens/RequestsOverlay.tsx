@@ -30,6 +30,8 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
     const { t } = useLanguage();
     const [bookings, setBookings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [systemNotifs, setSystemNotifs] = useState<any[]>([]);
+    const [notifLoading, setNotifLoading] = useState(false);
 
     const isDriver = user?.role === 'driver';
 
@@ -38,6 +40,35 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
         const interval = setInterval(fetchData, 5000); // Poll every 5s for updates
         return () => clearInterval(interval);
     }, []);
+
+    // Fetch and auto-mark-read system notifications (document approval/rejection)
+    useEffect(() => {
+        if (isDriver) {
+            fetchSystemNotifs();
+        }
+    }, [isDriver]);
+
+    const fetchSystemNotifs = async () => {
+        setNotifLoading(true);
+        try {
+            const response = await apiRequest('/api/notifications/', {}, logout);
+            if (response.ok) {
+                const data = await response.json();
+                const list = Array.isArray(data) ? data : [];
+                setSystemNotifs(list);
+                // Auto-mark each unread notification as read
+                list.filter((n: any) => !n.read).forEach(async (n: any) => {
+                    try {
+                        await apiRequest(`/api/notifications/${n.id}/read`, { method: 'PUT' }, logout);
+                    } catch (_) { /* silent */ }
+                });
+            }
+        } catch (err) {
+            console.error('Notif fetch error:', err);
+        } finally {
+            setNotifLoading(false);
+        }
+    };
 
     const fetchData = async () => {
         try {
@@ -252,6 +283,62 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
                 </TouchableOpacity>
             </View>
 
+            {/* System Notifications Section (Driver only) */}
+            {isDriver && systemNotifs.length > 0 && (
+                <View style={{ marginBottom: 16 }}>
+                    <Text style={[styles.sectionLabel, { color: colors.subtextColor }]}>📋 DOCUMENT STATUS</Text>
+                    {notifLoading ? (
+                        <ActivityIndicator color={colors.primary} style={{ marginVertical: 8 }} />
+                    ) : (
+                        systemNotifs.map((notif: any) => {
+                            const isApproved = notif.type === 'document_verification' && notif.title?.toLowerCase().includes('approved');
+                            const isRejected = notif.type === 'document_verification' && notif.title?.toLowerCase().includes('rejected');
+                            const accentColor = isApproved ? '#00BFA5' : isRejected ? '#F44336' : colors.primary;
+                            const bgColor = isApproved
+                                ? (isDark ? 'rgba(0,191,165,0.08)' : 'rgba(0,191,165,0.06)')
+                                : isRejected
+                                    ? (isDark ? 'rgba(244,67,54,0.08)' : 'rgba(244,67,54,0.06)')
+                                    : colors.cardColor;
+                            return (
+                                <View
+                                    key={notif.id}
+                                    style={[
+                                        styles.notifCard,
+                                        {
+                                            backgroundColor: bgColor,
+                                            borderColor: accentColor,
+                                            borderLeftWidth: 4,
+                                        },
+                                    ]}
+                                >
+                                    <View style={styles.notifRow}>
+                                        <Text style={styles.notifIcon}>
+                                            {isApproved ? '✅' : isRejected ? '❌' : '🔔'}
+                                        </Text>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={[styles.notifTitle, { color: accentColor }]}>
+                                                {notif.title}
+                                            </Text>
+                                            <Text style={[styles.notifMessage, { color: colors.textColor }]}>
+                                                {notif.message}
+                                            </Text>
+                                            <Text style={[styles.notifTime, { color: colors.subtextColor }]}>
+                                                {new Date(notif.createdAt).toLocaleDateString()} at{' '}
+                                                {new Date(notif.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </Text>
+                                        </View>
+                                        {!notif.read && (
+                                            <View style={[styles.unreadDot, { backgroundColor: accentColor }]} />
+                                        )}
+                                    </View>
+                                </View>
+                            );
+                        })
+                    )}
+                    <View style={[styles.divider, { backgroundColor: colors.borderColor }]} />
+                </View>
+            )}
+
             {loading ? (
                 <ActivityIndicator color={colors.primary} size="large" style={{ marginTop: 20 }} />
             ) : (
@@ -356,6 +443,54 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         padding: 40,
         fontSize: 16,
+    },
+    sectionLabel: {
+        fontSize: 11,
+        fontWeight: '700',
+        letterSpacing: 0.8,
+        marginBottom: 10,
+        textTransform: 'uppercase',
+    },
+    notifCard: {
+        borderRadius: 12,
+        borderWidth: 1,
+        padding: 14,
+        marginBottom: 10,
+    },
+    notifRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+    },
+    notifIcon: {
+        fontSize: 22,
+        marginRight: 12,
+        marginTop: 2,
+    },
+    notifTitle: {
+        fontSize: 15,
+        fontWeight: '700',
+        marginBottom: 4,
+    },
+    notifMessage: {
+        fontSize: 13,
+        lineHeight: 19,
+        marginBottom: 6,
+    },
+    notifTime: {
+        fontSize: 11,
+        fontStyle: 'italic',
+    },
+    unreadDot: {
+        width: 9,
+        height: 9,
+        borderRadius: 5,
+        marginTop: 4,
+        marginLeft: 8,
+    },
+    divider: {
+        height: 1,
+        marginTop: 8,
+        marginBottom: 4,
     },
     chatBtn: {
         backgroundColor: '#4285F4',

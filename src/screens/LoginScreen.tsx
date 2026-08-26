@@ -45,6 +45,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
         layout: 'suv'
     });
     const [loading, setLoading] = useState(false);
+    const [showDocSubmittedModal, setShowDocSubmittedModal] = useState(false);
     const { token, user, setAuth } = useAuth();
     const { colors, isDark } = useTheme();
     const { t } = useLanguage();
@@ -347,10 +348,16 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                     ...(tempUser || user),
                     name: name.trim(),
                     role: role,
-                    vehicle: body.vehicle
+                    vehicle: body.vehicle,
+                    ...(role === 'driver' ? { verification_status: 'pending' } : {}),
                 };
                 await setAuth(activeToken, tempRefreshToken, updatedUser);
-                onAuthenticated();
+                if (role === 'driver') {
+                    // Show success modal — driver must wait for admin approval
+                    setShowDocSubmittedModal(true);
+                } else {
+                    onAuthenticated();
+                }
             } else {
                 Alert.alert(t('common.error'), t('login.failProfile'));
             }
@@ -360,6 +367,97 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
             setLoading(false);
         }
     };
+
+    // ─── Document Submitted Success Screen ─────────────────────────────
+    if (showDocSubmittedModal) {
+        return (
+            <View style={[styles.container, { backgroundColor: isDark ? '#0A1628' : '#F0F7FF', justifyContent: 'center', alignItems: 'center', padding: 28 }]}>
+                {/* Glow ring */}
+                <View style={{
+                    width: 140, height: 140, borderRadius: 70,
+                    backgroundColor: 'rgba(0,191,165,0.08)',
+                    justifyContent: 'center', alignItems: 'center',
+                    borderWidth: 2, borderColor: 'rgba(0,191,165,0.25)',
+                    marginBottom: 32,
+                }}>
+                    <View style={{
+                        width: 100, height: 100, borderRadius: 50,
+                        backgroundColor: 'rgba(0,191,165,0.15)',
+                        justifyContent: 'center', alignItems: 'center',
+                        borderWidth: 2, borderColor: '#00BFA5',
+                    }}>
+                        <Text style={{ fontSize: 48 }}>✅</Text>
+                    </View>
+                </View>
+
+                <Text style={{ fontSize: 26, fontWeight: '800', color: '#00BFA5', textAlign: 'center', marginBottom: 12, letterSpacing: 0.3 }}>
+                    Documents Submitted!
+                </Text>
+                <Text style={{ fontSize: 15, color: isDark ? '#94A3B8' : '#64748B', textAlign: 'center', lineHeight: 24, marginBottom: 36 }}>
+                    Your vehicle documents have been submitted and are{' '}
+                    <Text style={{ fontWeight: '700', color: isDark ? '#CBD5E1' : '#334155' }}>under review</Text>.{'\n\n'}
+                    Our admin team will verify your documents and you will receive a{' '}
+                    <Text style={{ fontWeight: '700', color: isDark ? '#CBD5E1' : '#334155' }}>notification</Text>{' '}
+                    once approved or if any action is required.
+                </Text>
+
+                {/* Status steps */}
+                {[
+                    { icon: '📄', label: 'Documents Received', done: true },
+                    { icon: '🔍', label: 'Under Admin Review', done: false },
+                    { icon: '✅', label: 'Approval & Activation', done: false },
+                ].map((step, i) => (
+                    <View key={i} style={{
+                        flexDirection: 'row', alignItems: 'center',
+                        width: '100%', marginBottom: 14,
+                        paddingHorizontal: 8,
+                    }}>
+                        <View style={{
+                            width: 40, height: 40, borderRadius: 20,
+                            backgroundColor: step.done ? 'rgba(0,191,165,0.15)' : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'),
+                            justifyContent: 'center', alignItems: 'center',
+                            borderWidth: 1,
+                            borderColor: step.done ? '#00BFA5' : (isDark ? '#334155' : '#E2E8F0'),
+                            marginRight: 14,
+                        }}>
+                            <Text style={{ fontSize: 18 }}>{step.icon}</Text>
+                        </View>
+                        <Text style={{
+                            fontSize: 15, fontWeight: step.done ? '700' : '500',
+                            color: step.done ? '#00BFA5' : (isDark ? '#64748B' : '#94A3B8'),
+                        }}>
+                            {step.label}
+                        </Text>
+                        {step.done && <Text style={{ marginLeft: 'auto', color: '#00BFA5', fontWeight: '700' }}>✓</Text>}
+                    </View>
+                ))}
+
+                <TouchableOpacity
+                    style={{
+                        marginTop: 32,
+                        width: '100%',
+                        paddingVertical: 16,
+                        borderRadius: 16,
+                        backgroundColor: '#00BFA5',
+                        alignItems: 'center',
+                        shadowColor: '#00BFA5',
+                        shadowOpacity: 0.35,
+                        shadowRadius: 12,
+                        elevation: 6,
+                    }}
+                    onPress={onAuthenticated}
+                    activeOpacity={0.85}>
+                    <Text style={{ color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: 0.5 }}>
+                        Go to Dashboard
+                    </Text>
+                </TouchableOpacity>
+
+                <Text style={{ marginTop: 18, fontSize: 12, color: isDark ? '#475569' : '#94A3B8', textAlign: 'center' }}>
+                    You can check the status anytime in your notifications 🔔
+                </Text>
+            </View>
+        );
+    }
 
     // ─── Full-page KYC form for the vehicle step ───────────────────────────
     if (step === 'vehicle') {

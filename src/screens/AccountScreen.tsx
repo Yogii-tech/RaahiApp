@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -49,6 +49,27 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
     useBrowserBack(view !== 'main', () => {
         setView('main');
     }, isFocused);
+
+    // Sync verification status from server whenever Account tab is focused
+    useEffect(() => {
+        if (isFocused && user?.role === 'driver') {
+            apiRequest('/api/user/profile', {}, logout)
+                .then(async res => {
+                    if (res.ok) {
+                        const fresh = await res.json();
+                        if (fresh.verification_status !== user?.verification_status ||
+                            fresh.rejection_reason !== user?.rejection_reason) {
+                            await setAuth(token, null, {
+                                ...user,
+                                verification_status: fresh.verification_status,
+                                rejection_reason: fresh.rejection_reason,
+                            } as any);
+                        }
+                    }
+                })
+                .catch(() => { /* silent */ });
+        }
+    }, [isFocused]);
 
     // New functions for logout modal
     const confirmLogout = () => {
@@ -156,6 +177,28 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
                     </View>
                     {user?.role === 'driver' && (
                         <>
+                            <View style={styles.spacer6} />
+                            {/* Verification Status Badge */}
+                            {(() => {
+                                const vs = user?.verification_status;
+                                const isVerified = vs === 'verified';
+                                const isRejected = vs === 'rejected';
+                                const badgeColor = isVerified ? '#00BFA5' : isRejected ? '#F44336' : '#F59E0B';
+                                const badgeBg = isVerified ? 'rgba(0,191,165,0.12)' : isRejected ? 'rgba(244,67,54,0.12)' : 'rgba(245,158,11,0.12)';
+                                const label = isVerified ? '✅  Verified' : isRejected ? '❌  Rejected' : '🕐  Under Review';
+                                return (
+                                    <View style={{ backgroundColor: badgeBg, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: badgeColor }}>
+                                        <Text style={{ color: badgeColor, fontSize: 11, fontWeight: '700', letterSpacing: 0.3 }}>
+                                            {label}
+                                        </Text>
+                                        {isRejected && user?.rejection_reason ? (
+                                            <Text style={{ color: badgeColor, fontSize: 10, marginTop: 2, opacity: 0.85 }} numberOfLines={2}>
+                                                {user.rejection_reason}
+                                            </Text>
+                                        ) : null}
+                                    </View>
+                                );
+                            })()}
                             <View style={styles.spacer8} />
                             <View style={styles.ratingRow}>
                                 <Icon name="star" size={16} color={ratingColor} style={styles.star} />

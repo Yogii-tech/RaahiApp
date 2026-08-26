@@ -255,19 +255,34 @@ function MainTabs() {
       if (!token) return;
       const endpoint = isDriver ? '/api/rides/requests' : '/api/rides/bookings';
       const response = await apiRequest(endpoint, {}, logout);
+
+      let reqCount = 0;
+      let unreadChatTotal = 0;
+
       if (response.ok) {
         const data = await response.json() || [];
         // Filter: Driver sees UNVIEWED 'pending' reqs, Passenger sees UNVIEWED 'accepted' or 'rejected'
-        const reqCount = data.filter((b: any) =>
+        reqCount = data.filter((b: any) =>
           isDriver
             ? (b.status === 'pending' && !b.viewedByDriver)
             : ((b.status === 'accepted' || b.status === 'rejected') && !b.viewedByPassenger)
         ).length;
 
         // Add unread chat counts
-        const unreadChatTotal = data.reduce((sum: number, b: any) => sum + (b.unreadChatCount || 0), 0);
-        setNotificationCount(reqCount + unreadChatTotal);
+        unreadChatTotal = data.reduce((sum: number, b: any) => sum + (b.unreadChatCount || 0), 0);
       }
+
+      // Also count unread system notifications (e.g. document approved/rejected)
+      let systemNotifCount = 0;
+      try {
+        const notifResponse = await apiRequest('/api/notifications/', {}, logout);
+        if (notifResponse.ok) {
+          const notifs = await notifResponse.json() || [];
+          systemNotifCount = notifs.filter((n: any) => !n.read).length;
+        }
+      } catch (_) { /* ignore */ }
+
+      setNotificationCount(reqCount + unreadChatTotal + systemNotifCount);
     } catch (err) {
       console.error('Badge poll fail:', err);
     }

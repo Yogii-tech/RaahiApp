@@ -9,6 +9,8 @@ interface User {
     name: string;
     role: string;
     language?: string;
+    verification_status?: string; // 'pending' | 'verified' | 'rejected'
+    rejection_reason?: string;
     vehicle?: {
         vehicle_name: string;
         vehicle_type: string;
