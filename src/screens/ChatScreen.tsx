@@ -157,8 +157,15 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
         <View style={[styles.container, { backgroundColor: colors.background }]}>
             {/* Header */}
             <View style={[styles.header, { backgroundColor: colors.primary }]}>
-                <TouchableOpacity onPress={onBack} style={styles.backButton}>
-                    <Text style={styles.headerIcon}>←</Text>
+                <TouchableOpacity
+                    onPress={onBack}
+                    style={styles.backButton}
+                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                    activeOpacity={0.7}
+                >
+                    <View style={styles.backIconWrap}>
+                        <Text style={styles.headerIcon}>‹</Text>
+                    </View>
                 </TouchableOpacity>
 
                 <View style={styles.headerInfo}>
@@ -180,31 +187,24 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
                     <TouchableOpacity
                         style={styles.actionCircle}
                         onPress={() => {
-                            if (recipientPhone) {
-                                Linking.openURL(`tel:${recipientPhone}`).catch(() => {
-                                    Alert.alert(t('common.error') || 'Error', 'Could not open phone dialer');
-                                });
+                            if (!recipientPhone) {
+                                Alert.alert('Phone Unavailable', 'The phone number for this user is not available.');
+                                return;
+                            }
+                            if (Platform.OS === 'web') {
+                                // On web, tel: links open the dialer app if available; else show the number
+                                const confirmed = window.confirm(`Call ${recipientName} at ${recipientPhone}?`);
+                                if (confirmed) {
+                                    window.open(`tel:${recipientPhone}`, '_self');
+                                }
                             } else {
-                                Alert.alert(t('common.error') || 'Error', 'Phone number not available');
+                                Linking.openURL(`tel:${recipientPhone}`).catch(() => {
+                                    Alert.alert('Error', 'Could not open phone dialer. Number: ' + recipientPhone);
+                                });
                             }
                         }}
                     >
                         <Text>📞</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={styles.actionCircle}
-                        onPress={() => {
-                            onBack(); // Close chat overlay
-                            navigation.navigate('Map', {
-                                rideId: bookingId,
-                                // Pass coordinates if available, else null to let map handle it
-                                pickupCoords: (pickupLat && pickupLng) ? [pickupLat, pickupLng] : null,
-                                dropCoords: (dropoffLat && dropoffLng) ? [dropoffLat, dropoffLng] : null,
-                                pickupLabel: pickup,
-                                dropLabel: dropoff
-                            });
-                        }}>
-                        <Text>📍</Text>
                     </TouchableOpacity>
                 </View>
             </View>
@@ -292,13 +292,25 @@ const styles = StyleSheet.create({
         paddingBottom: 15,
     },
     backButton: {
-        padding: 8,
-        marginRight: 8,
+        padding: 4,
+        marginRight: 4,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    backIconWrap: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: 'rgba(255,255,255,0.18)',
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     headerIcon: {
         color: '#FFF',
-        fontSize: 24,
-        fontWeight: 'bold',
+        fontSize: 28,
+        fontWeight: '300',
+        lineHeight: 32,
+        includeFontPadding: false,
     },
     headerInfo: {
         flex: 1,

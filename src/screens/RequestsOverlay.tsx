@@ -117,7 +117,7 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
                     <>
                         <View style={styles.cardHeader}>
                             <Text style={[styles.requestTitle, { color: colors.textColor }]}>
-                                {t('requests.newRequestTitle')}
+                                {item.passengerName || t('requests.newRequestTitle')}
                             </Text>
                             <Text style={[styles.statusTag, { color: colors.primary }]}>{t(`requests.${item.status}`).toUpperCase()}</Text>
                         </View>

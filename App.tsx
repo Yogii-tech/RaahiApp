@@ -388,7 +388,8 @@ function MainTabs() {
         <View style={[StyleSheet.absoluteFill, { top: insets.top + 64, bottom: 0, backgroundColor: colors.background, zIndex: 100, elevation: 10 }]}>
           <RequestsOverlay
             onClose={() => {
-              if (!popSubViewHistory()) setNotificationsVisible(false);
+              setNotificationsVisible(false);
+              popSubViewHistory();
             }}
             onOpenChat={(booking) => {
               pushSubViewHistory('chat');
@@ -413,7 +414,8 @@ function MainTabs() {
             dropoffLng={activeChat.ride?.dropoffLng}
             departureTime={activeChat.ride?.departureTime}
             onBack={() => {
-              if (!popSubViewHistory()) setActiveChat(null);
+              setActiveChat(null);
+              popSubViewHistory();
             }}
           />
         </View>
