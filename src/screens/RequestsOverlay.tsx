@@ -1,28 +1,33 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
+import {
+    View, Text, StyleSheet, FlatList, ActivityIndicator,
+    TouchableOpacity, Alert, Animated, Easing
+} from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { API_BASE } from '../apiConfig';
 import { useLanguage } from '../context/LanguageContext';
-import JeepLayout from '../components/JeepLayout';
 import { apiRequest } from '../utils/api';
-
-interface Booking {
-    id: string;
-    rideId: string;
-    passengerId: string;
-    seatsRequested: number;
-    seatLayout?: number[];
-    status: string;
-    createdAt: string;
-    roofCarrier: boolean;
-    motionSickness: boolean;
-}
 
 interface RequestsOverlayProps {
     onClose?: () => void;
     onOpenChat: (booking: any) => void;
 }
+
+// Format a time-ago string
+const timeAgo = (dateStr: string) => {
+    const now = Date.now();
+    const then = new Date(dateStr).getTime();
+    const diff = Math.floor((now - then) / 1000);
+    if (diff < 60) return 'just now';
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return `${Math.floor(diff / 86400)}d ago`;
+};
+
+// Is this booking within 24 hours?
+const isWithin24h = (dateStr: string) => {
+    return Date.now() - new Date(dateStr).getTime() < 24 * 60 * 60 * 1000;
+};
 
 const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }) => {
     const { colors, isDark } = useTheme();
@@ -32,20 +37,19 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
     const [loading, setLoading] = useState(true);
     const [systemNotifs, setSystemNotifs] = useState<any[]>([]);
     const [notifLoading, setNotifLoading] = useState(false);
+    const [expandedId, setExpandedId] = useState<string | null>(null);
+    const [clearing, setClearing] = useState(false);
 
     const isDriver = user?.role === 'driver';
 
     useEffect(() => {
         fetchData();
-        const interval = setInterval(fetchData, 5000); // Poll every 5s for updates
+        const interval = setInterval(fetchData, 5000);
         return () => clearInterval(interval);
     }, []);
 
-    // Fetch and auto-mark-read system notifications (document approval/rejection)
     useEffect(() => {
-        if (isDriver) {
-            fetchSystemNotifs();
-        }
+        if (isDriver) fetchSystemNotifs();
     }, [isDriver]);
 
     const fetchSystemNotifs = async () => {
@@ -56,11 +60,8 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
                 const data = await response.json();
                 const list = Array.isArray(data) ? data : [];
                 setSystemNotifs(list);
-                // Auto-mark each unread notification as read
                 list.filter((n: any) => !n.read).forEach(async (n: any) => {
-                    try {
-                        await apiRequest(`/api/notifications/${n.id}/read`, { method: 'PUT' }, logout);
-                    } catch (_) { /* silent */ }
+                    try { await apiRequest(`/api/notifications/${n.id}/read`, { method: 'PUT' }, logout); } catch (_) {}
                 });
             }
         } catch (err) {
@@ -77,13 +78,12 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
             if (response.ok) {
                 const data = await response.json();
                 const list = Array.isArray(data) ? data : [];
-                // Sort newest requests first (top) and older requests last (bottom)
-                list.sort((a: any, b: any) => {
-                    const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-                    const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-                    return tB - tA;
+                // Filter to last 24h only
+                const recent = list.filter((b: any) => isWithin24h(b.createdAt));
+                recent.sort((a: any, b: any) => {
+                    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
                 });
-                setBookings(list);
+                setBookings(recent);
             }
         } catch (err) {
             console.error('Fetch error:', err);
@@ -99,246 +99,325 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
                 body: JSON.stringify({ status }),
             }, logout);
             if (response.ok) {
-                Alert.alert(t('requests.success'), t('requests.bookingStatus').replace('{{status}}', t(`requests.${status}`)));
                 fetchData();
             }
         } catch (err) {
-            console.error('Update error:', err);
             Alert.alert(t('common.error'), 'Could not update status.');
         }
     };
 
-    const renderItem = ({ item }: { item: any }) => {
-        if (!isDriver && item.status === 'pending') return null;
+    const handleClearAll = async () => {
+        Alert.alert(
+            'Clear All Notifications',
+            'This will remove all your document notifications. Booking requests will still be visible for 24 hours.',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Clear All',
+                    style: 'destructive',
+                    onPress: async () => {
+                        setClearing(true);
+                        try {
+                            await apiRequest('/api/notifications/clear', { method: 'DELETE' }, logout);
+                            setSystemNotifs([]);
+                        } catch (_) {}
+                        setClearing(false);
+                    },
+                },
+            ]
+        );
+    };
+
+    const toggleExpand = (id: string) => {
+        setExpandedId(prev => prev === id ? null : id);
+    };
+
+    // ─── Driver booking card ────────────────────────────────────────────────
+    const renderDriverCard = (item: any) => {
+        const isExpanded = expandedId === item.id;
+        const statusColor = item.status === 'accepted' ? '#00C853'
+            : item.status === 'rejected' ? '#F44336' : colors.primary;
+        const statusIcon = item.status === 'accepted' ? '✓'
+            : item.status === 'rejected' ? '✗' : '⏳';
+
+        const seatList = item.seatLayout && item.seatLayout.length > 0
+            ? item.seatLayout.map((s: number) => `Seat ${s + 1}`).join(', ')
+            : `${item.seatsRequested || 1} seat(s)`;
 
         return (
-            <View style={[styles.card, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}>
-                {isDriver ? (
-                    <>
-                        <View style={styles.cardHeader}>
-                            <Text style={[styles.requestTitle, { color: colors.textColor }]}>
-                                {item.passengerName || t('requests.newRequestTitle')}
-                            </Text>
-                            <Text style={[styles.statusTag, { color: colors.primary }]}>{t(`requests.${item.status}`).toUpperCase()}</Text>
-                        </View>
+            <TouchableOpacity
+                style={[styles.card, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}
+                onPress={() => toggleExpand(item.id)}
+                activeOpacity={0.85}
+            >
+                {/* Collapsed header — always visible */}
+                <View style={styles.cardRow}>
+                    <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
+                    <View style={{ flex: 1 }}>
+                        <Text style={[styles.cardTitle, { color: colors.textColor }]}>
+                            {item.type === 'parcel' ? '📦 Parcel Request' : '🎫 Seat Request'}
+                            {item.passengerName ? ` · ${item.passengerName}` : ''}
+                        </Text>
+                        <Text style={[styles.cardMeta, { color: colors.subtextColor }]}>
+                            {item.ride?.pickup || item.pickup} → {item.ride?.dropoff || item.dropoff}
+                            {'  ·  '}{timeAgo(item.createdAt)}
+                        </Text>
+                    </View>
+                    <View style={[styles.statusBadge, { backgroundColor: statusColor + '22', borderColor: statusColor }]}>
+                        <Text style={[styles.statusBadgeText, { color: statusColor }]}>
+                            {statusIcon} {item.status?.toUpperCase()}
+                        </Text>
+                    </View>
+                    <Text style={[styles.chevron, { color: colors.subtextColor }]}>
+                        {isExpanded ? '▲' : '▼'}
+                    </Text>
+                </View>
 
-                        <View style={styles.details}>
-                            <View style={styles.dateTimeRow}>
-                                <Text style={styles.dateTimeIcon}>📅</Text>
-                                <Text style={[styles.dateTimeText, { color: colors.textColor }]}>{item.ride?.date || item.date}</Text>
-                                <View style={{ width: 12 }} />
-                                <Text style={styles.dateTimeIcon}>🕒</Text>
-                                <Text style={[styles.dateTimeText, { color: colors.textColor }]}>{item.ride?.departureTime}</Text>
-                            </View>
-                            <View style={{ height: 4 }} />
-
-                            {item.type === 'parcel' ? (
-                                <View style={{ marginTop: 8 }}>
-                                    <Text style={[styles.detailText, { color: colors.primary, fontWeight: 'bold' }]}>📦 PARCEL DELIVERY</Text>
-                                    <Text style={[styles.detailText, { color: colors.textColor }]}>Route: {item.pickup} → {item.dropoff}</Text>
-                                    <Text style={[styles.detailText, { color: colors.subtextColor }]}>Recipient: {item.recipientName} ({item.contactNumber})</Text>
-                                    <Text style={[styles.detailText, { color: colors.subtextColor }]}>Size: {item.parcelSize?.toUpperCase()}</Text>
-                                </View>
-                            ) : (
+                {/* Expanded detail */}
+                {isExpanded && (
+                    <View style={[styles.expanded, { borderTopColor: colors.borderColor }]}>
+                        {/* Info rows */}
+                        <View style={styles.infoGrid}>
+                            <InfoRow icon="📅" label="Date" value={item.ride?.date || '—'} colors={colors} />
+                            <InfoRow icon="🕒" label="Time" value={item.ride?.departureTime || '—'} colors={colors} />
+                            {item.type !== 'parcel' && (
+                                <InfoRow icon="💺" label="Seats" value={seatList} colors={colors} />
+                            )}
+                            {item.type === 'parcel' && (
                                 <>
-                                    <Text style={[styles.detailText, { color: colors.subtextColor }]}>{t('requests.seatsTitle')}{item.seatsRequested}</Text>
-                                    {item.roofCarrier && <Text style={[styles.detailText, { color: colors.subtextColor }]}>• {t('trips.needsRoofCarrier')}</Text>}
+                                    <InfoRow icon="📏" label="Size" value={item.parcelSize?.toUpperCase() || '—'} colors={colors} />
+                                    <InfoRow icon="👤" label="Recipient" value={item.recipientName || '—'} colors={colors} />
+                                    <InfoRow icon="📞" label="Contact" value={item.contactNumber || '—'} colors={colors} />
                                 </>
                             )}
-
-                            <Text style={{ fontSize: 11, color: colors.subtextColor, marginTop: 4, fontStyle: 'italic' }}>
-                                {t('trips.bookedOn') || 'Booked on: '}
-                                {new Date(item.createdAt).toLocaleDateString()} at {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </Text>
+                            {item.roofCarrier && <InfoRow icon="🎒" label="Roof Carrier" value="Required" colors={colors} />}
+                            <InfoRow icon="🚗" label="Vehicle" value={item.ride?.vehicleModel || '—'} colors={colors} />
                         </View>
 
-                        {/* Layout for Driver to see requested seats (Hide for parcels) */}
-                        {item.type !== 'parcel' && (
-                            <View style={{ marginBottom: 20 }}>
-                                <JeepLayout
-                                    interactive={false}
-                                    takenSeats={item.status === 'accepted' ? (item.seatLayout || []) : []}
-                                    pendingSeats={item.status === 'pending' ? (item.seatLayout || []) : []}
-                                    numSeatsRequested={item.seatsRequested}
-                                    totalSeats={item.ride?.seatsTotal || user?.vehicle?.seats || 4}
-                                    layoutType={item.ride?.seatingLayout || user?.vehicle?.seating_layout || 'sedan'}
-                                />
-                            </View>
-                        )}
-
+                        {/* Action buttons */}
                         {item.status === 'pending' ? (
                             <View style={styles.actions}>
                                 <TouchableOpacity
-                                    style={[styles.actionBtn, { backgroundColor: '#4CAF50' }]}
+                                    style={[styles.actionBtn, { backgroundColor: '#00C853' }]}
                                     onPress={() => handleUpdateStatus(item.id, 'accepted')}>
-                                    <Text style={styles.btnText}>{t('requests.accept')}</Text>
+                                    <Text style={styles.btnText}>✓ Accept</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity
                                     style={[styles.actionBtn, { backgroundColor: '#F44336' }]}
                                     onPress={() => handleUpdateStatus(item.id, 'rejected')}>
-                                    <Text style={styles.btnText}>{t('requests.reject')}</Text>
+                                    <Text style={styles.btnText}>✗ Reject</Text>
                                 </TouchableOpacity>
                             </View>
-                        ) : (
-                            <View style={{ alignItems: 'center' }}>
-                                <Text style={{ color: item.status === 'accepted' ? '#4CAF50' : '#F44336', fontWeight: 'bold' }}>
-                                    {item.status === 'accepted' ? `✓ ${t('requests.accepted').toUpperCase()}` : `✗ ${t('requests.rejected').toUpperCase()}`}
-                                </Text>
-                                {item.status === 'accepted' && (
-                                    <TouchableOpacity
-                                        style={styles.chatBtn}
-                                        onPress={() => onOpenChat(item)}>
-                                        <View style={styles.chatBtnContent}>
-                                            <Text style={styles.chatBtnText}>💬 {t('chat.withPassenger')}</Text>
-                                            {item.unreadChatCount > 0 && (
-                                                <View style={styles.unreadBadge}>
-                                                    <Text style={styles.unreadCount}>{item.unreadChatCount}</Text>
-                                                </View>
-                                            )}
-                                        </View>
-                                    </TouchableOpacity>
-                                )}
-                            </View>
-                        )}
-                    </>
-                ) : item.status === 'accepted' ? (
-                    <>
-                        <View style={styles.successHeader}>
-                            <View style={styles.successIconOuter}>
-                                <Text style={styles.successIconInner}>✓</Text>
-                            </View>
-                            <Text style={[styles.successText, { color: colors.textColor }]}>
-                                {item.type === 'parcel' ? (t('parcel.parcelScheduled') || 'Parcel Scheduled') : t('requests.seatReserved')}
-                            </Text>
-                            <View style={[styles.dateTimeRow, { marginTop: 4 }]}>
-                                <Text style={styles.dateTimeIcon}>📅</Text>
-                                <Text style={[styles.dateTimeText, { color: colors.textColor }]}>{item.ride?.date || item.date}</Text>
-                                <View style={{ width: 12 }} />
-                                <Text style={styles.dateTimeIcon}>🕒</Text>
-                                <Text style={[styles.dateTimeText, { color: colors.textColor }]}>{item.ride?.departureTime}</Text>
-                            </View>
-                            {item.type === 'parcel' && (
-                                <Text style={[styles.routeText, { color: colors.textColor, fontWeight: 'bold', marginTop: 8 }]}>
-                                    {item.pickup} → {item.dropoff}
-                                </Text>
-                            )}
-                            <Text style={[styles.successSubtitle, { color: colors.subtextColor }]}>
-                                {item.type === 'parcel' ? 'Your parcel is being tracked' : t('requests.verifiedSubtitle')}
-                            </Text>
-                        </View>
-
-                        <View style={[styles.bookingIdCard, { backgroundColor: isDark ? '#111822' : '#EEF2FF' }]}>
-                            <View style={styles.bookingIdHeader}>
-                                <Text style={[styles.bookingIdLabel, { color: isDark ? '#607D8B' : '#7986A3' }]}>
-                                    {item.type === 'parcel' ? 'UNIQUE PARCEL ID' : t('trips.offlineBookingId')}
-                                </Text>
-                                <View style={styles.verifiedTag}>
-                                    <Text style={styles.verifiedTagText}>{item.type === 'parcel' ? 'PARCEL SECURED' : t('trips.verifiedDriver')}</Text>
-                                </View>
-                            </View>
-                            <Text style={styles.bookingIdText}>
-                                {item.type === 'parcel' ? 'RA-P-' : 'RA-'}{item.id.slice(-4).toUpperCase()}
-                            </Text>
-                            <Text style={[styles.bookingIdFooter, { color: isDark ? '#4B5C6B' : '#8A96BB' }]}>
-                                {item.type === 'parcel' ? 'Show this ID to the parcel partner' : t('trips.showDriverOffline')}
-                            </Text>
-
+                        ) : item.status === 'accepted' && (
                             <TouchableOpacity
-                                style={[styles.chatBtn, { marginTop: 12, width: '100%' }]}
-                                onPress={() => onOpenChat(item)}>
-                                <View style={styles.chatBtnContent}>
-                                    <Text style={styles.chatBtnText}>💬 {t('chat.withDriver')}</Text>
-                                    {item.unreadChatCount > 0 && (
-                                        <View style={styles.unreadBadge}>
-                                            <Text style={styles.unreadCount}>{item.unreadChatCount}</Text>
-                                        </View>
-                                    )}
-                                </View>
+                                style={[styles.chatBtn, { backgroundColor: colors.primary }]}
+                                onPress={() => { onOpenChat(item); }}>
+                                <Text style={styles.chatBtnText}>💬 Chat with Passenger</Text>
+                                {item.unreadChatCount > 0 && (
+                                    <View style={styles.unreadBadge}>
+                                        <Text style={styles.unreadCount}>{item.unreadChatCount}</Text>
+                                    </View>
+                                )}
                             </TouchableOpacity>
-                        </View>
-                    </>
-                ) : (
-                    <View style={styles.rejectionContainer}>
-                        <View style={styles.rejectionIconOuter}>
-                            <Text style={styles.rejectionIconInner}>✗</Text>
-                        </View>
-                        <Text style={[styles.rejectionText, { color: colors.textColor }]}>{t('requests.seatsNotBooked')}</Text>
-                        <Text style={[styles.rejectionSubtitle, { color: colors.subtextColor }]}>
-                            {t('requests.declinedSubtitle')}
-                        </Text>
+                        )}
                     </View>
                 )}
-            </View>
+            </TouchableOpacity>
         );
     };
 
+    // ─── Passenger booking card ─────────────────────────────────────────────
+    const renderPassengerCard = (item: any) => {
+        const isExpanded = expandedId === item.id;
+        const isAccepted = item.status === 'accepted';
+        const isRejected = item.status === 'rejected';
+        const statusColor = isAccepted ? '#00C853' : isRejected ? '#F44336' : colors.primary;
+        const statusIcon = isAccepted ? '✓' : isRejected ? '✗' : '⏳';
+
+        const seatList = item.seatLayout && item.seatLayout.length > 0
+            ? item.seatLayout.map((s: number) => `Seat ${s + 1}`).join(', ')
+            : `${item.seatsRequested || 1} seat(s)`;
+
+        return (
+            <TouchableOpacity
+                style={[
+                    styles.card,
+                    {
+                        backgroundColor: colors.cardColor,
+                        borderColor: isAccepted ? '#00C85322' : isRejected ? '#F4433622' : colors.borderColor,
+                        borderLeftWidth: 4,
+                        borderLeftColor: statusColor,
+                    }
+                ]}
+                onPress={() => toggleExpand(item.id)}
+                activeOpacity={0.85}
+            >
+                {/* Collapsed header */}
+                <View style={styles.cardRow}>
+                    <Text style={{ fontSize: 24, marginRight: 12 }}>
+                        {isAccepted ? '✅' : isRejected ? '❌' : '⏳'}
+                    </Text>
+                    <View style={{ flex: 1 }}>
+                        <Text style={[styles.cardTitle, { color: colors.textColor }]}>
+                            {isAccepted
+                                ? (item.type === 'parcel' ? 'Parcel Scheduled' : 'Seat Confirmed!')
+                                : isRejected
+                                    ? 'Booking Declined'
+                                    : 'Booking Pending'}
+                        </Text>
+                        <Text style={[styles.cardMeta, { color: colors.subtextColor }]}>
+                            {item.ride?.pickup || item.pickup} → {item.ride?.dropoff || item.dropoff}
+                            {'  ·  '}{timeAgo(item.createdAt)}
+                        </Text>
+                    </View>
+                    <Text style={[styles.chevron, { color: colors.subtextColor }]}>
+                        {isExpanded ? '▲' : '▼'}
+                    </Text>
+                </View>
+
+                {/* Expanded detail */}
+                {isExpanded && (
+                    <View style={[styles.expanded, { borderTopColor: colors.borderColor }]}>
+                        {isAccepted && (
+                            <View style={[styles.bookingIdRow, { backgroundColor: isDark ? '#0D1F2D' : '#EEF7FF' }]}>
+                                <Text style={[styles.bookingIdLabel, { color: colors.subtextColor }]}>BOOKING ID</Text>
+                                <Text style={[styles.bookingIdValue, { color: '#00C853' }]}>
+                                    {item.type === 'parcel' ? 'RA-P-' : 'RA-'}{item.id?.slice(-4).toUpperCase()}
+                                </Text>
+                            </View>
+                        )}
+
+                        <View style={styles.infoGrid}>
+                            <InfoRow icon="📅" label="Date" value={item.ride?.date || '—'} colors={colors} />
+                            <InfoRow icon="🕒" label="Departure" value={item.ride?.departureTime || '—'} colors={colors} />
+                            <InfoRow icon="🚗" label="Driver" value={item.ride?.driverName || '—'} colors={colors} />
+                            <InfoRow icon="🚙" label="Vehicle" value={item.ride?.vehicleModel || '—'} colors={colors} />
+                            {item.type !== 'parcel' && (
+                                <InfoRow icon="💺" label="Your Seats" value={seatList} colors={colors} />
+                            )}
+                            {item.type === 'parcel' && (
+                                <InfoRow icon="📦" label="Parcel Size" value={item.parcelSize?.toUpperCase() || '—'} colors={colors} />
+                            )}
+                            {item.roofCarrier && <InfoRow icon="🎒" label="Roof Carrier" value="Requested" colors={colors} />}
+                        </View>
+
+                        {isAccepted && (
+                            <TouchableOpacity
+                                style={[styles.chatBtn, { backgroundColor: colors.primary }]}
+                                onPress={() => { onOpenChat(item); }}>
+                                <Text style={styles.chatBtnText}>💬 Chat with Driver</Text>
+                                {item.unreadChatCount > 0 && (
+                                    <View style={styles.unreadBadge}>
+                                        <Text style={styles.unreadCount}>{item.unreadChatCount}</Text>
+                                    </View>
+                                )}
+                            </TouchableOpacity>
+                        )}
+
+                        {isRejected && (
+                            <View style={[styles.rejectedNote, { backgroundColor: isDark ? 'rgba(244,67,54,0.08)' : 'rgba(244,67,54,0.06)' }]}>
+                                <Text style={{ color: '#F44336', fontSize: 13, lineHeight: 19 }}>
+                                    Your booking was not accepted by the driver. Please try searching for another ride.
+                                </Text>
+                            </View>
+                        )}
+                    </View>
+                )}
+            </TouchableOpacity>
+        );
+    };
+
+    const renderItem = ({ item }: { item: any }) => {
+        if (!isDriver && item.status === 'pending') return null;
+        return isDriver ? renderDriverCard(item) : renderPassengerCard(item);
+    };
+
+    const hasAnyNotifs = systemNotifs.length > 0 || bookings.length > 0;
+
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
+            {/* Header */}
             <View style={styles.header}>
-                <Text style={[styles.title, { color: colors.textColor }]}>
-                    {isDriver ? t('requests.title') : t('requests.notifications')}
-                </Text>
-                <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-                    <Text style={{ color: colors.primary, fontWeight: 'bold' }}>{t('requests.closeBtn')}</Text>
-                </TouchableOpacity>
+                <View>
+                    <Text style={[styles.title, { color: colors.textColor }]}>
+                        {isDriver ? t('requests.title') : t('requests.notifications')}
+                    </Text>
+                    <Text style={[styles.headerSub, { color: colors.subtextColor }]}>Last 24 hours · Tap to expand</Text>
+                </View>
+                <View style={styles.headerRight}>
+                    {hasAnyNotifs && (
+                        <TouchableOpacity
+                            style={[styles.clearBtn, { borderColor: colors.borderColor }]}
+                            onPress={handleClearAll}
+                            disabled={clearing}
+                        >
+                            {clearing
+                                ? <ActivityIndicator size="small" color={colors.primary} />
+                                : <Text style={{ color: '#F44336', fontSize: 12, fontWeight: '700' }}>🗑 Clear</Text>
+                            }
+                        </TouchableOpacity>
+                    )}
+                    <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+                        <Text style={{ color: colors.primary, fontWeight: 'bold' }}>✕ Close</Text>
+                    </TouchableOpacity>
+                </View>
             </View>
 
-            {/* System Notifications Section (Driver only) */}
+            {/* Document notifications (driver only) */}
             {isDriver && systemNotifs.length > 0 && (
-                <View style={{ marginBottom: 16 }}>
+                <View style={{ marginBottom: 12 }}>
                     <Text style={[styles.sectionLabel, { color: colors.subtextColor }]}>📋 DOCUMENT STATUS</Text>
-                    {notifLoading ? (
-                        <ActivityIndicator color={colors.primary} style={{ marginVertical: 8 }} />
-                    ) : (
-                        systemNotifs.map((notif: any) => {
-                            const isApproved = notif.type === 'document_verification' && notif.title?.toLowerCase().includes('approved');
-                            const isRejected = notif.type === 'document_verification' && notif.title?.toLowerCase().includes('rejected');
-                            const accentColor = isApproved ? '#00BFA5' : isRejected ? '#F44336' : colors.primary;
-                            const bgColor = isApproved
-                                ? (isDark ? 'rgba(0,191,165,0.08)' : 'rgba(0,191,165,0.06)')
-                                : isRejected
-                                    ? (isDark ? 'rgba(244,67,54,0.08)' : 'rgba(244,67,54,0.06)')
-                                    : colors.cardColor;
+                    {notifLoading
+                        ? <ActivityIndicator color={colors.primary} style={{ marginVertical: 8 }} />
+                        : systemNotifs.map((notif: any) => {
+                            const isApproved = notif.title?.toLowerCase().includes('approved');
+                            const isRejectedNotif = notif.title?.toLowerCase().includes('rejected');
+                            const accent = isApproved ? '#00BFA5' : isRejectedNotif ? '#F44336' : colors.primary;
+                            const isExpanded = expandedId === `notif_${notif.id}`;
                             return (
-                                <View
+                                <TouchableOpacity
                                     key={notif.id}
-                                    style={[
-                                        styles.notifCard,
-                                        {
-                                            backgroundColor: bgColor,
-                                            borderColor: accentColor,
-                                            borderLeftWidth: 4,
-                                        },
-                                    ]}
+                                    style={[styles.notifCard, {
+                                        backgroundColor: colors.cardColor,
+                                        borderLeftColor: accent,
+                                    }]}
+                                    onPress={() => toggleExpand(`notif_${notif.id}`)}
+                                    activeOpacity={0.85}
                                 >
-                                    <View style={styles.notifRow}>
-                                        <Text style={styles.notifIcon}>
-                                            {isApproved ? '✅' : isRejected ? '❌' : '🔔'}
+                                    <View style={styles.cardRow}>
+                                        <Text style={{ fontSize: 22, marginRight: 10 }}>
+                                            {isApproved ? '✅' : isRejectedNotif ? '❌' : '🔔'}
                                         </Text>
                                         <View style={{ flex: 1 }}>
-                                            <Text style={[styles.notifTitle, { color: accentColor }]}>
-                                                {notif.title}
+                                            <Text style={[styles.notifTitle, { color: accent }]}>{notif.title}</Text>
+                                            <Text style={[styles.cardMeta, { color: colors.subtextColor }]}>
+                                                {timeAgo(notif.createdAt)}
+                                                {!notif.read && <Text style={{ color: accent }}> · NEW</Text>}
                                             </Text>
+                                        </View>
+                                        <Text style={[styles.chevron, { color: colors.subtextColor }]}>
+                                            {isExpanded ? '▲' : '▼'}
+                                        </Text>
+                                    </View>
+                                    {isExpanded && (
+                                        <View style={[styles.expanded, { borderTopColor: colors.borderColor }]}>
                                             <Text style={[styles.notifMessage, { color: colors.textColor }]}>
                                                 {notif.message}
                                             </Text>
-                                            <Text style={[styles.notifTime, { color: colors.subtextColor }]}>
-                                                {new Date(notif.createdAt).toLocaleDateString()} at{' '}
-                                                {new Date(notif.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            <Text style={[styles.cardMeta, { color: colors.subtextColor, marginTop: 4 }]}>
+                                                {new Date(notif.createdAt).toLocaleString()}
                                             </Text>
                                         </View>
-                                        {!notif.read && (
-                                            <View style={[styles.unreadDot, { backgroundColor: accentColor }]} />
-                                        )}
-                                    </View>
-                                </View>
+                                    )}
+                                </TouchableOpacity>
                             );
                         })
-                    )}
+                    }
                     <View style={[styles.divider, { backgroundColor: colors.borderColor }]} />
                 </View>
             )}
 
+            {/* Booking requests */}
             {loading ? (
                 <ActivityIndicator color={colors.primary} size="large" style={{ marginTop: 20 }} />
             ) : (
@@ -348,9 +427,12 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
                     renderItem={renderItem}
                     contentContainerStyle={styles.list}
                     ListEmptyComponent={
-                        <Text style={[styles.empty, { color: colors.subtextColor }]}>
-                            {isDriver ? t('requests.emptyDriver') : t('requests.noNotifications')}
-                        </Text>
+                        <View style={styles.emptyState}>
+                            <Text style={{ fontSize: 40, marginBottom: 12 }}>🔔</Text>
+                            <Text style={[styles.empty, { color: colors.subtextColor }]}>
+                                {isDriver ? t('requests.emptyDriver') : 'No recent notifications\nin the last 24 hours'}
+                            </Text>
+                        </View>
                     }
                 />
             )}
@@ -358,281 +440,104 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
     );
 };
 
+// ─── Shared InfoRow component ────────────────────────────────────────────────
+const InfoRow = ({ icon, label, value, colors }: { icon: string, label: string, value: string, colors: any }) => (
+    <View style={infoRowStyle.row}>
+        <Text style={infoRowStyle.icon}>{icon}</Text>
+        <Text style={[infoRowStyle.label, { color: colors.subtextColor }]}>{label}</Text>
+        <Text style={[infoRowStyle.value, { color: colors.textColor }]}>{value}</Text>
+    </View>
+);
+
+const infoRowStyle = StyleSheet.create({
+    row: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+    icon: { fontSize: 14, marginRight: 8, width: 20 },
+    label: { fontSize: 12, fontWeight: '600', width: 80 },
+    value: { fontSize: 13, fontWeight: '500', flex: 1 },
+});
+
+// ─── Styles ──────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        paddingHorizontal: 20,
-        paddingTop: 20,
-    },
+    container: { flex: 1, paddingHorizontal: 16, paddingTop: 16 },
     header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 20,
+        flexDirection: 'row', justifyContent: 'space-between',
+        alignItems: 'flex-start', marginBottom: 16,
     },
-    title: {
-        fontSize: 24,
-        fontWeight: 'bold',
+    headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
+    title: { fontSize: 22, fontWeight: 'bold' },
+    headerSub: { fontSize: 11, marginTop: 2, opacity: 0.7 },
+    clearBtn: {
+        borderWidth: 1, borderRadius: 8, paddingHorizontal: 10,
+        paddingVertical: 5, flexDirection: 'row', alignItems: 'center',
     },
-    closeBtn: {
-        padding: 8,
-    },
-    list: {
-        paddingBottom: 20,
-    },
-    card: {
-        borderRadius: 16,
-        borderWidth: 1,
-        padding: 18,
-        marginBottom: 16,
-    },
-    cardHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 12,
-    },
-    requestTitle: {
-        fontSize: 16,
-        fontWeight: 'bold',
-    },
-    statusTag: {
-        fontSize: 12,
-        fontWeight: 'bold',
-        backgroundColor: 'rgba(91, 79, 255, 0.1)',
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 8,
-    },
-    details: {
-        marginBottom: 16,
-    },
-    detailText: {
-        fontSize: 14,
-        marginBottom: 4,
-    },
-    dateTimeRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 8,
-    },
-    dateTimeIcon: {
-        fontSize: 14,
-        marginRight: 6,
-    },
-    dateTimeText: {
-        fontSize: 14,
-        fontWeight: 'bold',
-    },
-    actions: {
-        flexDirection: 'row',
-        gap: 12,
-    },
-    actionBtn: {
-        flex: 1,
-        paddingVertical: 10,
-        borderRadius: 8,
-        alignItems: 'center',
-    },
-    btnText: {
-        color: '#FFFFFF',
-        fontWeight: 'bold',
-        fontSize: 14,
-    },
-    empty: {
-        textAlign: 'center',
-        padding: 40,
-        fontSize: 16,
-    },
+    closeBtn: { padding: 6 },
+    list: { paddingBottom: 24 },
     sectionLabel: {
-        fontSize: 11,
-        fontWeight: '700',
-        letterSpacing: 0.8,
-        marginBottom: 10,
-        textTransform: 'uppercase',
+        fontSize: 10, fontWeight: '800', letterSpacing: 1,
+        marginBottom: 8, textTransform: 'uppercase',
     },
-    notifCard: {
-        borderRadius: 12,
-        borderWidth: 1,
-        padding: 14,
-        marginBottom: 10,
+    divider: { height: 1, marginVertical: 12 },
+    // Cards
+    card: {
+        borderRadius: 14, borderWidth: 1, marginBottom: 12,
+        overflow: 'hidden',
     },
-    notifRow: {
-        flexDirection: 'row',
-        alignItems: 'flex-start',
+    cardRow: {
+        flexDirection: 'row', alignItems: 'center',
+        padding: 14, gap: 8,
     },
-    notifIcon: {
-        fontSize: 22,
-        marginRight: 12,
-        marginTop: 2,
+    statusDot: { width: 10, height: 10, borderRadius: 5, marginRight: 4 },
+    cardTitle: { fontSize: 14, fontWeight: '700', marginBottom: 2 },
+    cardMeta: { fontSize: 11, lineHeight: 15 },
+    statusBadge: {
+        borderWidth: 1, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3,
     },
-    notifTitle: {
-        fontSize: 15,
-        fontWeight: '700',
-        marginBottom: 4,
+    statusBadgeText: { fontSize: 10, fontWeight: '800' },
+    chevron: { fontSize: 10, marginLeft: 4, fontWeight: 'bold' },
+    // Expanded panel
+    expanded: {
+        borderTopWidth: 1, padding: 14, paddingTop: 12,
     },
-    notifMessage: {
-        fontSize: 13,
-        lineHeight: 19,
-        marginBottom: 6,
+    infoGrid: { marginBottom: 12 },
+    bookingIdRow: {
+        borderRadius: 10, padding: 12, marginBottom: 12, alignItems: 'center',
     },
-    notifTime: {
-        fontSize: 11,
-        fontStyle: 'italic',
+    bookingIdLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 0.8 },
+    bookingIdValue: {
+        fontSize: 28, fontWeight: '900', letterSpacing: 3, marginTop: 4,
     },
-    unreadDot: {
-        width: 9,
-        height: 9,
-        borderRadius: 5,
-        marginTop: 4,
-        marginLeft: 8,
+    rejectedNote: {
+        borderRadius: 10, padding: 12, marginTop: 4,
     },
-    divider: {
-        height: 1,
-        marginTop: 8,
-        marginBottom: 4,
+    // Actions
+    actions: { flexDirection: 'row', gap: 10, marginTop: 4 },
+    actionBtn: {
+        flex: 1, paddingVertical: 10, borderRadius: 10,
+        alignItems: 'center',
     },
+    btnText: { color: '#FFF', fontWeight: '800', fontSize: 14 },
     chatBtn: {
-        backgroundColor: '#4285F4',
-        paddingHorizontal: 20,
-        paddingVertical: 10,
-        borderRadius: 20,
-        marginTop: 10,
-        alignItems: 'center',
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+        borderRadius: 10, paddingVertical: 10, paddingHorizontal: 16,
+        marginTop: 4, gap: 8,
     },
-    chatBtnText: {
-        color: '#FFFFFF',
-        fontWeight: 'bold',
-        fontSize: 14,
-    },
-    chatBtnContent: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
+    chatBtnText: { color: '#FFF', fontWeight: '700', fontSize: 14 },
     unreadBadge: {
-        backgroundColor: '#FF4444',
-        borderRadius: 10,
-        minWidth: 20,
-        height: 20,
-        paddingHorizontal: 6,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginLeft: 8,
-        borderWidth: 1.5,
-        borderColor: '#FFFFFF',
+        backgroundColor: '#FF4444', borderRadius: 10, minWidth: 20, height: 20,
+        paddingHorizontal: 6, justifyContent: 'center', alignItems: 'center',
+        borderWidth: 1.5, borderColor: '#FFF',
     },
-    unreadCount: {
-        color: '#FFFFFF',
-        fontSize: 10,
-        fontWeight: 'bold',
+    unreadCount: { color: '#FFF', fontSize: 10, fontWeight: 'bold' },
+    // Notif card
+    notifCard: {
+        borderRadius: 12, borderLeftWidth: 4, borderWidth: 1,
+        marginBottom: 8, overflow: 'hidden',
     },
-    successHeader: {
-        alignItems: 'center',
-        marginBottom: 20,
-    },
-    successIconOuter: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
-        backgroundColor: 'rgba(0, 191, 165, 0.1)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 12,
-        borderWidth: 1,
-        borderColor: '#00BFA5',
-    },
-    successIconInner: {
-        color: '#00BFA5',
-        fontSize: 30,
-        fontWeight: 'bold',
-    },
-    successText: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        letterSpacing: 1,
-        marginBottom: 4,
-    },
-    successSubtitle: {
-        fontSize: 12,
-        textAlign: 'center',
-        opacity: 0.7,
-    },
-    bookingIdCard: {
-        borderRadius: 16,
-        padding: 20,
-        marginTop: 10,
-    },
-    bookingIdHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 15,
-    },
-    bookingIdLabel: {
-        fontSize: 10,
-        fontWeight: 'bold',
-        letterSpacing: 0.5,
-    },
-    verifiedTag: {
-        backgroundColor: 'rgba(0, 191, 165, 0.15)',
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 6,
-    },
-    verifiedTagText: {
-        color: '#00BFA5',
-        fontSize: 9,
-        fontWeight: 'bold',
-    },
-    bookingIdText: {
-        color: '#00BFA5',
-        fontSize: 32,
-        fontWeight: 'bold',
-        letterSpacing: 2,
-        marginBottom: 10,
-    },
-    bookingIdFooter: {
-        color: '#4B5C6B',
-        fontSize: 9,
-        fontWeight: 'bold',
-    },
-    rejectionContainer: {
-        alignItems: 'center',
-        paddingVertical: 10,
-    },
-    rejectionIconOuter: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
-        backgroundColor: 'rgba(244, 67, 54, 0.1)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 12,
-        borderWidth: 1,
-        borderColor: '#F44336',
-    },
-    rejectionIconInner: {
-        color: '#F44336',
-        fontSize: 30,
-        fontWeight: 'bold',
-    },
-    rejectionText: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        letterSpacing: 1,
-        marginBottom: 8,
-    },
-    rejectionSubtitle: {
-        fontSize: 12,
-        textAlign: 'center',
-        opacity: 0.7,
-        lineHeight: 18,
-    },
-    routeText: {
-        fontSize: 14,
-        textAlign: 'center',
-    },
+    notifTitle: { fontSize: 14, fontWeight: '700', marginBottom: 1 },
+    notifMessage: { fontSize: 13, lineHeight: 20 },
+    // Empty
+    emptyState: { alignItems: 'center', paddingTop: 60, paddingBottom: 40 },
+    empty: { fontSize: 14, textAlign: 'center', lineHeight: 22 },
 });
 
 export default RequestsOverlay;
