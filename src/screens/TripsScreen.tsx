@@ -114,18 +114,18 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
                         );
                     }
                 }
-                // Regular active Trips view: show available/pending ones
+                // Regular active Trips view: show available/pending/ongoing ones
                 else {
                     if (isDriver) {
-                        // Driver: show active/available rides (non-parcel)
-                        data = data.filter((b: any) => b.type !== 'parcel' && b.status === 'available');
+                        // Driver: show active/available/ongoing rides (non-parcel)
+                        data = data.filter((b: any) => b.type !== 'parcel' && (b.status === 'available' || b.status === 'ongoing'));
                     } else {
-                        // Passenger: show pending or accepted bookings where the ride itself is still available
+                        // Passenger: show pending or accepted bookings where the ride itself is still available or ongoing
                         data = data.filter((b: any) =>
                             b.type !== 'parcel' &&
                             b.ride?.type !== 'parcel' &&
                             (b.status === 'pending' || b.status === 'accepted') &&
-                            b.ride?.status === 'available'
+                            (b.ride?.status === 'available' || b.ride?.status === 'ongoing')
                         );
                     }
                 }
@@ -155,8 +155,8 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
     // Start GPS tracking for driver
     useEffect(() => {
         if (isDriver && user?.id && bookings && bookings.length > 0) {
-            // Find the most relevant active ride (available and has bookings)
-            const activeRide = bookings.find(b => b.status === 'available');
+            // Find the most relevant active ride (available/ongoing and has bookings)
+            const activeRide = bookings.find(b => b.status === 'available' || b.status === 'ongoing');
             if (activeRide) {
                 const stopTracking = startDriverTracking(activeRide.id, user.id);
                 return () => stopTracking();
@@ -188,6 +188,33 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
             }
         } catch (err) {
             console.error('Error completing trip:', err);
+        }
+    };
+
+    const handleStartTrip = async (rideId: string) => {
+        try {
+            const response = await apiRequest(`/api/rides/${rideId}/start`, {
+                method: 'PUT',
+            }, logout);
+            if (response.ok) {
+                const msg = t('trips.tripStarted') || 'Trip started successfully';
+                if (Platform.OS === 'web') {
+                    window.alert(msg);
+                } else {
+                    Alert.alert(t('common.success') || 'Success', msg);
+                }
+                fetchData();
+            } else {
+                const data = await response.json();
+                const errorMsg = data.error || 'Failed to start trip';
+                if (Platform.OS === 'web') {
+                    window.alert(errorMsg);
+                } else {
+                    Alert.alert(t('common.error') || 'Error', errorMsg);
+                }
+            }
+        } catch (err) {
+            console.error('Error starting trip:', err);
         }
     };
 
@@ -294,9 +321,26 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
                     </TouchableOpacity>
                 )}
 
-                {/* For Passengers - Always show or add a button (Only for non-parcels) */}
+                 {/* For Passengers - Always show or add a button (Only for non-parcels) */}
                 {!isDriver && !isParcel && !isParcelHistory && (
                     <View style={{ marginTop: 10 }}>
+                        {item.ride?.status === 'ongoing' && (
+                            <View style={{
+                                backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                                borderColor: '#4CAF50',
+                                borderWidth: 1,
+                                borderRadius: 12,
+                                padding: 12,
+                                marginBottom: 15,
+                                flexDirection: 'row',
+                                alignItems: 'center'
+                            }}>
+                                <Icon name="car-outline" size={20} color="#4CAF50" style={{ marginRight: 10 }} />
+                                <Text style={{ color: '#4CAF50', fontSize: 13, fontWeight: 'bold', flex: 1 }}>
+                                    {t('trips.driverMoving') || 'Driver started moving to destination!'}
+                                </Text>
+                            </View>
+                        )}
                         <JeepLayout
                             interactive={false}
                             selectedSeats={item.seatLayout || []}
@@ -514,6 +558,32 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
 
                         {!isCompleted && (
                             <View style={{ marginTop: 20 }}>
+                                {item.status !== 'ongoing' && (
+                                    <TouchableOpacity
+                                        onPress={() => handleStartTrip(item.id)}
+                                        style={{
+                                            backgroundColor: '#4CAF50',
+                                            paddingVertical: 8,
+                                            paddingHorizontal: 20,
+                                            borderRadius: 8,
+                                            alignSelf: 'center',
+                                            flexDirection: 'row',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            marginBottom: 15,
+                                            shadowColor: '#4CAF50',
+                                            shadowOffset: { width: 0, height: 2 },
+                                            shadowOpacity: 0.1,
+                                            shadowRadius: 3,
+                                            elevation: 2,
+                                        }}
+                                    >
+                                        <Icon name="play-outline" size={16} color="#FFF" style={{ marginRight: 6 }} />
+                                        <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 13 }}>
+                                            {(t('trips.startRide') || 'Start Ride').toUpperCase()}
+                                        </Text>
+                                    </TouchableOpacity>
+                                )}
                                 <SlideToComplete
                                     title="Finish the ride"
                                     onComplete={() => handleCompleteTrip(item.id)}

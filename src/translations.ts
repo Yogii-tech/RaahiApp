@@ -201,6 +201,10 @@ export const translations = {
     'trips.bookedOn': 'Booked on: ',
     'trips.postedOn': 'Posted on: ',
     'trips.noHistory': 'No recent history',
+    'trips.startRide': 'Start Ride',
+    'trips.ongoing': 'Ongoing',
+    'trips.driverMoving': 'Driver started moving to destination!',
+    'requests.ongoing': 'ONGOING',
 
     // Account
     'account.passenger': 'PASSENGER',
@@ -547,6 +551,10 @@ export const translations = {
     'trips.bookedOn': 'बुकिंग की तारीख: ',
     'trips.postedOn': 'पोस्ट की तारीख: ',
     'trips.noHistory': 'कोई हालिया इतिहास नहीं',
+    'trips.startRide': 'यात्रा शुरू करें',
+    'trips.ongoing': 'चल रही है',
+    'trips.driverMoving': 'ड्राइवर गंतव्य की ओर बढ़ने लगा है!',
+    'requests.ongoing': 'चल रही है',
 
     // Account
     'account.passenger': 'यात्री',
