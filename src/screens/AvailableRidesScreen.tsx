@@ -188,26 +188,7 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ searchPicku
                     <Text style={[styles.routePoint, { color: colors.textColor }]}>{dropoffDisplay.toUpperCase()}</Text>
                 </View>
 
-                {/* Full route label if this is a segment of a longer ride */}
-                {isSegment && (
-                    <View style={[styles.segmentBadge, { backgroundColor: isDark ? 'rgba(0,255,255,0.08)' : 'rgba(91,79,255,0.08)' }]}>
-                        <Text style={{ fontSize: 10, color: isDark ? '#00BFFF' : '#5B4FFF', fontWeight: '600' }}>
-                            🚐 Full route: {item.pickup} → {item.dropoff}
-                        </Text>
-                    </View>
-                )}
 
-                {/* Discovered stops preview */}
-                {item.discoveredStops && item.discoveredStops.length > 2 && (
-                    <View style={[styles.stopsPreview, { borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }]}>
-                        <Text style={{ fontSize: 10, fontWeight: 'bold', color: isDark ? '#00FFFF' : '#5B4FFF', marginBottom: 6, letterSpacing: 0.5 }}>
-                            📍 ROUTE VIA
-                        </Text>
-                        <Text style={{ fontSize: 11, color: colors.subtextColor, lineHeight: 16 }} numberOfLines={2}>
-                            {item.discoveredStops.map(s => s.name).join(' → ')}
-                        </Text>
-                    </View>
-                )}
 
                 {/* Date & Time Row */}
                 <View style={styles.dateTimeRow}>
