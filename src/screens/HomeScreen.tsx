@@ -24,6 +24,7 @@ import ParcelBookingView from './ParcelBookingView';
 import LocationInput from '../components/LocationInput';
 import { saveFormDraft, loadFormDraft, clearFormDraft } from '../utils/formDraftStorage';
 import { pushSubViewHistory, popSubViewHistory, useBrowserBack } from '../utils/browserHistory';
+import ResubmitDocsView from './ResubmitDocsView';
 
 interface HomeScreenProps {
     onSosPressed?: () => void;
@@ -97,6 +98,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
     const [totalDistanceKm, setTotalDistanceKm] = useState<number | null>(null);
     const [postingRide, setPostingRide] = useState(false);
     const [pricePerSeat, setPricePerSeat] = useState(() => loadFormDraft('home_pricePerSeat', ''));
+    const [hideVerificationBanner, setHideVerificationBanner] = useState(false);
+    const [showResubmitKYC, setShowResubmitKYC] = useState(false);
 
     // Save draft state to sessionStorage
     useEffect(() => { saveFormDraft('home_pickup', pickup); }, [pickup]);
@@ -378,6 +381,10 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
         }
     };
 
+    if (showResubmitKYC) {
+        return <ResubmitDocsView onClose={() => setShowResubmitKYC(false)} />;
+    }
+
     if (isParceller || view === 'parcel') {
         return <ParcelBookingView onBack={() => {
             if (!popSubViewHistory()) {
@@ -444,7 +451,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
             <View style={styles.spacer24} />
 
             {/* ── Verification Status Banner (drivers only) ─────────────── */}
-            {isDriver && user?.verification_status !== 'verified' && (
+            {isDriver && user?.verification_status !== 'verified' && !hideVerificationBanner && (
                 <View style={{
                     borderRadius: 14,
                     borderWidth: 1.5,
@@ -479,7 +486,17 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                                     ? `Reason: ${user?.rejection_reason || 'Please contact support for details.'}\n\nPlease resubmit your documents or contact support.`
                                     : 'Our admin team is reviewing your vehicle documents. You will be notified once approved. Ride posting will be enabled after verification.'}
                             </Text>
+                            {user?.verification_status === 'rejected' && (
+                                <TouchableOpacity 
+                                    style={{ marginTop: 12, backgroundColor: '#F44336', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8, alignSelf: 'flex-start' }}
+                                    onPress={() => setShowResubmitKYC(true)}>
+                                    <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 13 }}>Resubmit Documents</Text>
+                                </TouchableOpacity>
+                            )}
                         </View>
+                        <TouchableOpacity onPress={() => setHideVerificationBanner(true)} style={{ padding: 4 }}>
+                            <Icon name="close" size={20} color={isDark ? '#CBD5E1' : '#475569'} />
+                        </TouchableOpacity>
                     </View>
                 </View>
             )}
