@@ -330,7 +330,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
 
         return (
             <View style={styles.content}>
-                <TouchableOpacity onPress={() => { if (!popSubViewHistory()) setStep('rides'); }} style={styles.backButton}>
+                <TouchableOpacity onPress={() => { setStep('rides'); popSubViewHistory(); }} style={styles.backButton}>
                     <Text style={[styles.backText, { color: colors.primary }]}>← {t('common.back')}</Text>
                 </TouchableOpacity>
 
@@ -405,7 +405,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
 
     const renderRecipientDetails = () => (
         <View style={styles.content}>
-            <TouchableOpacity onPress={() => { if (!popSubViewHistory()) setStep('search'); }} style={styles.backButton}>
+            <TouchableOpacity onPress={() => { setStep('search'); popSubViewHistory(); }} style={styles.backButton}>
                 <Text style={[styles.backText, { color: colors.primary }]}>
                     ← {t('common.back')}
                 </Text>
@@ -531,7 +531,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
 
     const renderRideSelection = () => (
         <View style={styles.content}>
-            <TouchableOpacity onPress={() => { if (!popSubViewHistory()) setStep('search'); }} style={styles.backButton}>
+            <TouchableOpacity onPress={() => { setStep('search'); popSubViewHistory(); }} style={styles.backButton}>
                 <Text style={[styles.backText, { color: colors.primary }]}>
                     ← {t('common.back')}
                 </Text>

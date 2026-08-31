@@ -130,11 +130,11 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
     ];
 
     if (view === 'trusted') {
-        return <TrustedContactsScreen onBack={() => { if (!popSubViewHistory()) setView('main'); }} />;
+        return <TrustedContactsScreen onBack={() => { setView('main'); popSubViewHistory(); }} />;
     }
 
     if (view === 'vehicle') {
-        return <VehicleDetailsScreen onBack={() => { if (!popSubViewHistory()) setView('main'); }} />;
+        return <VehicleDetailsScreen onBack={() => { setView('main'); popSubViewHistory(); }} />;
     }
 
     return (

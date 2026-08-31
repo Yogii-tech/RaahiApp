@@ -387,10 +387,9 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
 
     if (isParceller || view === 'parcel') {
         return <ParcelBookingView onBack={() => {
-            if (!popSubViewHistory()) {
-                setView('home');
-                if (setParcelMode) setParcelMode(false);
-            }
+            setView('home');
+            if (setParcelMode) setParcelMode(false);
+            popSubViewHistory();
         }} />;
     }
 
@@ -401,7 +400,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                 searchDropoff={dropoff.trim()}
                 searchDate={date.trim()}
                 onBack={() => {
-                    if (!popSubViewHistory()) setView('home');
+                    setView('home');
+                    popSubViewHistory();
                 }}
                 onSelectRide={(ride) => {
                     setSelectedRide(ride);
@@ -418,7 +418,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                 searchPickup={pickup.trim()}
                 searchDropoff={dropoff.trim()}
                 onBack={() => {
-                    if (!popSubViewHistory()) setView('available');
+                    setView('available');
+                    popSubViewHistory();
                 }}
                 onBookingComplete={() => {
                     clearFormDraft('home_pickup');

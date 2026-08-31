@@ -62,9 +62,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
     };
 
     const handleBackStep = (fallbackStep: typeof step) => {
-        if (!popSubViewHistory()) {
-            setStep(fallbackStep);
-        }
+        setStep(fallbackStep);
+        popSubViewHistory();
     };
 
     useBrowserBack(step !== 'phone', () => {
