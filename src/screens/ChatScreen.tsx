@@ -251,9 +251,6 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
 
                 {/* Input Bar */}
                 <View style={[styles.inputBar, { backgroundColor: isDark ? '#1C2939' : '#FFFFFF', borderTopColor: colors.borderColor }]}>
-                    <TouchableOpacity style={styles.attachmentButton}>
-                        <Text style={styles.inputIcon}>📎</Text>
-                    </TouchableOpacity>
 
                     <TextInput
                         style={[styles.input, { color: colors.textColor, backgroundColor: isDark ? '#2C3E50' : '#F1F3F4' }]}
