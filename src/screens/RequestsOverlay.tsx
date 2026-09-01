@@ -332,7 +332,7 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
         return isDriver ? renderDriverCard(item) : renderPassengerCard(item);
     };
 
-    const hasAnyNotifs = systemNotifs.length > 0 || bookings.length > 0;
+    const hasClearableNotifs = systemNotifs.length > 0;
 
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -345,7 +345,7 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
                     <Text style={[styles.headerSub, { color: colors.subtextColor }]}>Last 24 hours · Tap to expand</Text>
                 </View>
                 <View style={styles.headerRight}>
-                    {hasAnyNotifs && (
+                    {hasClearableNotifs && (
                         <TouchableOpacity
                             style={[styles.clearBtn, { borderColor: colors.borderColor }]}
                             onPress={handleClearAll}
