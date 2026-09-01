@@ -49,8 +49,8 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
     }, []);
 
     useEffect(() => {
-        if (isDriver) fetchSystemNotifs();
-    }, [isDriver]);
+        fetchSystemNotifs();
+    }, []);
 
     const fetchSystemNotifs = async () => {
         setNotifLoading(true);
@@ -363,10 +363,12 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
                 </View>
             </View>
 
-            {/* Document notifications (driver only) */}
-            {isDriver && systemNotifs.length > 0 && (
+            {/* System notifications */}
+            {systemNotifs.length > 0 && (
                 <View style={{ marginBottom: 12 }}>
-                    <Text style={[styles.sectionLabel, { color: colors.subtextColor }]}>📋 DOCUMENT STATUS</Text>
+                    <Text style={[styles.sectionLabel, { color: colors.subtextColor }]}>
+                        {isDriver ? '📋 DOCUMENT STATUS' : '📋 SYSTEM NOTIFICATIONS'}
+                    </Text>
                     {notifLoading
                         ? <ActivityIndicator color={colors.primary} style={{ marginVertical: 8 }} />
                         : systemNotifs.map((notif: any) => {
