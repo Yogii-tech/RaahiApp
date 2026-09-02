@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import * as Sentry from "@sentry/react-native";
 import { ErrorBoundary } from './src/components/ErrorBoundary';
+import { registerFCM, unregisterFCM } from './src/services/fcmService';
 
 import {
   StatusBar,
@@ -233,8 +234,42 @@ function MainTabs() {
   const [parcelMode, setParcelMode] = useState(false);
   const [currentRoute, setCurrentRoute] = useState('Home');
   const insets = useSafeAreaInsets();
+  const tabNavRef = useRef<any>(null);
 
   const isDriver = user?.role === 'driver';
+
+  // ─── FCM: register when authenticated, unregister on logout ─────────────
+  const handleFCMNavigate = useCallback((type: string, data: any) => {
+    switch (type) {
+      case 'booking_request':
+        // Driver: open requests overlay
+        setNotificationsVisible(true);
+        break;
+      case 'booking_status':
+      case 'ride_started':
+      case 'ride_completed':
+        // Passenger: open Trips tab
+        setNotificationsVisible(true);
+        break;
+      case 'chat':
+      case 'document_verification':
+      case 'admin_alert':
+        setNotificationsVisible(true);
+        break;
+      default:
+        setNotificationsVisible(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (token) {
+      registerFCM(token, handleFCMNavigate);
+    } else {
+      unregisterFCM();
+    }
+  }, [token, handleFCMNavigate]);
+  // ────────────────────────────────────────────────────────────────────────
+
 
   useBrowserBack(Boolean(notificationsVisible || activeChat), () => {
     if (activeChat) {
