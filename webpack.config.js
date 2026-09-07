@@ -106,6 +106,7 @@ module.exports = {
             patterns: [
                 { from: path.resolve(appDirectory, 'public/firebase-messaging-sw.js'), to: '.' },
                 { from: path.resolve(appDirectory, 'public/logo192.png'), to: '.', noErrorOnMissing: true },
+                { from: path.resolve(appDirectory, 'public/manifest.json'), to: '.' },
             ],
         }),
         // Inject __DEV__ so React Native code works on web.

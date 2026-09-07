@@ -209,11 +209,30 @@ async function registerWebFCM(authToken: string, onNavigate: NavigateToScreen): 
     if (foregroundUnsubscribe) foregroundUnsubscribe();
     foregroundUnsubscribe = onMessage(messaging, (payload: any) => {
       console.log('[FCM Web] Foreground message:', payload);
-      const title = payload?.notification?.title || 'New Notification';
-      const body = payload?.notification?.body || '';
-      // Use the non-blocking Notifications API instead of window.alert()
+      const title = payload?.notification?.title || payload?.data?.title || 'GoRaahi Notification';
+      const body = payload?.notification?.body || payload?.data?.body || '';
+      
       if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-        new Notification(title, { body, icon: '/logo192.png' });
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.ready.then(reg => {
+            reg.showNotification(title, {
+              body,
+              icon: '/logo192.png',
+              badge: '/logo192.png',
+              tag: payload?.data?.type || 'general',
+              renotify: true,
+              data: payload?.data || {},
+            });
+          }).catch(err => {
+            console.warn('[FCM Web] SW showNotification error:', err);
+          });
+        } else {
+          try {
+            new Notification(title, { body, icon: '/logo192.png' });
+          } catch (e) {
+            console.warn('[FCM Web] Notification fallback error:', e);
+          }
+        }
       }
     });
 
