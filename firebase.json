@@ -30,6 +30,13 @@
         ]
       }
     ],
+    "redirects": [
+      {
+        "source": "/:path*",
+        "destination": "https://goraahi.in/:path*",
+        "type": 301
+      }
+    ],
     "rewrites": [
       {
         "source": "**",
