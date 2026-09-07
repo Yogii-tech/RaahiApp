@@ -252,6 +252,13 @@ function MainTabs() {
         setNotificationsVisible(true);
         break;
       case 'chat':
+        if (data.relatedId) {
+          setActiveChat({ id: data.relatedId });
+          pushSubViewHistory('chat');
+        } else {
+          setNotificationsVisible(true);
+        }
+        break;
       case 'document_verification':
       case 'admin_alert':
         setNotificationsVisible(true);
@@ -260,6 +267,20 @@ function MainTabs() {
         setNotificationsVisible(true);
     }
   }, []);
+
+  // Handle Cold-Start Web Deep Links
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const chatId = urlParams.get('chat');
+      if (chatId && user) {
+        setActiveChat({ id: chatId });
+        pushSubViewHistory('chat');
+        // Clean up the URL
+        window.history.replaceState({}, document.title, '/');
+      }
+    }
+  }, [user]);
 
   useEffect(() => {
     if (token) {
@@ -401,14 +422,25 @@ function MainTabs() {
         </Tab.Screen>
         <Tab.Screen
           name="Trips"
-          children={(props) => <TripsScreen {...props} isParcelMode={user?.role === 'parceller' || parcelMode} />}
+          children={(props) => <TripsScreen 
+            {...props} 
+            isParcelMode={user?.role === 'parceller' || parcelMode} 
+            onOpenChat={(booking) => { setActiveChat(booking); pushSubViewHistory('chat'); }}
+          />}
           options={{ title: (user?.role === 'parceller' || parcelMode) ? t('tab.trackPackage') : t('tab.trips') }}
         />
         <Tab.Screen
           name="History"
           children={(props) => {
             const isParcel = user?.role === 'parceller' || parcelMode;
-            return <TripsScreen {...props} isParcelMode={false} isParcelHistory={isParcel} isRideHistory={!isParcel} title={t('tab.history')} />;
+            return <TripsScreen 
+              {...props} 
+              isParcelMode={false} 
+              isParcelHistory={isParcel} 
+              isRideHistory={!isParcel} 
+              title={t('tab.history')} 
+              onOpenChat={(booking) => { setActiveChat(booking); pushSubViewHistory('chat'); }}
+            />;
           }}
           options={{ title: t('tab.history') }}
         />

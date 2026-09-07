@@ -115,18 +115,15 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ searchPicku
     const [rides, setRides] = useState<Ride[]>([]);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        fetchRides();
-    }, []);
-
     const fetchRides = async () => {
+        setLoading(true);
         try {
             let url = `${API_BASE}/api/rides/available`;
-            const queryParams = [];
+            const queryParams: string[] = [];
             if (searchPickup) queryParams.push(`pickup=${encodeURIComponent(searchPickup)}`);
             if (searchDropoff) queryParams.push(`dropoff=${encodeURIComponent(searchDropoff)}`);
             if (searchDate) {
-                // Convert display format DD/MM/YYYY to API format YYYY-MM-DD (BUG-022 fix)
+                // Convert display format DD/MM/YYYY to API format YYYY-MM-DD
                 const parts = searchDate.trim().split('/');
                 const apiDate = parts.length === 3
                     ? `${parts[2]}-${parts[1]}-${parts[0]}`
@@ -148,6 +145,13 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ searchPicku
             setLoading(false);
         }
     };
+
+    // Re-fetch whenever search params change.
+    // Previously this used [] which caused a stale closure — fetchRides ran once
+    // on mount before props were reliably set, returning empty results.
+    useEffect(() => {
+        fetchRides();
+    }, [searchPickup, searchDropoff, searchDate]);
 
     const renderRideItem = ({ item }: { item: Ride }) => {
         // Use segment price if available, otherwise full price

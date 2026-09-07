@@ -22,10 +22,10 @@ document.head.appendChild(style);
 
 AppRegistry.registerComponent('RaahiApp', () => App);
 
-const rootElement = document.getElementById('root');
-if (rootElement) {
-    const root = createRoot(rootElement);
-    // Get the application component from AppRegistry
-    const { element } = AppRegistry.getApplication('RaahiApp');
-    root.render(element);
+const rootTag = document.getElementById('root');
+if (rootTag) {
+    AppRegistry.runApplication('RaahiApp', {
+        initialProps: {},
+        rootTag: rootTag,
+    });
 }

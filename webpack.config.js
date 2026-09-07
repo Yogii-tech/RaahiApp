@@ -23,12 +23,10 @@ const babelLoaderConfiguration = {
         options: {
             configFile: false,
             babelrc: false,
-            sourceType: 'unambiguous',
             presets: [
+                ['@react-native/babel-preset', { disableImportExportTransform: true }],
                 ['@babel/preset-env', { modules: false, loose: true }],
-                ['@babel/preset-react', { runtime: 'automatic' }],
-                '@babel/preset-flow',
-                '@babel/preset-typescript',
+                ['@babel/preset-react', { runtime: 'automatic' }]
             ],
             plugins: ['react-native-web'],
         },
@@ -42,7 +40,10 @@ const imageLoaderConfiguration = {
 };
 
 module.exports = {
-    entry: path.resolve(appDirectory, 'index.web.js'),
+    entry: [
+        'regenerator-runtime/runtime',
+        path.resolve(appDirectory, 'index.web.js')
+    ],
     output: {
         path: path.resolve(appDirectory, 'dist'),
         filename: 'bundle.js',
@@ -111,6 +112,15 @@ module.exports = {
         allowedHosts: 'all',
         hot: true,
         historyApiFallback: true,
+        server: 'http',
+        proxy: [
+            {
+                context: ['/api', '/uploads'],
+                target: 'http://127.0.0.1:8080',
+                secure: false,
+                changeOrigin: true
+            }
+        ],
         client: {
             overlay: {
                 errors: true,

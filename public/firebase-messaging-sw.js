@@ -21,35 +21,46 @@ const messaging = firebase.messaging();
 // Background message handler
 messaging.onBackgroundMessage((payload) => {
   console.log('[firebase-messaging-sw.js] Received background message ', payload);
-  
-  // Customize notification here
-  const notificationTitle = payload.notification?.title || 'New Notification';
-  const notificationOptions = {
-    body: payload.notification?.body,
-    icon: '/favicon.ico', // Replace with your app icon path if available
-    data: payload.data
-  };
-
-  self.registration.showNotification(notificationTitle, notificationOptions);
+  // Note: Since the backend sends a "notification" payload, Firebase's built-in SDK
+  // will automatically display the notification. We do not need to call 
+  // self.registration.showNotification here, as it would cause duplicate notifications.
 });
 
 // Handle notification click
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   
-  // You can customize the URL to open based on event.notification.data
-  const urlToOpen = new URL('/', self.location.origin).href;
+  console.log('[SW] Notification click data:', event.notification.data);
+
+  // Firebase Web SDK often nests the payload under FCM_MSG when it auto-displays notifications
+  const payloadData = event.notification.data?.FCM_MSG?.data || event.notification.data || {};
+  
+  // Construct the deep link URL if it's a chat notification
+  const type = payloadData.type;
+  const relatedId = payloadData.relatedId;
+  
+  let path = payloadData.url || '/';
+  if (type === 'chat' && relatedId) {
+    path = `/?chat=${relatedId}`;
+  }
+
+  const urlToOpen = new URL(path, self.location.origin).href;
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      // Check if there is already a window/tab open with the target URL
+      // Check if there is already a window/tab open with the same origin
       for (let i = 0; i < windowClients.length; i++) {
         const client = windowClients[i];
-        if (client.url === urlToOpen && 'focus' in client) {
-          return client.focus();
+        if (client.url.startsWith(self.location.origin) && 'focus' in client) {
+          client.focus();
+          // Send the payload to the open app so it can navigate internally
+          return client.postMessage({
+            type: 'NOTIFICATION_CLICK',
+            data: payloadData
+          });
         }
       }
-      // If not, open a new window/tab
+      // If no window is open, open a new one with the deep link query parameter
       if (clients.openWindow) {
         return clients.openWindow(urlToOpen);
       }

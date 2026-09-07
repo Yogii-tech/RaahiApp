@@ -4,9 +4,9 @@ import { Platform } from 'react-native';
 const PROD_URL = 'https://raahi-api-137804375265.asia-south2.run.app';
 
 // Only used during local development on native (Android/iOS emulator or physical device)
-// Set this to your local machine's LAN IP when running the backend locally
-const LOCAL_DEV_URL = 'http://localhost:8080';
+const LOCAL_DEV_URL = Platform.OS === 'web' ? '' : 'http://192.168.1.9:8080';
 
-export const API_BASE = Platform.OS === 'web'
-  ? (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? LOCAL_DEV_URL : PROD_URL)
-  : (typeof __DEV__ !== 'undefined' && __DEV__ ? LOCAL_DEV_URL : PROD_URL);
+const isLocalWeb = Platform.OS === 'web' && typeof window !== 'undefined' && 
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.startsWith('192.168.') || window.location.hostname.endsWith('.loca.lt'));
+
+export const API_BASE = isLocalWeb ? LOCAL_DEV_URL : (typeof __DEV__ !== 'undefined' && __DEV__ ? LOCAL_DEV_URL : PROD_URL);

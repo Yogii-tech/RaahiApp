@@ -383,7 +383,13 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
                                         backgroundColor: colors.cardColor,
                                         borderLeftColor: accent,
                                     }]}
-                                    onPress={() => toggleExpand(`notif_${notif.id}`)}
+                                    onPress={() => {
+                                        if (notif.type === 'chat' && notif.relatedId) {
+                                            onOpenChat({ id: notif.relatedId });
+                                        } else {
+                                            toggleExpand(`notif_${notif.id}`);
+                                        }
+                                    }}
                                     activeOpacity={0.85}
                                 >
                                     <View style={styles.cardRow}>

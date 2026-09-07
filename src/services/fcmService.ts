@@ -5,6 +5,7 @@
  */
 
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE } from '../apiConfig';
 import { firebaseWebConfig, VAPID_KEY } from '../config/firebaseWebConfig';
 
@@ -45,10 +46,11 @@ async function getWebMessaging() {
   if (Platform.OS !== 'web') return null;
   if (!webMessaging) {
     try {
-      const { initializeApp } = await import('firebase/app');
+      const { initializeApp, getApps, getApp } = await import('firebase/app');
       const { getMessaging, isSupported } = await import('firebase/messaging');
       
-      const app = initializeApp(firebaseWebConfig);
+      // Guard against "duplicate-app" error if this function is called more than once
+      const app = getApps().length === 0 ? initializeApp(firebaseWebConfig) : getApp();
       const supported = await isSupported();
       
       if (supported) {
@@ -78,11 +80,26 @@ async function uploadToken(fcmToken: string, authToken: string): Promise<void> {
     });
     if (res.ok) {
       console.log('[FCM] Token uploaded to backend successfully');
+      await AsyncStorage.removeItem('pending_fcm_token');
     } else {
       console.warn('[FCM] Backend token upload failed:', res.status);
+      await AsyncStorage.setItem('pending_fcm_token', fcmToken);
     }
   } catch (e) {
-    console.warn('[FCM] Failed to upload token to backend:', e);
+    console.warn('[FCM] Failed to upload token to backend (Network). Caching for retry:', e);
+    await AsyncStorage.setItem('pending_fcm_token', fcmToken);
+  }
+}
+
+async function syncPendingToken(authToken: string): Promise<void> {
+  try {
+    const pendingToken = await AsyncStorage.getItem('pending_fcm_token');
+    if (pendingToken) {
+      console.log('[FCM] Found pending token, attempting sync...');
+      await uploadToken(pendingToken, authToken);
+    }
+  } catch (e) {
+    console.warn('[FCM] Failed to sync pending token', e);
   }
 }
 
@@ -98,6 +115,9 @@ let tokenRefreshUnsubscribe: (() => void) | null = null;
 let foregroundUnsubscribe: (() => void) | null = null;
 
 export async function registerFCM(authToken: string, onNavigate: NavigateToScreen): Promise<void> {
+  // Try to sync any previously failed token uploads
+  await syncPendingToken(authToken);
+
   if (Platform.OS === 'web') {
     await registerWebFCM(authToken, onNavigate);
   } else {
@@ -164,26 +184,57 @@ async function registerWebFCM(authToken: string, onNavigate: NavigateToScreen): 
     }
 
     const { getToken, onMessage } = await import('firebase/messaging');
-    
-    // Get token using VAPID key
-    const token = await getToken(messaging, { vapidKey: VAPID_KEY });
+
+    // Wait for the service worker to be fully active before requesting a token.
+    let swRegistration: ServiceWorkerRegistration | undefined;
+    if ('serviceWorker' in navigator) {
+      // Explicitly register the service worker so `ready` doesn't hang if it's the first visit
+      swRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+      await navigator.serviceWorker.ready;
+    }
+
+    // Get token using VAPID key and explicitly pass the SW registration
+    const token = await getToken(messaging, { 
+      vapidKey: VAPID_KEY,
+      serviceWorkerRegistration: swRegistration 
+    });
     if (token) {
       console.log('[FCM Web] Got browser token');
       await uploadToken(token, authToken);
     } else {
-      console.warn('[FCM Web] No registration token available.');
+      console.warn('[FCM Web] No registration token available. Ensure firebase-messaging-sw.js is served at the root and the page is on HTTP or trusted HTTPS.');
     }
 
     // Foreground message handler
     if (foregroundUnsubscribe) foregroundUnsubscribe();
     foregroundUnsubscribe = onMessage(messaging, (payload: any) => {
       console.log('[FCM Web] Foreground message:', payload);
-      // Optional: show a custom in-app toast/banner here for web users
+      const title = payload?.notification?.title || 'New Notification';
+      const body = payload?.notification?.body || '';
+      // Use the non-blocking Notifications API instead of window.alert()
+      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+        new Notification(title, { body, icon: '/logo192.png' });
+      }
     });
 
     // Note: Web background messages are handled by firebase-messaging-sw.js.
     // Notification clicks on web are handled by the service worker bringing the window to focus,
     // which may not directly trigger `onNavigate` inside the React lifecycle like Native does.
+    if ('serviceWorker' in navigator) {
+      // Force update the service worker to bypass aggressive caching
+      navigator.serviceWorker.getRegistration().then(reg => {
+        if (reg) {
+          reg.update();
+        }
+      });
+
+      navigator.serviceWorker.addEventListener('message', (event) => {
+        if (event.data && event.data.type === 'NOTIFICATION_CLICK') {
+          console.log('[FCM Web] Service worker notification click:', event.data.data);
+          handleNotificationNavigation(event.data.data as FCMNotificationPayload, onNavigate);
+        }
+      });
+    }
 
   } catch (e) {
     console.warn('[FCM Web] Failed to register:', e);
