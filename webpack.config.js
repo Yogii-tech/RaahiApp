@@ -1,5 +1,6 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
 const webpack = require('webpack');
 
 const appDirectory = __dirname;
@@ -97,6 +98,15 @@ module.exports = {
     plugins: [
         new HtmlWebpackPlugin({
             template: path.resolve(appDirectory, 'public/index.html'),
+        }),
+        // Copy static files from public/ to dist/ for production builds.
+        // firebase-messaging-sw.js MUST be at the root for push notifications to work.
+        // logo192.png is the notification icon referenced by the service worker.
+        new CopyWebpackPlugin({
+            patterns: [
+                { from: path.resolve(appDirectory, 'public/firebase-messaging-sw.js'), to: '.' },
+                { from: path.resolve(appDirectory, 'public/logo192.png'), to: '.', noErrorOnMissing: true },
+            ],
         }),
         // Inject __DEV__ so React Native code works on web.
         // Metro bundler defines this automatically; webpack does not.
