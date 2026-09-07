@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
     View, Text, StyleSheet, FlatList, ActivityIndicator,
-    TouchableOpacity, Alert, Animated, Easing
+    TouchableOpacity, Alert, Animated, Easing, Platform
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
@@ -107,25 +107,33 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
     };
 
     const handleClearAll = async () => {
-        Alert.alert(
-            'Clear All Notifications',
-            'This will remove all your document notifications. Booking requests will still be visible for 24 hours.',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Clear All',
-                    style: 'destructive',
-                    onPress: async () => {
-                        setClearing(true);
-                        try {
-                            await apiRequest('/api/notifications/clear', { method: 'DELETE' }, logout);
-                            setSystemNotifs([]);
-                        } catch (_) {}
-                        setClearing(false);
+        const executeClear = async () => {
+            setClearing(true);
+            try {
+                await apiRequest('/api/notifications/clear', { method: 'DELETE' }, logout);
+                setSystemNotifs([]);
+            } catch (_) {}
+            setClearing(false);
+        };
+
+        if (Platform.OS === 'web') {
+            if (typeof window !== 'undefined' && window.confirm('Clear all notifications?')) {
+                await executeClear();
+            }
+        } else {
+            Alert.alert(
+                'Clear All Notifications',
+                'This will remove all your document notifications.',
+                [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                        text: 'Clear All',
+                        style: 'destructive',
+                        onPress: executeClear,
                     },
-                },
-            ]
-        );
+                ]
+            );
+        }
     };
 
     const toggleExpand = (id: string) => {
