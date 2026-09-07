@@ -120,44 +120,7 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
 
     const handleSupportPress = () => setSupportVisible(true);
 
-    const handleTestNotification = async () => {
-        if (Platform.OS === 'web' && 'serviceWorker' in navigator) {
-            try {
-                const reg = await navigator.serviceWorker.ready;
-                await reg.showNotification("🔔 Local Banner Test", {
-                    body: "If you see this popup banner, your browser & Windows notifications are working!",
-                    icon: "/logo192.png",
-                    badge: "/logo192.png",
-                    renotify: true,
-                    tag: "local_test",
-                });
-            } catch (err) {
-                console.warn("Local SW notification failed:", err);
-            }
-        }
-
-        if (token) {
-            try {
-                const { registerFCM } = await import('../services/fcmService');
-                await registerFCM(token, () => {});
-            } catch (_) {}
-        }
-
-        try {
-            const res = await apiRequest('/api/notifications/test-push', { method: 'POST' }, logout);
-            const data = await res.json();
-            if (res.ok) {
-                Alert.alert("Push Notification Sent", data.message || "Test push delivered to your FCM token!");
-            } else {
-                Alert.alert("FCM Token Check", data.error || "Could not send push notification.");
-            }
-        } catch (e) {
-            Alert.alert("Push Test", "Local browser notification tested.");
-        }
-    };
-
     const optionItems = [
-        { icon: 'notifications-outline', title: 'Test Notifications', action: handleTestNotification },
         { icon: 'card-outline', title: t('account.paymentMethods') },
         ...(!isParcelMode ? [{ icon: 'id-card-outline', title: t('account.trustedContacts'), action: () => navigateToSubView('trusted') }] : []),
         { icon: 'globe-outline', title: t('account.language'), action: handleLanguagePress },
