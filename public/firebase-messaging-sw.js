@@ -2,8 +2,8 @@
 
 // Import and configure the Firebase SDK
 // These scripts are made available when the app is served or bundled
-importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/11.7.1/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/11.7.1/firebase-messaging-compat.js');
 
 // IMPORTANT: You must replace this with your actual config from Firebase Console
 const firebaseConfig = {
