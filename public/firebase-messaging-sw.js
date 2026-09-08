@@ -7,7 +7,7 @@ importScripts('https://www.gstatic.com/firebasejs/11.7.1/firebase-messaging-comp
 
 // IMPORTANT: You must replace this with your actual config from Firebase Console
 const firebaseConfig = {
-  apiKey: "AIzaSyAQ_mrNt4HncSj3t-ONgk8OLvisA2ZkTNM",
+  apiKey: "AIzaSyAQ_mrNt4HncSj3t-ONgk8OLviSa2ZkTNM",
   authDomain: "project-4e312d2c-0d4c-4929-860.firebaseapp.com",
   projectId: "project-4e312d2c-0d4c-4929-860",
   storageBucket: "project-4e312d2c-0d4c-4929-860.firebasestorage.app",
@@ -87,16 +87,16 @@ self.addEventListener('push', (event) => {
 // Handle notification click
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  
+
   console.log('[SW] Notification click data:', event.notification.data);
 
   // Firebase Web SDK often nests the payload under FCM_MSG when it auto-displays notifications
   const payloadData = event.notification.data?.FCM_MSG?.data || event.notification.data || {};
-  
+
   // Construct the deep link URL if it's a chat notification
   const type = payloadData.type;
   const relatedId = payloadData.relatedId;
-  
+
   let path = payloadData.url || '/';
   if (type === 'chat' && relatedId) {
     path = `/?chat=${relatedId}`;
