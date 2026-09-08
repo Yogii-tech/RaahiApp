@@ -3,8 +3,9 @@
  * Handles driver location emission and passenger subscription
  */
 import { io, Socket } from 'socket.io-client';
+import { API_BASE } from '../../apiConfig';
 
-const BACKEND_URL = (typeof process !== 'undefined' && process.env && process.env.VITE_BACKEND_URL) ? process.env.VITE_BACKEND_URL : 'http://10.165.74.1:4000';
+const BACKEND_URL = (typeof process !== 'undefined' && process.env && process.env.VITE_BACKEND_URL) ? process.env.VITE_BACKEND_URL : (API_BASE || 'https://raahi-api-137804375265.asia-south2.run.app');
 
 export interface DriverLocation {
   lat: number;
