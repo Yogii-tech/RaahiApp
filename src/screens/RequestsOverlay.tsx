@@ -39,6 +39,33 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
     const [notifLoading, setNotifLoading] = useState(false);
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [clearing, setClearing] = useState(false);
+    const [sendingTestPush, setSendingTestPush] = useState(false);
+
+    const handleTestPush = async () => {
+        setSendingTestPush(true);
+        try {
+            const res = await apiRequest('/api/notifications/test-push', { method: 'POST' }, logout);
+            if (res.ok) {
+                if (Platform.OS === 'web' && typeof window !== 'undefined') {
+                    window.alert('🔔 Test push notification triggered! Check your laptop notification panel.');
+                } else {
+                    Alert.alert('Success', 'Test push notification sent!');
+                }
+            } else {
+                const errData = await res.json();
+                const errMsg = errData.error || 'Failed to trigger test push';
+                if (Platform.OS === 'web' && typeof window !== 'undefined') {
+                    window.alert(errMsg);
+                } else {
+                    Alert.alert('Error', errMsg);
+                }
+            }
+        } catch (e) {
+            console.error('Test push error:', e);
+        } finally {
+            setSendingTestPush(false);
+        }
+    };
 
     const isDriver = user?.role === 'driver';
 
@@ -353,6 +380,16 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
                     <Text style={[styles.headerSub, { color: colors.subtextColor }]}>Last 24 hours · Tap to expand</Text>
                 </View>
                 <View style={styles.headerRight}>
+                    <TouchableOpacity
+                        style={[styles.clearBtn, { borderColor: colors.primary, marginRight: 8 }]}
+                        onPress={handleTestPush}
+                        disabled={sendingTestPush}
+                    >
+                        {sendingTestPush
+                            ? <ActivityIndicator size="small" color={colors.primary} />
+                            : <Text style={{ color: colors.primary, fontSize: 12, fontWeight: '700' }}>🔔 Test Push</Text>
+                        }
+                    </TouchableOpacity>
                     {hasClearableNotifs && (
                         <TouchableOpacity
                             style={[styles.clearBtn, { borderColor: colors.borderColor }]}

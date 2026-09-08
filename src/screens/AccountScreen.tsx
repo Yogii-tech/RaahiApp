@@ -187,7 +187,7 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
                                 const badgeBg = isVerified ? 'rgba(0,191,165,0.12)' : isRejected ? 'rgba(244,67,54,0.12)' : 'rgba(245,158,11,0.12)';
                                 const label = isVerified ? '✅  Verified' : isRejected ? '❌  Rejected' : '🕐  Under Review';
                                 return (
-                                    <View style={{ backgroundColor: badgeBg, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: badgeColor }}>
+                                    <View style={{ alignSelf: 'flex-start', backgroundColor: badgeBg, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: badgeColor }}>
                                         <Text style={{ color: badgeColor, fontSize: 11, fontWeight: '700', letterSpacing: 0.3 }}>
                                             {label}
                                         </Text>
