@@ -21,4 +21,4 @@ export const firebaseWebConfig = {
  * IMPORTANT: Replace this with your actual VAPID key from the Firebase Console
  * (Project Settings -> Cloud Messaging -> Web configuration -> Web Push certificates).
  */
-export const VAPID_KEY = "BKc8FE2AnvFLXMYpy9onB0kBtz-XB1dmmWZg8p5QT7eVaanFLcQ1PcIGexU_X7jsmFhktIwwRaz-ZpFqnjE9FDU";
+export const VAPID_KEY = "BKc8FE2AnvFLXMYpy9onB0kBtz-XB1dmmWZG8p5QT7eVaanFlcQ1PcIGexU_X7jsmFhktIwwRaz-ZpFqnjE9FDU";
