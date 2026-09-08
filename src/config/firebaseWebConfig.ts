@@ -7,7 +7,7 @@
  * from the Firebase Console (Project Settings -> General -> Your Apps (Web App)).
  */
 export const firebaseWebConfig = {
-  apiKey: "AIzaSyAQ_mrNt4HncSj3t-ONgk8OLviSa2ZkTNM",
+  apiKey: "AIzaSyAQ_mrNt4HncSj3t-ONgk8OLvisA2ZkTNM",
   authDomain: "project-4e312d2c-0d4c-4929-860.firebaseapp.com",
   projectId: "project-4e312d2c-0d4c-4929-860",
   storageBucket: "project-4e312d2c-0d4c-4929-860.firebasestorage.app",

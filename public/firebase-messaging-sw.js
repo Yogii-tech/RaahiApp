@@ -7,7 +7,7 @@ importScripts('https://www.gstatic.com/firebasejs/11.7.1/firebase-messaging-comp
 
 // IMPORTANT: You must replace this with your actual config from Firebase Console
 const firebaseConfig = {
-  apiKey: "AIzaSyAQ_mrNt4HncSj3t-ONgk8OLviSa2ZkTNM",
+  apiKey: "AIzaSyAQ_mrNt4HncSj3t-ONgk8OLvisA2ZkTNM",
   authDomain: "project-4e312d2c-0d4c-4929-860.firebaseapp.com",
   projectId: "project-4e312d2c-0d4c-4929-860",
   storageBucket: "project-4e312d2c-0d4c-4929-860.firebasestorage.app",
