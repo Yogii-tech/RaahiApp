@@ -39,30 +39,12 @@ export function getSocket(): Socket {
   return socket;
 }
 
-// ── Driver: register + start sending GPS ──
+// ── Driver: register ──
 export function startDriverTracking(orderId: string, driverId: string) {
   const s = getSocket();
   s.emit('driver:register', { orderId, driverId });
 
-  const watchId = navigator.geolocation.watchPosition(
-    (pos: any) => {
-      const { latitude, longitude, heading, accuracy, speed } = pos.coords;
-      const payload: DriverLocation & { orderId: string } = {
-        orderId,
-        lat: latitude,
-        lng: longitude,
-        heading: heading ?? 0,
-        accuracy: accuracy ?? 0,
-        speed: speed ?? 0,
-      };
-      s.emit('driver:location', payload);
-    },
-    (err: any) => console.error('[GPS] Error:', err.message),
-    { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
-  );
-
   return () => {
-    navigator.geolocation.clearWatch(watchId);
     s.emit('trip:status', { orderId, status: 'driver_offline' });
   };
 }

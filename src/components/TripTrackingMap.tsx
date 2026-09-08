@@ -112,12 +112,8 @@ const TripTrackingMap: React.FC<TripTrackingMapProps> = ({ bookingId, pickup, dr
             setDriverLoc({ lat: currentLat, lng: currentLng });
         }, 1000);
 
-        // Get passenger location
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition((pos: any) => {
-                setPassengerLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-            });
-        }
+        // Passenger location set to pickup location directly without requesting browser GPS
+        setPassengerLoc({ lat: pickupCoords[0], lng: pickupCoords[1] });
 
         return () => {
             clearInterval(interval);
