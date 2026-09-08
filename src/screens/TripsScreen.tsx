@@ -91,7 +91,7 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
 
     const fetchData = React.useCallback(async () => {
         try {
-            const endpoint = isDriver ? '/api/rides/recent?role=driver' : '/api/rides/bookings';
+            const endpoint = isDriver ? '/api/rides/recent?role=driver&limit=100' : '/api/rides/bookings';
             const response = await apiRequest(endpoint, {}, logout);
             if (response.ok) {
                 let data = await response.json() || [];

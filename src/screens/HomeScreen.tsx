@@ -161,12 +161,12 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
             const response = await apiRequest(`/api/rides/recent?role=${role}`, {}, logout);
             if (response.ok) {
                 const data = await response.json();
-                setRecentRides(data);
+                setRecentRides(Array.isArray(data) ? data : []);
             } else {
-                setError(true);
+                setRecentRides([]);
             }
         } catch {
-            setError(true);
+            setRecentRides([]);
         } finally {
             setLoading(false);
         }
