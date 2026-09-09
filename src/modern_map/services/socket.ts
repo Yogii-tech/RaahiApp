@@ -1,11 +1,6 @@
 /**
- * Socket.io singleton client
- * Handles driver location emission and passenger subscription
+ * Socket service — Disabled (Real-time live GPS tracking disabled by design)
  */
-import { io, Socket } from 'socket.io-client';
-import { API_BASE } from '../../apiConfig';
-
-const BACKEND_URL = (typeof process !== 'undefined' && process.env && process.env.VITE_BACKEND_URL) ? process.env.VITE_BACKEND_URL : (API_BASE || 'https://raahi-api-137804375265.asia-south2.run.app');
 
 export interface DriverLocation {
   lat: number;
@@ -16,52 +11,21 @@ export interface DriverLocation {
   timestamp?: number;
 }
 
-let socket: Socket | null = null;
-
-export function getSocket(): Socket {
-  if (!socket) {
-    socket = io(BACKEND_URL, {
-      transports: ['websocket', 'polling'],
-      reconnectionAttempts: 10,
-      reconnectionDelay: 2000,
-    });
-
-    socket.on('connect', () => {
-      console.log('[Socket] Connected:', socket!.id);
-    });
-    socket.on('disconnect', (reason) => {
-      console.warn('[Socket] Disconnected:', reason);
-    });
-    socket.on('connect_error', (err) => {
-      console.error('[Socket] Connection error:', err.message);
-    });
-  }
-  return socket;
+export function getSocket(): null {
+  return null;
 }
 
-// ── Driver: register ──
-export function startDriverTracking(orderId: string, driverId: string) {
-  const s = getSocket();
-  s.emit('driver:register', { orderId, driverId });
-
-  return () => {
-    s.emit('trip:status', { orderId, status: 'driver_offline' });
-  };
+// ── Driver: register (Disabled) ──
+export function startDriverTracking(_orderId: string, _driverId: string) {
+  return () => {};
 }
 
-// ── Passenger: subscribe to a driver's live location ──
+// ── Passenger: subscribe (Disabled) ──
 export function trackOrder(
-  orderId: string,
-  onMove: (loc: DriverLocation) => void,
-  onStatus?: (status: string) => void
+  _orderId: string,
+  _onMove: (loc: DriverLocation) => void,
+  _onStatus?: (status: string) => void
 ) {
-  const s = getSocket();
-  s.emit('passenger:track', { orderId });
-  s.on('driver:moved', onMove);
-  if (onStatus) s.on('trip:status', ({ status }) => onStatus(status));
-
-  return () => {
-    s.off('driver:moved', onMove);
-    if (onStatus) s.off('trip:status');
-  };
+  return () => {};
 }
+
