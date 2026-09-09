@@ -418,29 +418,24 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
 
                                         {/* Row 2: Booking Details */}
                                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                            <View style={{ flex: 1.2 }}>
+                                            <View style={{ flex: 1 }}>
                                                 <Text style={{ color: ticketLabel, fontSize: 9, fontWeight: 'bold' }}>BOOKED ON</Text>
                                                 <Text style={{ color: ticketText, fontSize: 11, marginTop: 2 }}>{new Date(item.createdAt).toLocaleDateString()} at {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
                                             </View>
-                                            <View style={{ flex: 0.8, alignItems: 'center' }}>
-                                                <Text style={{ color: ticketLabel, fontSize: 9, fontWeight: 'bold' }}>REF CODE</Text>
-                                                <Text style={{ color: '#4CAF50', fontSize: 13, marginTop: 2, fontWeight: 'bold', letterSpacing: 0.5 }}>RA-{item.id.slice(-4).toUpperCase()}</Text>
-                                            </View>
-                                            <View style={{ flex: 1.2, alignItems: 'flex-end' }}>
+                                            <View style={{ flex: 1, alignItems: 'flex-end' }}>
                                                 <Text style={{ color: ticketLabel, fontSize: 9, fontWeight: 'bold', textAlign: 'right' }}>JOURNEY INFO</Text>
                                                 <Text style={{ color: ticketText, fontSize: 11, marginTop: 2, textAlign: 'right' }}>{item.ride?.date} at {item.ride?.departureTime}</Text>
                                             </View>
                                         </View>
 
                                         {/* Row 3: Places and Arrow */}
-                                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 18 }}>
+                                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 18 }}>
                                             <View style={{ flex: 1.2 }}>
                                                 <Text style={{ color: ticketLabel, fontSize: 9, fontWeight: 'bold' }}>FROM</Text>
                                                 <Text style={{ color: ticketText, fontSize: 13, marginTop: 2, fontWeight: '500' }} numberOfLines={1}>{item.ride?.pickup}</Text>
                                             </View>
-                                            <View style={{ flex: 0.8, alignItems: 'center', justifyContent: 'center' }}>
-                                                <DistanceDisplay pickup={item.ride?.pickup} dropoff={item.ride?.dropoff} color={ticketLabel} />
-                                                <Text style={{ color: '#4CAF50', fontSize: 14 }}>➔</Text>
+                                            <View style={{ flex: 0.6, alignItems: 'center', justifyContent: 'center' }}>
+                                                <Text style={{ color: '#4CAF50', fontSize: 16 }}>➔</Text>
                                             </View>
                                             <View style={{ flex: 1.2, alignItems: 'flex-end' }}>
                                                 <Text style={{ color: ticketLabel, fontSize: 9, fontWeight: 'bold' }}>TO</Text>
