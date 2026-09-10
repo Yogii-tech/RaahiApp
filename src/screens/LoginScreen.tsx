@@ -54,6 +54,41 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
     const [tempRefreshToken, setTempRefreshToken] = useState<string | null>(null);
     const [tempUser, setTempUser] = useState<any | null>(null);
 
+    const [confirmationResult, setConfirmationResult] = useState<any>(null);
+    const recaptchaVerifierRef = React.useRef<any>(null);
+
+    const setupRecaptcha = async () => {
+        if (Platform.OS === 'web' && typeof document !== 'undefined') {
+            let container = document.getElementById('recaptcha-container');
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'recaptcha-container';
+                document.body.appendChild(container);
+            }
+            if (recaptchaVerifierRef.current) {
+                try { recaptchaVerifierRef.current.clear(); } catch {}
+                recaptchaVerifierRef.current = null;
+            }
+            try {
+                const { initializeApp, getApps, getApp } = await import('firebase/app');
+                const { getAuth, RecaptchaVerifier } = await import('firebase/auth');
+                const { firebaseWebConfig } = await import('../config/firebaseWebConfig');
+                const app = getApps().length === 0 ? initializeApp(firebaseWebConfig) : getApp();
+                const auth = getAuth(app);
+                
+                const verifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+                    size: 'invisible',
+                    callback: () => {
+                        console.log('[Firebase Recaptcha] Verified silently');
+                    }
+                });
+                recaptchaVerifierRef.current = verifier;
+            } catch (err) {
+                console.warn('[Firebase Recaptcha] Setup warning:', err);
+            }
+        }
+    };
+
     const navigateToStep = (newStep: typeof step) => {
         if (newStep !== 'phone') {
             pushSubViewHistory(`login_${newStep}`);
@@ -87,7 +122,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
     });
 
     useEffect(() => {
-        if (Platform.OS === 'web') {
+        if (Platform.OS === 'web' && typeof document !== 'undefined') {
+            const badges = document.querySelectorAll('.grecaptcha-badge');
+            badges.forEach(el => el.remove());
             const w = globalThis as any;
             if (w.window && w.window.location) {
                 const params = new URLSearchParams(w.window.location.search);
@@ -108,31 +145,45 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
 
         setLoading(true);
         try {
-            const response = await fetch(`${API_BASE}/api/auth/otp/send`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phone_number: phoneNumber.trim() }),
-            });
+            if (Platform.OS === 'web' && typeof document !== 'undefined') {
+                await setupRecaptcha();
+                const { initializeApp, getApps, getApp } = await import('firebase/app');
+                const { getAuth, signInWithPhoneNumber } = await import('firebase/auth');
+                const { firebaseWebConfig } = await import('../config/firebaseWebConfig');
+                const app = getApps().length === 0 ? initializeApp(firebaseWebConfig) : getApp();
+                const auth = getAuth(app);
+                
+                const fullPhone = `+91${phoneNumber.trim()}`;
+                console.log('[Firebase OTP] Requesting Firebase SMS OTP for:', fullPhone);
+                if (!recaptchaVerifierRef.current) {
+                    throw new Error('RecaptchaVerifier not initialized');
+                }
 
-            const data = await response.json();
-
-            if (!response.ok) {
-                Alert.alert(t('common.error'), data.error || t('common.error'));
-                return;
-            }
-
-            navigateToStep(isAdmin ? 'admin_otp' : 'otp');
-            if (data.otp) {
-                setOtp(data.otp);
+                const confirmation = await signInWithPhoneNumber(auth, fullPhone, recaptchaVerifierRef.current);
+                setConfirmationResult(confirmation);
+                console.log('[Firebase OTP] Confirmation object received successfully!');
+                
+                navigateToStep(isAdmin ? 'admin_otp' : 'otp');
                 Alert.alert(
-                    isAdmin ? 'Admin OTP (Dev Mode)' : 'OTP (Dev Mode)',
-                    `Your OTP is: ${data.otp}. It has been autofilled for you.`
+                    t('login.otpSent'),
+                    `Firebase OTP request successful for +91 ${phoneNumber.trim()}.\nPlease enter the 6-digit code.`
                 );
             } else {
-                Alert.alert(t('login.otpSent'), t('login.otpSentMessage'));
+                Alert.alert('Error', 'Firebase Web Auth is supported on Web browsers.');
             }
-        } catch {
-            Alert.alert(t('common.error'), t('login.connectionError'));
+        } catch (err: any) {
+            console.error('[Firebase OTP Send Error]', err);
+            const errCode = err?.code || '';
+            const errMsg = err?.message || 'Firebase SMS request failed';
+            
+            if (errCode === 'auth/captcha-check-failed' || errCode === 'auth/invalid-app-credential' || errCode === 'auth/quota-exceeded' || errCode === 'auth/too-many-requests') {
+                Alert.alert(
+                    'Firebase SMS Blocked on Localhost',
+                    `Firebase error (${errCode}): ${errMsg}\n\nTo test on localhost:\n1. Open Firebase Console -> Authentication -> Sign-in method -> Phone.\n2. Add +91 ${phoneNumber.trim()} under "Phone numbers for testing" with code 654321.\n3. Retry logging in with code 654321.`
+                );
+            } else {
+                Alert.alert('Firebase SMS Error', `${errMsg} (${errCode})`);
+            }
         } finally {
             setLoading(false);
         }
@@ -140,20 +191,30 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
 
     const handleAdminVerifyOtp = async () => {
         if (!otp.trim()) { Alert.alert('Error', 'Enter OTP'); return; }
+        if (!confirmationResult) {
+            Alert.alert('Error', 'No active Firebase OTP session found. Request a new OTP.');
+            return;
+        }
         setLoading(true);
         try {
-            const response = await fetch(`${API_BASE}/api/auth/otp/verify`, {
+            const userCredential = await confirmationResult.confirm(otp.trim());
+            const idToken = await userCredential.user.getIdToken();
+
+            const response = await fetch(`${API_BASE}/api/auth/firebase-verify`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phone_number: phoneNumber.trim(), otp: otp.trim() }),
+                body: JSON.stringify({
+                    id_token: idToken,
+                    phone_number: phoneNumber.trim()
+                }),
             });
             const data = await response.json();
             if (!response.ok) { Alert.alert('Error', data.error || 'Invalid OTP'); return; }
             setAdminTempToken(data.token);
             setAdminTempUser(data.user);
             navigateToStep('admin_secret');
-        } catch {
-            Alert.alert('Error', 'Connection error');
+        } catch (fbErr: any) {
+            Alert.alert('Error', fbErr?.message || 'Invalid Firebase OTP code');
         } finally { setLoading(false); }
     };
 
@@ -171,8 +232,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 Alert.alert('Access Denied', promoteData.error || 'Invalid secret key');
                 return;
             }
-            // Just proceed with auth using the updated role
-            // Set admin user with updated role
             await setAuth(adminTempToken, null, { ...adminTempUser, role: 'admin' });
             onAuthenticated();
         } catch {
@@ -186,18 +245,31 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
             return;
         }
 
+        if (!confirmationResult) {
+            Alert.alert(t('common.error'), 'No active Firebase OTP session found. Please request a new OTP.');
+            return;
+        }
+
         setLoading(true);
         try {
-            const response = await fetch(`${API_BASE}/api/auth/otp/verify`, {
+            console.log('[Firebase Verify] Confirming OTP code:', otp.trim());
+            const userCredential = await confirmationResult.confirm(otp.trim());
+            const idToken = await userCredential.user.getIdToken();
+            console.log('[Firebase Verify] Successfully obtained Firebase ID Token!');
+
+            const response = await fetch(`${API_BASE}/api/auth/firebase-verify`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phone_number: phoneNumber.trim(), otp: otp.trim() }),
+                body: JSON.stringify({
+                    id_token: idToken,
+                    phone_number: phoneNumber.trim()
+                }),
             });
 
             const data = await response.json();
 
             if (!response.ok) {
-                Alert.alert(t('common.error'), data.error || t('login.invalidOtp'));
+                Alert.alert(t('common.error'), data.error || 'Backend token verification failed');
                 return;
             }
 
@@ -209,7 +281,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 if (!data.user.name) {
                     navigateToStep('name');
                 } else {
-                    // Has name but no role
                     setName(data.user.name);
                     navigateToStep('consent');
                 }
@@ -217,8 +288,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 await setAuth(data.token, data.refresh_token, data.user);
                 onAuthenticated();
             }
-        } catch {
-            Alert.alert(t('common.error'), t('login.connectionError'));
+        } catch (err: any) {
+            Alert.alert(t('common.error'), err?.message || t('login.connectionError'));
         } finally {
             setLoading(false);
         }
