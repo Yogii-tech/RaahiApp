@@ -468,7 +468,7 @@ function MainTabs() {
       )}
 
       {activeChat && (
-        <View style={StyleSheet.absoluteFill}>
+        <View style={[StyleSheet.absoluteFill, { zIndex: 1000, elevation: 1000 }]}>
           <ChatScreen
             bookingId={activeChat.id}
             recipientName={isDriver ? activeChat.passengerName || "Passenger" : activeChat.ride?.driverName || "Driver"}

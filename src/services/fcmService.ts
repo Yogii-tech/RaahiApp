@@ -188,8 +188,8 @@ async function registerWebFCM(authToken: string, onNavigate: NavigateToScreen): 
     // Wait for the service worker to be fully active before requesting a token.
     let swRegistration: ServiceWorkerRegistration | undefined;
     if ('serviceWorker' in navigator) {
-      // Explicitly register the service worker so `ready` doesn't hang if it's the first visit
-      swRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+      // Explicitly register the service worker with root scope for PWA standalone mode
+      swRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' });
       await navigator.serviceWorker.ready;
     }
 

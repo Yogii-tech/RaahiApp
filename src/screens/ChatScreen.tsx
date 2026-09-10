@@ -12,6 +12,7 @@ import {
     ActivityIndicator,
     Alert,
     Linking,
+    BackHandler,
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
@@ -91,6 +92,15 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
         return () => clearInterval(interval);
     }, [bookingId]);
 
+    useEffect(() => {
+        const handleHardwareBack = () => {
+            onBack();
+            return true;
+        };
+        const subscription = BackHandler.addEventListener('hardwareBackPress', handleHardwareBack);
+        return () => subscription.remove();
+    }, [onBack]);
+
     const handleSend = async (customText?: string) => {
         const textToSend = customText || inputText;
         if (!textToSend.trim()) return;
@@ -160,7 +170,7 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
                 <TouchableOpacity
                     onPress={onBack}
                     style={styles.backButton}
-                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                    hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
                     activeOpacity={0.7}
                 >
                     <View style={styles.backIconWrap}>
@@ -289,10 +299,11 @@ const styles = StyleSheet.create({
         paddingBottom: 15,
     },
     backButton: {
-        padding: 4,
-        marginRight: 4,
+        padding: 6,
+        marginRight: 8,
         justifyContent: 'center',
         alignItems: 'center',
+        zIndex: 50,
     },
     backIconWrap: {
         width: 36,

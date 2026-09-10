@@ -134,33 +134,13 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
     };
 
     const handleClearAll = async () => {
-        const executeClear = async () => {
-            setClearing(true);
-            try {
-                await apiRequest('/api/notifications/clear', { method: 'DELETE' }, logout);
-                setSystemNotifs([]);
-            } catch (_) {}
-            setClearing(false);
-        };
-
-        if (Platform.OS === 'web') {
-            if (typeof window !== 'undefined' && window.confirm('Clear all notifications?')) {
-                await executeClear();
-            }
-        } else {
-            Alert.alert(
-                'Clear All Notifications',
-                'This will remove all your document notifications.',
-                [
-                    { text: 'Cancel', style: 'cancel' },
-                    {
-                        text: 'Clear All',
-                        style: 'destructive',
-                        onPress: executeClear,
-                    },
-                ]
-            );
-        }
+        setClearing(true);
+        try {
+            await apiRequest('/api/notifications/clear', { method: 'DELETE' }, logout);
+            setSystemNotifs([]);
+            setBookings([]);
+        } catch (_) {}
+        setClearing(false);
     };
 
     const toggleExpand = (id: string) => {
@@ -380,18 +360,16 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
                     <Text style={[styles.headerSub, { color: colors.subtextColor }]}>Last 24 hours · Tap to expand</Text>
                 </View>
                 <View style={styles.headerRight}>
-                    {hasClearableNotifs && (
-                        <TouchableOpacity
-                            style={[styles.clearBtn, { borderColor: colors.borderColor }]}
-                            onPress={handleClearAll}
-                            disabled={clearing}
-                        >
-                            {clearing
-                                ? <ActivityIndicator size="small" color={colors.primary} />
-                                : <Text style={{ color: '#F44336', fontSize: 12, fontWeight: '700' }}>🗑 Clear</Text>
-                            }
-                        </TouchableOpacity>
-                    )}
+                    <TouchableOpacity
+                        style={[styles.clearBtn, { borderColor: '#F44336', backgroundColor: isDark ? 'rgba(244, 67, 54, 0.15)' : '#FFEBEE' }]}
+                        onPress={handleClearAll}
+                        disabled={clearing}
+                    >
+                        {clearing
+                            ? <ActivityIndicator size="small" color="#F44336" />
+                            : <Text style={{ color: '#F44336', fontSize: 12, fontWeight: '700' }}>🗑 Clear All</Text>
+                        }
+                    </TouchableOpacity>
                     <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
                         <Text style={{ color: colors.primary, fontWeight: 'bold' }}>✕ Close</Text>
                     </TouchableOpacity>

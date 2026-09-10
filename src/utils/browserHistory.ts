@@ -35,15 +35,10 @@ if (Platform.OS === 'web' && typeof window !== 'undefined') {
   window.addEventListener('popstate', (_e: PopStateEvent) => {
     // Fire the top-most registered handler (LIFO)
     if (handlerStack.length > 0) {
-      const topHandler = handlerStack[handlerStack.length - 1];
-      topHandler();
-      // Re-push a history entry so browser back still works for the next pop
-      // (The handler is responsible for un-registering itself via useBrowserBack cleanup)
-      window.history.pushState(
-        { subView: 'intercepted', timestamp: Date.now() },
-        '',
-        window.location.href
-      );
+      const topHandler = handlerStack.pop();
+      if (topHandler) {
+        topHandler();
+      }
     }
   });
 }
