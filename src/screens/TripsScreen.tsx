@@ -261,6 +261,17 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
         const cardBgColor = isCompleted ? (isDark ? '#1C2939' : '#F5F5F5') : colors.cardColor;
         const cardOpacity = isCompleted ? 0.7 : 1;
 
+        const rawCompletedAt = item.completedAt || item.ride?.completedAt;
+        let finishedTimeStr = '';
+        if (rawCompletedAt) {
+            try {
+                const compDate = new Date(rawCompletedAt);
+                if (!isNaN(compDate.getTime())) {
+                    finishedTimeStr = compDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+                }
+            } catch (_) {}
+        }
+
         return (
             <View style={[styles.card, { backgroundColor: cardBgColor, borderColor: colors.borderColor, opacity: cardOpacity }]}>
                 <View style={styles.cardHeader}>
@@ -290,8 +301,17 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
                         <View style={{ width: 12 }} />
                         <Icon name="time-outline" size={14} color={colors.textColor} style={styles.dateTimeIcon} />
                         <Text style={[styles.dateTimeText, { color: colors.textColor }]}>
-                            {isDriver ? item.departureTime : item.ride?.departureTime}
+                            Start: {isDriver ? item.departureTime : item.ride?.departureTime}
                         </Text>
+                        {isCompleted && (
+                            <>
+                                <View style={{ width: 12 }} />
+                                <Icon name="checkmark-done-circle-outline" size={14} color="#4CAF50" style={styles.dateTimeIcon} />
+                                <Text style={[styles.dateTimeText, { color: '#4CAF50', fontWeight: 'bold' }]}>
+                                    Finished: {finishedTimeStr || 'Completed'}
+                                </Text>
+                            </>
+                        )}
                     </View>
 
                     {isParcel ? (
@@ -381,13 +401,13 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
                                                 <View>
                                                     <Text style={{ color: colors.subtextColor, fontSize: 10, fontWeight: 'bold' }}>FINISHED ON</Text>
                                                     <Text style={{ color: colors.textColor, fontSize: 12, marginTop: 2 }}>
-                                                        {item.completedAt ? new Date(item.completedAt).toLocaleDateString() : new Date().toLocaleDateString()}
+                                                        {rawCompletedAt ? new Date(rawCompletedAt).toLocaleDateString() : new Date().toLocaleDateString()}
                                                     </Text>
                                                 </View>
                                                 <View style={{ alignItems: 'flex-end' }}>
-                                                    <Text style={{ color: colors.subtextColor, fontSize: 10, fontWeight: 'bold' }}>TIME</Text>
+                                                    <Text style={{ color: colors.subtextColor, fontSize: 10, fontWeight: 'bold' }}>FINISHED TIME</Text>
                                                     <Text style={{ color: colors.textColor, fontSize: 12, marginTop: 2 }}>
-                                                        {item.completedAt ? new Date(item.completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                                                        {finishedTimeStr || (rawCompletedAt ? new Date(rawCompletedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—')}
                                                     </Text>
                                                 </View>
                                             </View>

@@ -380,16 +380,6 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
                     <Text style={[styles.headerSub, { color: colors.subtextColor }]}>Last 24 hours · Tap to expand</Text>
                 </View>
                 <View style={styles.headerRight}>
-                    <TouchableOpacity
-                        style={[styles.clearBtn, { borderColor: colors.primary, marginRight: 8 }]}
-                        onPress={handleTestPush}
-                        disabled={sendingTestPush}
-                    >
-                        {sendingTestPush
-                            ? <ActivityIndicator size="small" color={colors.primary} />
-                            : <Text style={{ color: colors.primary, fontSize: 12, fontWeight: '700' }}>🔔 Test Push</Text>
-                        }
-                    </TouchableOpacity>
                     {hasClearableNotifs && (
                         <TouchableOpacity
                             style={[styles.clearBtn, { borderColor: colors.borderColor }]}
