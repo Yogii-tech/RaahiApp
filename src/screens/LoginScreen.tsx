@@ -59,16 +59,18 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
 
     const setupRecaptcha = async () => {
         if (Platform.OS === 'web' && typeof document !== 'undefined') {
-            let container = document.getElementById('recaptcha-container');
-            if (!container) {
-                container = document.createElement('div');
-                container.id = 'recaptcha-container';
-                document.body.appendChild(container);
-            }
             if (recaptchaVerifierRef.current) {
                 try { recaptchaVerifierRef.current.clear(); } catch {}
                 recaptchaVerifierRef.current = null;
             }
+            const existing = document.getElementById('recaptcha-container-box');
+            if (existing) {
+                existing.remove();
+            }
+            const container = document.createElement('div');
+            container.id = 'recaptcha-container-box';
+            document.body.appendChild(container);
+
             try {
                 const { initializeApp, getApps, getApp } = await import('firebase/app');
                 const { getAuth, RecaptchaVerifier } = await import('firebase/auth');
@@ -76,7 +78,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 const app = getApps().length === 0 ? initializeApp(firebaseWebConfig) : getApp();
                 const auth = getAuth(app);
                 
-                const verifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+                const verifier = new RecaptchaVerifier(auth, 'recaptcha-container-box', {
                     size: 'invisible',
                     callback: () => {
                         console.log('[Firebase Recaptcha] Verified silently');
@@ -182,14 +184,20 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
             console.error('[Firebase OTP Send Error]', err);
             const errCode = err?.code || '';
             const errMsg = err?.message || 'Firebase SMS request failed';
+            const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'goraahi.in';
             
-            if (errCode === 'auth/captcha-check-failed' || errCode === 'auth/invalid-app-credential' || errCode === 'auth/quota-exceeded' || errCode === 'auth/too-many-requests') {
+            if (errCode === 'auth/unauthorized-domain' || errMsg.includes('auth/captcha-check-failed') || errMsg.includes('Hostname match not found')) {
                 Alert.alert(
-                    'Firebase SMS Blocked on Localhost',
-                    `Firebase error (${errCode}): ${errMsg}\n\nTo test on localhost:\n1. Open Firebase Console -> Authentication -> Sign-in method -> Phone.\n2. Add +91 ${phoneNumber.trim()} under "Phone numbers for testing" with code 654321.\n3. Retry logging in with code 654321.`
+                    'Domain Not Authorized in Firebase Console',
+                    `Firebase error: Hostname match not found for '${currentHost}'.\n\nHow to Fix in 30 Seconds:\n1. Open Firebase Console (project-4e312d2c-0d4c-4929-860).\n2. Go to Authentication -> Settings -> Authorized domains.\n3. Click 'Add domain', type '${currentHost}', and click Save.\n4. Also add 'www.${currentHost.replace('www.', '')}'.`
+                );
+            } else if (errCode === 'auth/captcha-check-failed' || errCode === 'auth/invalid-app-credential' || errCode === 'auth/quota-exceeded' || errCode === 'auth/too-many-requests') {
+                Alert.alert(
+                    'Firebase SMS Request Error',
+                    `Firebase error (${errCode}): ${errMsg}\n\nPlease check Firebase Console -> Authentication -> Sign-in method -> Phone to verify SMS settings and quotas.`
                 );
             } else {
-                Alert.alert('Firebase SMS Error', `${errMsg} (${errCode})`);
+                Alert.alert('Firebase SMS Error', `${errMsg} (${errCode || 'Unknown'})`);
             }
         } finally {
             setLoading(false);
