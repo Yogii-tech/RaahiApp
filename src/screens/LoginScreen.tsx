@@ -123,8 +123,15 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
 
     useEffect(() => {
         if (Platform.OS === 'web' && typeof document !== 'undefined') {
+            const styleId = 'hide-grecaptcha-badge-style';
+            if (!document.getElementById(styleId)) {
+                const style = document.createElement('style');
+                style.id = styleId;
+                style.innerHTML = '.grecaptcha-badge { visibility: hidden !important; display: none !important; opacity: 0 !important; pointer-events: none !important; width: 0 !important; height: 0 !important; }';
+                document.head.appendChild(style);
+            }
             const badges = document.querySelectorAll('.grecaptcha-badge');
-            badges.forEach(el => el.remove());
+            badges.forEach(el => (el as HTMLElement).style.setProperty('display', 'none', 'important'));
             const w = globalThis as any;
             if (w.window && w.window.location) {
                 const params = new URLSearchParams(w.window.location.search);
