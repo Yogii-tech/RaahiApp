@@ -59,17 +59,18 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
 
     const setupRecaptcha = async () => {
         if (Platform.OS === 'web' && typeof document !== 'undefined') {
+            let container = document.getElementById('recaptcha-container-box');
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'recaptcha-container-box';
+                document.body.appendChild(container);
+            }
+
             if (recaptchaVerifierRef.current) {
                 try { recaptchaVerifierRef.current.clear(); } catch {}
                 recaptchaVerifierRef.current = null;
             }
-            const existing = document.getElementById('recaptcha-container-box');
-            if (existing) {
-                existing.remove();
-            }
-            const container = document.createElement('div');
-            container.id = 'recaptcha-container-box';
-            document.body.appendChild(container);
+            container.innerHTML = '';
 
             try {
                 const { initializeApp, getApps, getApp } = await import('firebase/app');
@@ -129,11 +130,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
             if (!document.getElementById(styleId)) {
                 const style = document.createElement('style');
                 style.id = styleId;
-                style.innerHTML = '.grecaptcha-badge { visibility: hidden !important; display: none !important; opacity: 0 !important; pointer-events: none !important; width: 0 !important; height: 0 !important; }';
+                style.innerHTML = '.grecaptcha-badge { visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }';
                 document.head.appendChild(style);
             }
             const badges = document.querySelectorAll('.grecaptcha-badge');
-            badges.forEach(el => (el as HTMLElement).style.setProperty('display', 'none', 'important'));
+            badges.forEach(el => (el as HTMLElement).style.setProperty('visibility', 'hidden', 'important'));
             const w = globalThis as any;
             if (w.window && w.window.location) {
                 const params = new URLSearchParams(w.window.location.search);
