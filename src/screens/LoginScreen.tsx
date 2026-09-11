@@ -56,21 +56,41 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
 
     const [confirmationResult, setConfirmationResult] = useState<any>(null);
     const recaptchaVerifierRef = React.useRef<any>(null);
+    const [resendTimer, setResendTimer] = useState<number>(119);
+
+    const formatTime = (seconds: number) => {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+    };
+
+    useEffect(() => {
+        let interval: any = null;
+        if ((step === 'otp' || step === 'admin_otp') && resendTimer > 0) {
+            interval = setInterval(() => {
+                setResendTimer(prev => (prev > 0 ? prev - 1 : 0));
+            }, 1000);
+        }
+        return () => {
+            if (interval) clearInterval(interval);
+        };
+    }, [step, resendTimer]);
 
     const setupRecaptcha = async () => {
         if (Platform.OS === 'web' && typeof document !== 'undefined') {
-            let container = document.getElementById('recaptcha-container-box');
-            if (!container) {
-                container = document.createElement('div');
-                container.id = 'recaptcha-container-box';
-                document.body.appendChild(container);
-            }
-
             if (recaptchaVerifierRef.current) {
                 try { recaptchaVerifierRef.current.clear(); } catch {}
                 recaptchaVerifierRef.current = null;
             }
-            container.innerHTML = '';
+
+            // Remove any existing recaptcha container elements from DOM to avoid "already rendered" error
+            const existingContainers = document.querySelectorAll('[id^="recaptcha-container"]');
+            existingContainers.forEach(el => el.remove());
+
+            const containerId = `recaptcha-container-${Date.now()}`;
+            const container = document.createElement('div');
+            container.id = containerId;
+            document.body.appendChild(container);
 
             try {
                 const { initializeApp, getApps, getApp } = await import('firebase/app');
@@ -79,7 +99,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 const app = getApps().length === 0 ? initializeApp(firebaseWebConfig) : getApp();
                 const auth = getAuth(app);
                 
-                const verifier = new RecaptchaVerifier(auth, 'recaptcha-container-box', {
+                const verifier = new RecaptchaVerifier(auth, containerId, {
                     size: 'invisible',
                     callback: () => {
                         console.log('[Firebase Recaptcha] Verified silently');
@@ -173,6 +193,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 setConfirmationResult(confirmation);
                 console.log('[Firebase OTP] Confirmation object received successfully!');
                 
+                setResendTimer(119);
                 navigateToStep(isAdmin ? 'admin_otp' : 'otp');
                 Alert.alert(
                     t('login.otpSent'),
@@ -183,6 +204,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
             }
         } catch (err: any) {
             console.error('[Firebase OTP Send Error]', err);
+            if (recaptchaVerifierRef.current) {
+                try { recaptchaVerifierRef.current.clear(); } catch {}
+                recaptchaVerifierRef.current = null;
+            }
+            if (Platform.OS === 'web' && typeof document !== 'undefined') {
+                const existingContainers = document.querySelectorAll('[id^="recaptcha-container"]');
+                existingContainers.forEach(el => el.remove());
+            }
             const errCode = err?.code || '';
             const errMsg = err?.message || 'Firebase SMS request failed';
             const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'goraahi.in';
@@ -846,9 +875,29 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
 
                         <View style={styles.spacer12} />
 
-                        <TouchableOpacity onPress={() => handleBackStep('phone')}>
-                            <Text style={[styles.switchText, { color: colors.primary }]}>{t('login.changePhone')}</Text>
-                        </TouchableOpacity>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <TouchableOpacity onPress={() => handleBackStep('phone')}>
+                                <Text style={[styles.switchText, { color: colors.primary }]}>{t('login.changePhone')}</Text>
+                            </TouchableOpacity>
+
+                            {resendTimer > 0 ? (
+                                <Text style={{ color: colors.subtextColor, fontSize: 13, fontWeight: '500' }}>
+                                    {t('login.resendIn')}
+                                    <Text style={{ color: colors.primary, fontWeight: '700' }}>{formatTime(resendTimer)}</Text>
+                                </Text>
+                            ) : (
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        setResendTimer(119);
+                                        handleSendOtp(false);
+                                    }}
+                                    disabled={loading}>
+                                    <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 13 }}>
+                                        {t('login.resendOtp')}
+                                    </Text>
+                                </TouchableOpacity>
+                            )}
+                        </View>
 
                         <View style={styles.spacer24} />
 
@@ -1029,15 +1078,35 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                             onChangeText={setOtp}
                             maxLength={6}
                         />
+                        <View style={styles.spacer12} />
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <TouchableOpacity onPress={() => handleBackStep('admin_phone')}>
+                                <Text style={[styles.switchText, { color: colors.subtextColor }]}>← Change number</Text>
+                            </TouchableOpacity>
+
+                            {resendTimer > 0 ? (
+                                <Text style={{ color: colors.subtextColor, fontSize: 13, fontWeight: '500' }}>
+                                    Resend OTP in <Text style={{ color: '#1FAF63', fontWeight: '700' }}>{formatTime(resendTimer)}</Text>
+                                </Text>
+                            ) : (
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        setResendTimer(119);
+                                        handleSendOtp(true);
+                                    }}
+                                    disabled={loading}>
+                                    <Text style={{ color: '#1FAF63', fontWeight: '700', fontSize: 13 }}>
+                                        Resend OTP
+                                    </Text>
+                                </TouchableOpacity>
+                            )}
+                        </View>
                         <View style={styles.spacer24} />
                         <TouchableOpacity
                             style={[styles.button, { backgroundColor: '#1FAF63' }, loading && styles.buttonDisabled]}
                             onPress={handleAdminVerifyOtp}
                             disabled={loading}>
                             {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Verify OTP</Text>}
-                        </TouchableOpacity>
-                        <TouchableOpacity style={{ marginTop: 16 }} onPress={() => handleBackStep('admin_phone')}>
-                            <Text style={[styles.switchText, { color: colors.subtextColor }]}>← Change number</Text>
                         </TouchableOpacity>
                     </>
                 )}
