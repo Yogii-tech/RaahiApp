@@ -873,15 +873,17 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                             maxLength={6}
                         />
 
+                        <View style={styles.spacer16} />
+
+                        <TouchableOpacity onPress={() => handleBackStep('phone')}>
+                            <Text style={[styles.switchText, { color: colors.primary }]}>{t('login.changePhone')}</Text>
+                        </TouchableOpacity>
+
                         <View style={styles.spacer12} />
 
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <TouchableOpacity onPress={() => handleBackStep('phone')}>
-                                <Text style={[styles.switchText, { color: colors.primary }]}>{t('login.changePhone')}</Text>
-                            </TouchableOpacity>
-
+                        <View style={{ alignItems: 'center' }}>
                             {resendTimer > 0 ? (
-                                <Text style={{ color: colors.subtextColor, fontSize: 13, fontWeight: '500' }}>
+                                <Text style={{ color: colors.subtextColor, fontSize: 13, fontWeight: '500', textAlign: 'center' }}>
                                     {t('login.resendIn')}
                                     <Text style={{ color: colors.primary, fontWeight: '700' }}>{formatTime(resendTimer)}</Text>
                                 </Text>
@@ -891,8 +893,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                                         setResendTimer(119);
                                         handleSendOtp(false);
                                     }}
-                                    disabled={loading}>
-                                    <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 13 }}>
+                                    disabled={loading}
+                                    style={{ paddingVertical: 2 }}>
+                                    <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 14, textAlign: 'center' }}>
                                         {t('login.resendOtp')}
                                     </Text>
                                 </TouchableOpacity>
@@ -1078,14 +1081,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                             onChangeText={setOtp}
                             maxLength={6}
                         />
+                        <View style={styles.spacer16} />
+                        <TouchableOpacity onPress={() => handleBackStep('admin_phone')} style={{ alignItems: 'center' }}>
+                            <Text style={[styles.switchText, { color: colors.subtextColor }]}>← Change number</Text>
+                        </TouchableOpacity>
                         <View style={styles.spacer12} />
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <TouchableOpacity onPress={() => handleBackStep('admin_phone')}>
-                                <Text style={[styles.switchText, { color: colors.subtextColor }]}>← Change number</Text>
-                            </TouchableOpacity>
-
+                        <View style={{ alignItems: 'center' }}>
                             {resendTimer > 0 ? (
-                                <Text style={{ color: colors.subtextColor, fontSize: 13, fontWeight: '500' }}>
+                                <Text style={{ color: colors.subtextColor, fontSize: 13, fontWeight: '500', textAlign: 'center' }}>
                                     Resend OTP in <Text style={{ color: '#1FAF63', fontWeight: '700' }}>{formatTime(resendTimer)}</Text>
                                 </Text>
                             ) : (
@@ -1094,8 +1097,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                                         setResendTimer(119);
                                         handleSendOtp(true);
                                     }}
-                                    disabled={loading}>
-                                    <Text style={{ color: '#1FAF63', fontWeight: '700', fontSize: 13 }}>
+                                    disabled={loading}
+                                    style={{ paddingVertical: 2 }}>
+                                    <Text style={{ color: '#1FAF63', fontWeight: '700', fontSize: 14, textAlign: 'center' }}>
                                         Resend OTP
                                     </Text>
                                 </TouchableOpacity>
