@@ -1147,14 +1147,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                     {t('login.disclaimer')}
                 </Text>
 
-                {/* Admin access link — small but readable */}
-                <TouchableOpacity
-                    onPress={() => navigateToStep('admin_phone')}
-                    style={styles.adminAccessButton}>
-                    <Text style={{ fontSize: 11, color: colors.subtextColor, opacity: 0.5, letterSpacing: 1 }}>
-                        admin access
-                    </Text>
-                </TouchableOpacity>
+
 
             </View>
         </KeyboardAvoidingView>
