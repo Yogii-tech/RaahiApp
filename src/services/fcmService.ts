@@ -4,7 +4,7 @@
  * Supports both Native (Android/iOS) and Web.
  */
 
-import { Platform } from 'react-native';
+import { Platform, Vibration, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE } from '../apiConfig';
 import { firebaseWebConfig, VAPID_KEY } from '../config/firebaseWebConfig';
@@ -155,7 +155,15 @@ async function registerNativeFCM(authToken: string, onNavigate: NavigateToScreen
 
   if (foregroundUnsubscribe) foregroundUnsubscribe();
   foregroundUnsubscribe = fcm().onMessage(async (remoteMessage: any) => {
-    console.log('[FCM Native] Foreground message:', remoteMessage?.notification?.title);
+    const title = remoteMessage?.notification?.title || 'GoRaahi';
+    const body  = remoteMessage?.notification?.body  || '';
+    console.log('[FCM Native] Foreground message:', title);
+
+    // Vibrate: 0ms delay → 300ms on → 150ms off → 300ms on
+    Vibration.vibrate([0, 300, 150, 300]);
+
+    // Show an in-app alert so the user sees the notification while using the app
+    Alert.alert(title, body, [{ text: 'OK', style: 'default' }], { cancelable: true });
   });
 
   fcm().onNotificationOpenedApp((remoteMessage: any) => {

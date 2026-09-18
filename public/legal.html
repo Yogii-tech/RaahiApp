@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GoRaahi - Terms & Conditions & Privacy Policy</title>
+  <meta name="description" content="GoRaahi Mountain Mobility LLP - Terms & Conditions and Privacy Policy" />
+  <link rel="icon" href="/logo192.png" />
+  <style>
+    :root {
+      --bg-color: #0F172A;
+      --card-bg: #1E293B;
+      --text-main: #F8FAFC;
+      --text-muted: #94A3B8;
+      --primary: #5B4FFF;
+      --primary-hover: #4838FF;
+      --accent: #00BFA5;
+      --border-color: #334155;
+      --header-bg: rgba(15, 23, 42, 0.9);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      line-height: 1.6;
+      padding-bottom: 60px;
+    }
+
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background-color: var(--header-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-color);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: var(--text-main);
+    }
+
+    .brand img {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+    }
+
+    .brand-name {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--primary);
+    }
+
+    .nav-tabs {
+      display: flex;
+      gap: 8px;
+      background: #181F2A;
+      padding: 4px;
+      border-radius: 24px;
+      border: 1px solid var(--border-color);
+    }
+
+    .tab-btn {
+      padding: 8px 18px;
+      border-radius: 20px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-decoration: none;
+    }
+
+    .tab-btn.active, .tab-btn:hover {
+      background: var(--primary);
+      color: #FFFFFF;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 32px auto;
+      padding: 0 20px;
+    }
+
+    .legal-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 32px;
+      margin-bottom: 40px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+    }
+
+    .doc-header {
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 20px;
+      margin-bottom: 28px;
+    }
+
+    .doc-title {
+      font-size: 1.85rem;
+      font-weight: 800;
+      color: #FFFFFF;
+      margin-bottom: 8px;
+    }
+
+    .doc-meta {
+      font-size: 0.88rem;
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .entity-tag {
+      margin-top: 12px;
+      display: inline-block;
+      background: rgba(91, 79, 255, 0.15);
+      border: 1px solid var(--primary);
+      color: #A5B4FC;
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+    }
+
+    h2 {
+      font-size: 1.35rem;
+      color: #F1F5F9;
+      margin-top: 28px;
+      margin-bottom: 12px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+
+    h3 {
+      font-size: 1.1rem;
+      color: #CBD5E1;
+      margin-top: 20px;
+      margin-bottom: 10px;
+    }
+
+    p {
+      margin-bottom: 14px;
+      color: #E2E8F0;
+      font-size: 0.98rem;
+    }
+
+    ul, ol {
+      margin-bottom: 16px;
+      padding-left: 24px;
+      color: #E2E8F0;
+    }
+
+    li {
+      margin-bottom: 8px;
+    }
+
+    .important-box {
+      background: rgba(245, 158, 11, 0.1);
+      border-left: 4px solid #F59E0B;
+      padding: 16px;
+      border-radius: 0 8px 8px 0;
+      margin: 24px 0;
+      color: #FCD34D;
+      font-size: 0.93rem;
+    }
+
+    footer {
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      margin-top: 40px;
+    }
+
+    footer a {
+      color: var(--primary);
+      text-decoration: none;
+    }
+
+    @media (max-width: 640px) {
+      header {
+        flex-direction: column;
+        gap: 12px;
+      }
+      .legal-card {
+        padding: 20px;
+      }
+      .doc-title {
+        font-size: 1.5rem;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <a href="/" class="brand">
+      <img src="/logo192.png" alt="GoRaahi Logo" />
+      <span class="brand-name">GoRaahi</span>
+    </a>
+    <div class="nav-tabs">
+      <a href="#terms" class="tab-btn active">Terms & Conditions</a>
+      <a href="#privacy" class="tab-btn">Privacy Policy</a>
+    </div>
+  </header>
+
+  <div class="container">
+
+    <!-- TERMS & CONDITIONS SECTION -->
+    <section id="terms" class="legal-card">
+      <div class="doc-header">
+        <h1 class="doc-title">Terms & Conditions</h1>
+        <div class="doc-meta">Last Updated: 16 September 2026</div>
+        <div class="entity-tag">GoRaahi Mountain Mobility LLP</div>
+      </div>
+
+      <p>Welcome to GoRaahi. These Terms and Conditions (“Terms”) govern your access to and use of the GoRaahi web application, mobile applications, and services (collectively, the “Service”), operated by GoRaahi Mountain Mobility LLP (“GoRaahi”, “we”, “us”, or “our”).</p>
+      
+      <p>By registering for, accessing, or using GoRaahi, you agree to be bound by these Terms. If you do not agree to these Terms, please do not use our Service.</p>
+
+      <h2>1. Platform Overview</h2>
+      <p>GoRaahi is a mobility and technology platform designed to help passengers discover, request, and book local transportation services, and connect with independent drivers and fleet operators in mountainous and regional locations.</p>
+      <p>GoRaahi acts solely as a technological intermediary connecting users. GoRaahi does not own, operate, or maintain transportation vehicles, nor does it employ drivers, unless explicitly stated otherwise in writing.</p>
+
+      <h2>2. Eligibility & Account Creation</h2>
+      <ul>
+        <li>You must be at least 18 years old and legally capable of entering into binding contracts under applicable law to create an account or use GoRaahi.</li>
+        <li>You are responsible for providing accurate, current, and complete information during account registration and verification.</li>
+        <li>Your mobile phone number is used for authentication. You are responsible for keeping your device and OTP credentials secure.</li>
+      </ul>
+
+      <h2>3. User Responsibilities & Conduct</h2>
+      <p>When using GoRaahi, you agree that you will not:</p>
+      <ul>
+        <li>Engage in fraudulent, abusive, unlawful, threatening, or discriminatory behavior.</li>
+        <li>Misuse the booking platform or create fake requests.</li>
+        <li>Interfere with or compromise the operation, security, or integrity of the Service.</li>
+        <li>Transport illegal substances, hazardous materials, or dangerous goods.</li>
+      </ul>
+
+      <h2>4. Driver & Operator Obligations</h2>
+      <p>Drivers registering on GoRaahi represent and warrant that:</p>
+      <ul>
+        <li>They possess a valid driving licence, commercial transport permits, vehicle registration, and active vehicle insurance as required by applicable laws.</li>
+        <li>They maintain their vehicles in safe, roadworthy conditions suitable for mountain terrain.</li>
+        <li>They obey all local traffic rules, safety regulations, and government mandates.</li>
+      </ul>
+
+      <h2>5. Fare Estimates & Direct Payments</h2>
+      <ul>
+        <li>Fare estimates shown on the platform are indicative and may vary based on route choice, demand, weather conditions, tolls, permits, or operator charges.</li>
+        <li>Passengers pay the driver directly for transportation bookings. GoRaahi does not process online payments or collect card/UPI credentials for rides at present.</li>
+      </ul>
+
+      <h2>6. Mountain Travel & Safety Acknowledgements</h2>
+      <div class="important-box">
+        <strong>⚠️ Mountain Region Notice:</strong> Travel in mountainous and remote areas involves inherent environmental and logistical risks including sudden weather disruptions, landslides, road closures, mechanical failures, communication blackouts, and delays. Users and drivers agree to prioritize safety and follow official guidance at all times.
+      </div>
+
+      <h2>7. Cancellation & Refunds</h2>
+      <p>Cancellations and refund handling are subject to GoRaahi’s published policies and direct agreement between driver and passenger. Passengers and drivers must provide timely notice of cancellations whenever feasible.</p>
+
+      <h2>8. Limitation of Liability</h2>
+      <p>To the maximum extent permitted by applicable law, GoRaahi Mountain Mobility LLP shall not be liable for indirect, incidental, special, consequential, or punitive damages arising out of or related to your use of the transportation services provided by third-party drivers.</p>
+
+      <h2>9. Contact Information</h2>
+      <p>For inquiries or concerns regarding these Terms & Conditions, please contact us:</p>
+      <p><strong>GoRaahi Mountain Mobility LLP</strong><br />
+      Website: <a href="https://goraahi.in" style="color:var(--primary)">https://goraahi.in</a></p>
+    </section>
+
+    <!-- PRIVACY POLICY SECTION -->
+    <section id="privacy" class="legal-card">
+      <div class="doc-header">
+        <h1 class="doc-title">Privacy Policy</h1>
+        <div class="doc-meta">Last Updated: 16 September 2026</div>
+        <div class="entity-tag">GoRaahi Mountain Mobility LLP</div>
+      </div>
+
+      <p>GoRaahi Mountain Mobility LLP (“GoRaahi”, “we”, “us”, or “our”) operates the GoRaahi web application and related services (collectively, the “Service”).</p>
+      <p>GoRaahi is a mobility and transportation platform designed to help passengers discover, request, and book local transportation services and connect with drivers.</p>
+      <p>This Privacy Policy explains what information we collect, how we use it, how we protect it, and what choices you have regarding your information.</p>
+      <p>By using GoRaahi, you acknowledge the practices described in this Privacy Policy.</p>
+
+      <h2>1. Information We Collect</h2>
+
+      <h3>1.1 Account and Contact Information</h3>
+      <p>When you create or use a GoRaahi account, we may collect:</p>
+      <ul>
+        <li>Mobile phone number</li>
+        <li>Name</li>
+        <li>Email address, if provided</li>
+        <li>Account and login information</li>
+        <li>Information you provide while contacting GoRaahi</li>
+      </ul>
+      <p>Your mobile number may be used for account verification and OTP-based authentication.</p>
+
+      <h3>1.2 Booking Information</h3>
+      <p>When you search for or make a transportation booking, we may collect information such as:</p>
+      <ul>
+        <li>Pickup location</li>
+        <li>Destination</li>
+        <li>Travel date and time</li>
+        <li>Selected route or vehicle</li>
+        <li>Number of passengers</li>
+        <li>Booking details</li>
+        <li>Booking status</li>
+        <li>Information required to communicate with the driver</li>
+      </ul>
+
+      <h3>1.3 Location Information</h3>
+      <p>With your permission, GoRaahi may collect or access your device’s location information.</p>
+      <p>Location information may be used to:</p>
+      <ul>
+        <li>Help identify your pickup location</li>
+        <li>Show relevant transportation services</li>
+        <li>Improve route and booking functionality</li>
+        <li>Help connect passengers with drivers</li>
+        <li>Provide location-related features of the Service</li>
+      </ul>
+      <p>You can control location permissions through your device or browser settings. Some features may not work correctly if location access is disabled.</p>
+
+      <h3>1.4 Driver Information</h3>
+      <p>If you register or apply as a driver, GoRaahi may collect additional information required for driver onboarding and verification, including:</p>
+      <ul>
+        <li>Name</li>
+        <li>Mobile number</li>
+        <li>Address</li>
+        <li>Vehicle information</li>
+        <li>Driving licence information</li>
+        <li>Vehicle registration information</li>
+        <li>Vehicle photographs</li>
+        <li>Identity or verification documents</li>
+        <li>Bank or settlement information where required for GoRaahi’s future services</li>
+        <li>Other information necessary for driver verification and platform operations</li>
+      </ul>
+      <p>Driver information may be reviewed for verification and safety purposes.</p>
+
+      <h3>1.5 Device and Technical Information</h3>
+      <p>When you access GoRaahi, we may automatically receive certain technical information, such as:</p>
+      <ul>
+        <li>IP address</li>
+        <li>Browser type</li>
+        <li>Device type</li>
+        <li>Operating system</li>
+        <li>Approximate location derived from technical information</li>
+        <li>Language and timezone settings</li>
+        <li>Access times</li>
+        <li>Pages or features accessed</li>
+        <li>Error and diagnostic information</li>
+      </ul>
+      <p>This information helps us operate, secure, troubleshoot, and improve the Service.</p>
+
+      <h2>2. How We Use Your Information</h2>
+      <p>We may use information we collect to:</p>
+      <ul>
+        <li>Create and manage your account</li>
+        <li>Verify your identity and phone number</li>
+        <li>Process and manage bookings</li>
+        <li>Connect passengers with drivers</li>
+        <li>Provide transportation-related services</li>
+        <li>Communicate booking information and service updates</li>
+        <li>Provide customer support</li>
+        <li>Verify and onboard drivers</li>
+        <li>Detect and prevent fraud, abuse, or unauthorized activity</li>
+        <li>Maintain the security of the Service</li>
+        <li>Troubleshoot technical problems</li>
+        <li>Improve our website, products, and services</li>
+        <li>Analyze usage and platform performance</li>
+        <li>Comply with applicable legal and regulatory requirements</li>
+      </ul>
+      <p>We will use personal information only for legitimate business, service, security, legal, or operational purposes.</p>
+
+      <h2>3. Payments</h2>
+      <p>GoRaahi currently does not process online payments for transportation bookings through the web application.</p>
+      <p>At present:</p>
+      <ul>
+        <li>Passengers pay the driver directly.</li>
+        <li>GoRaahi does not collect the passenger’s card, UPI, or other online payment credentials for the ride.</li>
+        <li>GoRaahi does not act as the payment processor for these direct driver-passenger payments.</li>
+        <li>Payment arrangements between a passenger and driver are subject to the applicable booking and service terms.</li>
+      </ul>
+      <p>If GoRaahi introduces online payments or other payment-processing services in the future, this Privacy Policy may be updated to explain the collection and processing of payment-related information.</p>
+
+      <h2>4. Sharing of Information</h2>
+      <p>We may share information when reasonably necessary to operate GoRaahi and provide the Service.</p>
+
+      <h3>4.1 With Drivers and Passengers</h3>
+      <p>Certain information may be shared between passengers and drivers when necessary to facilitate a booking.</p>
+      <p>For example, information relevant to completing a booking may be made available to the driver, including the passenger’s name, pickup information, destination, booking details, and contact information where necessary.</p>
+      <p>Similarly, relevant driver and vehicle information may be displayed to passengers.</p>
+
+      <h3>4.2 Service Providers</h3>
+      <p>We may use third-party service providers for services such as:</p>
+      <ul>
+        <li>Cloud hosting</li>
+        <li>Authentication and OTP services</li>
+        <li>Database infrastructure</li>
+        <li>Maps and location services</li>
+        <li>Analytics</li>
+        <li>Communications</li>
+        <li>Security</li>
+        <li>Technical support</li>
+      </ul>
+      <p>These providers may process information on our behalf as necessary to provide their services.</p>
+
+      <h3>4.3 Legal and Safety Requirements</h3>
+      <p>We may disclose information where reasonably necessary to:</p>
+      <ul>
+        <li>Comply with applicable law</li>
+        <li>Respond to lawful requests from authorities</li>
+        <li>Protect the rights, safety, or property of GoRaahi, users, drivers, or others</li>
+        <li>Investigate fraud, abuse, security incidents, or illegal activity</li>
+      </ul>
+
+      <h2>5. Third-Party Services</h2>
+      <p>GoRaahi may use third-party technologies and services to provide functionality such as authentication, maps, hosting, analytics, communications, and other technical services.</p>
+      <p>These third parties may process information according to their own privacy policies and applicable agreements.</p>
+      <p>GoRaahi does not control the privacy practices of third-party services.</p>
+
+      <h2>6. Cookies and Similar Technologies</h2>
+      <p>GoRaahi may use cookies, local storage, session technologies, and similar technologies to:</p>
+      <ul>
+        <li>Keep users signed in</li>
+        <li>Maintain sessions</li>
+        <li>Remember preferences</li>
+        <li>Improve website functionality</li>
+        <li>Understand how users interact with the Service</li>
+        <li>Detect security issues</li>
+      </ul>
+      <p>You may be able to control cookies through your browser settings. Disabling certain cookies or storage technologies may affect some functionality.</p>
+
+      <h2>7. Data Security</h2>
+      <p>We take reasonable technical and organizational measures to protect personal information from unauthorized access, alteration, disclosure, loss, or misuse.</p>
+      <p>However, no internet-based service can guarantee absolute security.</p>
+      <p>You should also protect your account information and avoid sharing OTPs, passwords, or authentication information with other people.</p>
+
+      <h2>8. Data Retention</h2>
+      <p>We retain personal information for as long as reasonably necessary to:</p>
+      <ul>
+        <li>Provide and maintain the Service</li>
+        <li>Maintain business and transaction records</li>
+        <li>Resolve disputes</li>
+        <li>Prevent fraud and abuse</li>
+        <li>Meet legal or regulatory obligations</li>
+        <li>Enforce our agreements</li>
+      </ul>
+      <p>When information is no longer reasonably required, we may delete, anonymize, or securely dispose of it, subject to applicable legal requirements.</p>
+
+      <h2>9. Your Privacy Choices and Rights</h2>
+      <p>Depending on applicable law, you may have rights regarding your personal information, including the ability to:</p>
+      <ul>
+        <li>Request access to certain personal information</li>
+        <li>Request correction of inaccurate information</li>
+        <li>Request deletion of your account or personal information, subject to legal and operational requirements</li>
+        <li>Withdraw certain permissions, such as location access</li>
+        <li>Ask questions about how your information is processed</li>
+        <li>Raise a privacy-related complaint</li>
+      </ul>
+      <p>To make a privacy request, contact us using the information provided below.</p>
+
+      <h2>10. Account and Data Deletion</h2>
+      <p>If you no longer want to use GoRaahi, you may request deletion of your account and associated personal information by contacting us.</p>
+      <p>Some information may need to be retained where required by law, necessary to resolve disputes, prevent fraud, maintain security, or comply with legitimate business obligations.</p>
+
+      <h2>11. Children’s Privacy</h2>
+      <p>GoRaahi is not intended to knowingly collect personal information from children in circumstances where such collection is prohibited by applicable law.</p>
+      <p>If you believe that a child has provided personal information to GoRaahi without appropriate authorization, please contact us so that we can review the matter and take appropriate action.</p>
+
+      <h2>12. Changes to This Privacy Policy</h2>
+      <p>We may update this Privacy Policy from time to time to reflect changes to our services, technology, legal requirements, or business practices.</p>
+      <p>When we make changes, we may update the “Last Updated” date at the top of this policy.</p>
+      <p>Your continued use of GoRaahi after an updated Privacy Policy becomes effective means that you acknowledge the updated policy.</p>
+
+      <h2>13. Contact Us</h2>
+      <p>If you have questions, concerns, requests, or complaints regarding this Privacy Policy or the handling of your personal information, please contact:</p>
+      <p><strong>GoRaahi Mountain Mobility LLP</strong><br />
+      Website: <a href="https://goraahi.in" style="color:var(--primary)">https://goraahi.in</a></p>
+
+      <div class="important-box">
+        <strong>Important:</strong> This Privacy Policy describes GoRaahi’s current practices. If GoRaahi later introduces online payments, advertising, WhatsApp communications, additional analytics, background location tracking, or other data-processing features, this policy should be reviewed and updated accordingly.
+      </div>
+    </section>
+
+    <footer>
+      &copy; 2026 GoRaahi Mountain Mobility LLP. All rights reserved. | <a href="/">Back to Application</a>
+    </footer>
+
+  </div>
+
+  <script>
+    // Tab highlight logic on scroll/click
+    const tabs = document.querySelectorAll('.tab-btn');
+    window.addEventListener('hashchange', () => {
+      const hash = window.location.hash || '#terms';
+      tabs.forEach(tab => {
+        if (tab.getAttribute('href') === hash) {
+          tab.classList.add('active');
+        } else {
+          tab.classList.remove('active');
+        }
+      });
+    });
+  </script>
+</body>
+</html>
