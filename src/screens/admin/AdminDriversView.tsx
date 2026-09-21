@@ -36,6 +36,7 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
     const [previewImage, setPreviewImage] = useState<string | null>(null);
     const [rejectionReason, setRejectionReason] = useState('');
     const [submittingAction, setSubmittingAction] = useState(false);
+    const [deletingDriverId, setDeletingDriverId] = useState<string | null>(null);
     const [activeFilter, setActiveFilter] = useState<'all' | 'pending' | 'verified' | 'rejected'>(initialFilter);
 
     const { fetchWithAuth } = useAuth();
@@ -104,6 +105,50 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
             else Alert.alert('Error', msg);
         } finally {
             setSubmittingAction(false);
+        }
+    };
+
+    const handleDeleteDriver = async (driver: Driver) => {
+        const confirmMsg = `Are you sure you want to permanently delete driver "${driver.name}" (${driver.phone})?\n\nThis will also delete all their rides and bookings. This action CANNOT be undone.`;
+        if (Platform.OS === 'web') {
+            if (!window.confirm(confirmMsg)) return;
+        } else {
+            // For native, we'd use Alert.alert with buttons, but for simplicity:
+            Alert.alert('Confirm Delete', confirmMsg, [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Delete', style: 'destructive', onPress: () => executeDelete(driver) }
+            ]);
+            return;
+        }
+        await executeDelete(driver);
+    };
+
+    const executeDelete = async (driver: Driver) => {
+        setDeletingDriverId(driver.id);
+        try {
+            const res = await fetchWithAuth(`${API_BASE}/api/admin/drivers/${driver.id}`, {
+                method: 'DELETE',
+            });
+            if (res.ok) {
+                const data = await res.json();
+                const msg = data.message || `Driver ${driver.name} deleted successfully`;
+                if (Platform.OS === 'web') alert(msg);
+                else Alert.alert('Deleted', msg);
+                setInspectModalVisible(false);
+                setSelectedDriver(null);
+                loadDrivers();
+            } else {
+                const data = await res.json();
+                const msg = data.error || 'Failed to delete driver';
+                if (Platform.OS === 'web') alert(msg);
+                else Alert.alert('Error', msg);
+            }
+        } catch (err) {
+            const msg = 'Connection error while deleting driver';
+            if (Platform.OS === 'web') alert(msg);
+            else Alert.alert('Error', msg);
+        } finally {
+            setDeletingDriverId(null);
         }
     };
 
@@ -261,14 +306,23 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                                         </View>
 
                                         {/* Actions */}
-                                        <View style={{ flex: 1.5, alignItems: 'center', justifyContent: 'center' }}>
+                                        <View style={{ flex: 1.5, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 }}>
                                             <TouchableOpacity
                                                 style={styles.inspectBtn}
                                                 onPress={() => handleInspect(item)}
                                                 activeOpacity={0.8}
                                             >
                                                 <Text style={{ fontSize: 13, marginRight: 4 }}>👁</Text>
-                                                <Text style={styles.inspectBtnText}>Inspect Docs</Text>
+                                                <Text style={styles.inspectBtnText}>Inspect</Text>
+                                            </TouchableOpacity>
+                                            <TouchableOpacity
+                                                style={[styles.deleteBtn, deletingDriverId === item.id && { opacity: 0.6 }]}
+                                                onPress={() => handleDeleteDriver(item)}
+                                                activeOpacity={0.8}
+                                                disabled={deletingDriverId === item.id}
+                                            >
+                                                <Text style={{ fontSize: 13, marginRight: 4 }}>🗑</Text>
+                                                <Text style={styles.deleteBtnText}>{deletingDriverId === item.id ? '...' : 'Delete'}</Text>
                                             </TouchableOpacity>
                                         </View>
                                     </View>
@@ -375,11 +429,19 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                             {/* Modal Action Buttons */}
                             <View style={styles.modalFooter}>
                                 <TouchableOpacity
+                                    style={[styles.actionBtn, styles.deleteDriverBtn, (submittingAction || deletingDriverId === selectedDriver.id) && { opacity: 0.6 }]}
+                                    onPress={() => handleDeleteDriver(selectedDriver)}
+                                    disabled={submittingAction || deletingDriverId === selectedDriver.id}
+                                >
+                                    <Text style={styles.actionBtnText}>🗑 Delete Driver</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
                                     style={[styles.actionBtn, styles.rejectBtn, submittingAction && { opacity: 0.6 }]}
                                     onPress={() => handleVerifyAction('rejected')}
                                     disabled={submittingAction}
                                 >
-                                    <Text style={styles.actionBtnText}>✕ Reject Onboarding</Text>
+                                    <Text style={styles.actionBtnText}>✕ Reject</Text>
                                 </TouchableOpacity>
 
                                 <TouchableOpacity
@@ -391,7 +453,7 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                                     {submittingAction ? (
                                         <ActivityIndicator color="#fff" size="small" />
                                     ) : (
-                                        <Text style={styles.actionBtnText}>✓ Approve & Verify Driver</Text>
+                                        <Text style={styles.actionBtnText}>✓ Approve</Text>
                                     )}
                                 </TouchableOpacity>
                             </View>
@@ -513,9 +575,15 @@ const styles = StyleSheet.create({
     statusBadgeText: { fontSize: 11, fontWeight: 'bold', letterSpacing: 0.5 },
     inspectBtn: {
         backgroundColor: '#2563EB', flexDirection: 'row', alignItems: 'center',
-        paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8
+        paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8
     },
     inspectBtnText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 12 },
+    deleteBtn: {
+        backgroundColor: '#991B1B', flexDirection: 'row', alignItems: 'center',
+        paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8,
+        borderWidth: 1, borderColor: 'rgba(239,68,68,0.4)'
+    },
+    deleteBtnText: { color: '#FCA5A5', fontWeight: 'bold', fontSize: 12 },
     emptyBox: { padding: 40, alignItems: 'center' },
     emptyText: { color: '#6B7280', fontSize: 14 },
 
@@ -566,6 +634,7 @@ const styles = StyleSheet.create({
         borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)'
     },
     actionBtn: { flex: 1, paddingVertical: 14, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+    deleteDriverBtn: { backgroundColor: '#7F1D1D', borderWidth: 1, borderColor: 'rgba(239,68,68,0.5)' },
     rejectBtn: { backgroundColor: '#EF4444' },
     approveBtn: { backgroundColor: '#22C55E' },
     actionBtnText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 14 },
