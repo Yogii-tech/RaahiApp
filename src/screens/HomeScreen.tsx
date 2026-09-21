@@ -850,11 +850,16 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                         },
                     ]}
                     onPress={() => {
-                        navigateToView('parcel');
-                        if (setParcelMode) setParcelMode(true);
+                        // Temporary Coming Soon alert without removing internal functionality
+                        // navigateToView('parcel');
+                        // if (setParcelMode) setParcelMode(true);
+                        Alert.alert('Coming Soon 🔒', 'Send a Parcel service will be available soon!');
                     }}
                     activeOpacity={0.8}>
-                    <Icon name="cube-outline" size={28} color={colors.accentColor} />
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Icon name="cube-outline" size={28} color={colors.accentColor} />
+                        <Icon name="lock-closed" size={20} color={colors.accentColor} />
+                    </View>
                     <View style={styles.spacer8} />
                     <Text style={[styles.whyTitle, { color: colors.textColor }]}>
                         {t('login.iAmParceller')}
