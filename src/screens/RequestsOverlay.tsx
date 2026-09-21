@@ -169,10 +169,17 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
                 <View style={styles.cardRow}>
                     <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
                     <View style={{ flex: 1 }}>
-                        <Text style={[styles.cardTitle, { color: colors.textColor }]}>
-                            {item.type === 'parcel' ? '📦 Parcel Request' : '🎫 Seat Request'}
-                            {item.passengerName ? ` · ${item.passengerName}` : ''}
-                        </Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
+                            {item.bookingId ? (
+                                <View style={{ backgroundColor: 'rgba(0,191,165,0.15)', borderWidth: 1, borderColor: '#00BFA5', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 1, marginRight: 6 }}>
+                                    <Text style={{ color: '#00BFA5', fontSize: 10, fontWeight: 'bold' }}>{item.bookingId}</Text>
+                                </View>
+                            ) : null}
+                            <Text style={[styles.cardTitle, { color: colors.textColor }]}>
+                                {item.type === 'parcel' ? '📦 Parcel Request' : '🎫 Seat Request'}
+                                {item.passengerName ? ` · ${item.passengerName}` : ''}
+                            </Text>
+                        </View>
                         <Text style={[styles.cardMeta, { color: colors.subtextColor }]}>
                             {item.ride?.pickup || item.pickup} → {item.ride?.dropoff || item.dropoff}
                             {'  ·  '}{timeAgo(item.createdAt)}

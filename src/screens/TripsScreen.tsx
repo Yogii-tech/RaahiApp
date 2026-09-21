@@ -275,11 +275,18 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
         return (
             <View style={[styles.card, { backgroundColor: cardBgColor, borderColor: colors.borderColor, opacity: cardOpacity }]}>
                 <View style={styles.cardHeader}>
-                    <Text style={[styles.requestTitle, { color: colors.textColor }]}>
-                        {isParcel
-                            ? `Parcel to ${item.ride?.dropoff || item.dropoff || 'Recipient'}`
-                            : (isDriver ? `${t('trips.rideTo')} ${item.dropoff}` : `${t('trips.bookingFor')} ${item.ride?.vehicleModel || 'SUV'}`)}
-                    </Text>
+                    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                        {item.bookingId ? (
+                            <View style={{ backgroundColor: 'rgba(0,191,165,0.15)', borderWidth: 1, borderColor: '#00BFA5', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
+                                <Text style={{ color: '#00BFA5', fontSize: 11, fontWeight: 'bold' }}>{item.bookingId}</Text>
+                            </View>
+                        ) : null}
+                        <Text style={[styles.requestTitle, { color: colors.textColor }]}>
+                            {isParcel
+                                ? `Parcel to ${item.ride?.dropoff || item.dropoff || 'Recipient'}`
+                                : (isDriver ? `${t('trips.rideTo')} ${item.dropoff}` : `${t('trips.bookingFor')} ${item.ride?.vehicleModel || 'SUV'}`)}
+                        </Text>
+                    </View>
                     <Text style={[styles.statusTag, { color: isCompleted ? '#4CAF50' : colors.primary, backgroundColor: isCompleted ? 'rgba(76, 175, 80, 0.1)' : 'rgba(91, 79, 255, 0.1)' }]}>
                         {isCompleted ? 'COMPLETED' : t(`requests.${item.status || 'pending'}`).toUpperCase()}
                     </Text>
