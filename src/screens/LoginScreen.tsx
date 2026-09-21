@@ -27,8 +27,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
     const [phoneNumber, setPhoneNumber] = useState('');
     const [otp, setOtp] = useState('');
     const [name, setName] = useState('');
-    const [step, setStep] = useState<'phone' | 'otp' | 'name' | 'consent' | 'role' | 'vehicle' | 'admin_phone' | 'admin_otp' | 'admin_secret'>('phone');
+    const [step, setStep] = useState<'phone' | 'otp' | 'name' | 'consent' | 'role' | 'driver_consent' | 'vehicle' | 'admin_phone' | 'admin_otp' | 'admin_secret'>('phone');
     const [consentChecked, setConsentChecked] = useState(false);
+    const [driverConsentChecked, setDriverConsentChecked] = useState(false);
     const [adminSecretKey, setAdminSecretKey] = useState('');
     const [adminTempToken, setAdminTempToken] = useState<string | null>(null);
     const [adminTempUser, setAdminTempUser] = useState<any | null>(null);
@@ -133,8 +134,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
             setStep('name');
         } else if (step === 'role') {
             setStep('consent');
-        } else if (step === 'vehicle') {
+        } else if (step === 'driver_consent') {
             setStep('role');
+        } else if (step === 'vehicle') {
+            setStep('driver_consent');
         } else if (step === 'admin_phone') {
             setStep('phone');
         } else if (step === 'admin_otp') {
@@ -368,7 +371,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
         if (role === 'passenger' || role === 'parceller') {
             handleCompleteRegistration(role);
         } else {
-            navigateToStep('vehicle');
+            navigateToStep('driver_consent');
         }
     };
 
@@ -603,7 +606,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
 
                     {/* Header */}
                     <View style={[kycStyles.pageHeader, { backgroundColor: colors.primary }]}>
-                        <TouchableOpacity onPress={() => handleBackStep('role')} style={kycStyles.backBtn}>
+                        <TouchableOpacity onPress={() => handleBackStep('driver_consent')} style={kycStyles.backBtn}>
                             <Text style={{ color: '#fff', fontSize: 22, lineHeight: 26 }}>←</Text>
                         </TouchableOpacity>
                         <View style={{ flex: 1, alignItems: 'center' }}>
@@ -822,7 +825,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                     {step === 'name' ? t('login.enterName') :
                         step === 'role' ? t('login.chooseRole') :
                             step === 'consent' ? 'User Consent' :
-                                t('login.moveFreely')}
+                                step === 'driver_consent' ? 'Driver Consent & Terms' :
+                                    t('login.moveFreely')}
                 </Text>
 
                 <View style={styles.spacer16} />
@@ -832,9 +836,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                         ? t('login.howUseRaahi')
                         : step === 'consent'
                             ? 'Please review our terms of use'
-                            : step !== 'name'
-                                ? t('login.localTrusted')
-                                : null}
+                            : step === 'driver_consent'
+                                ? 'GoRaahi Driver Consent & Terms of Onboarding'
+                                : step !== 'name'
+                                    ? t('login.localTrusted')
+                                    : null}
                 </Text>
 
                 <View style={styles.spacer40} />
@@ -1049,6 +1055,98 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
 
                         <TouchableOpacity onPress={() => handleBackStep('name')} style={styles.backButton}>
                             <Text style={[styles.switchText, { color: colors.primary }]}>{t('common.back')}</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
+
+                {step === 'driver_consent' && (
+                    <View style={styles.consentContainer}>
+                        <ScrollView style={[styles.consentBox, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]} showsVerticalScrollIndicator={true}>
+                            <Text style={[styles.consentTitle, { color: colors.textColor, fontSize: 15, fontWeight: '800', marginBottom: 12 }]}>
+                                GORAAHI DRIVER CONSENT & TERMS OF ONBOARDING
+                            </Text>
+                            <Text style={[styles.consentIntro, { color: colors.textColor, fontSize: 13, lineHeight: 19, marginBottom: 16 }]}>
+                                By registering as a driver/vehicle operator with GoRaahi / GORAAHI MOUNTAIN MOBILITY LLP (“GoRaahi”, “we”, “us”, or “our”), I confirm that I have read, understood, and agree to the following Driver Consent and Terms of Onboarding.
+                            </Text>
+
+                            {[
+                                {
+                                    title: "1. Driver Information & Documents",
+                                    body: "I confirm that all information and documents submitted by me during onboarding are true, accurate, valid, and belong to me or the vehicle/operator represented by me.\n\nThis may include, where applicable:\n• Driving Licence\n• Vehicle Registration Certificate (RC)\n• Vehicle Insurance\n• Fitness Certificate\n• Permit\n• Pollution Under Control (PUC) Certificate\n• Vehicle photographs\n• Identity/address proof\n• Bank/payment details, where required\n• Any other documents reasonably required for verification\n\nI understand that GoRaahi may verify the information and documents submitted by me."
+                                },
+                                {
+                                    title: "2. Verification & Approval",
+                                    body: "I understand that submission of documents does not automatically guarantee approval.\n\nGoRaahi may:\n• Verify submitted information and documents.\n• Request additional documents or clarification.\n• Reject or delay onboarding where information is incomplete, inaccurate, expired, or unverifiable.\n• Suspend or deactivate my driver account if material information is found to be false, misleading, fraudulent, or no longer valid."
+                                },
+                                {
+                                    title: "3. Driver Responsibility",
+                                    body: "I agree to maintain all legally required licences, permits, registrations, insurance, fitness certificates, and other vehicle-related documents necessary to operate my vehicle.\n\nI will notify GoRaahi if any submitted document expires, is cancelled, suspended, or becomes invalid.\n\nI am responsible for ensuring that my vehicle is roadworthy, properly maintained, and legally permitted to operate."
+                                },
+                                {
+                                    title: "4. Passenger Safety & Service",
+                                    body: "I agree to provide passengers with safe, lawful, respectful, and professional service.\n\nI will:\n• Follow applicable traffic and transport laws.\n• Not drive under the influence of alcohol or drugs.\n• Not engage in unsafe or reckless driving.\n• Treat passengers respectfully.\n• Follow confirmed booking details.\n• Not knowingly misrepresent fares, routes, vehicle details, or availability.\n• Not misuse passenger information obtained through GoRaahi."
+                                },
+                                {
+                                    title: "5. Booking & Payment",
+                                    body: "I understand that GoRaahi may facilitate the discovery, booking, and coordination of rides between passengers and drivers.\n\nUnless another payment method is specifically introduced and communicated by GoRaahi, the passenger may pay the driver directly according to the applicable booking/fare information.\n\nI agree to follow the applicable fare, booking, cancellation, and platform procedures communicated by GoRaahi."
+                                },
+                                {
+                                    title: "6. Platform Conduct",
+                                    body: "I agree not to:\n• Create duplicate or fraudulent driver accounts.\n• Submit false documents or information.\n• Accept bookings using a vehicle different from the vehicle registered on the platform without authorization.\n• Manipulate bookings, fares, ratings, or platform systems.\n• Misuse passenger or GoRaahi information.\n• Use GoRaahi to facilitate unlawful activities."
+                                },
+                                {
+                                    title: "7. Verification, Suspension & Deactivation",
+                                    body: "GoRaahi may temporarily restrict, suspend, or deactivate my access to the platform where there is a reasonable concern relating to document validity, safety, fraudulent activity, serious complaints, misuse of the platform, or violation of these terms or applicable law.\n\nWhere appropriate, GoRaahi may request clarification or supporting information before taking further action."
+                                },
+                                {
+                                    title: "8. Data & Document Consent",
+                                    body: "I authorize GoRaahi to collect, store, use, and process the information and documents I provide for purposes including:\n• Driver and vehicle onboarding\n• Identity and document verification\n• Booking and operational management\n• Customer support\n• Safety and compliance\n• Communication relating to GoRaahi services\n• Prevention and investigation of fraud or misuse\n• Legal and regulatory requirements\n\nGoRaahi will handle personal information in accordance with its applicable Privacy Policy."
+                                },
+                                {
+                                    title: "9. Accuracy of Declaration",
+                                    body: "I understand that providing false, forged, altered, misleading, or unauthorized documents or information may result in rejection of my application, suspension/deactivation of my account, and/or action as permitted under applicable law."
+                                },
+                                {
+                                    title: "10. Changes to Terms",
+                                    body: "GoRaahi may update these Driver Terms from time to time. Where material changes are made, GoRaahi may communicate the updated terms through the platform or other appropriate communication channels."
+                                },
+                                {
+                                    title: "11. Driver Declaration",
+                                    body: "By checking the acceptance box and submitting my onboarding application, I confirm that:\n• I have read and understood these Driver Consent & Terms of Onboarding.\n• The information and documents submitted by me are accurate to the best of my knowledge.\n• I authorize GoRaahi to verify the submitted information and documents.\n• I agree to comply with these terms and applicable laws.\n• I understand that approval as a GoRaahi driver is subject to successful verification and approval by GoRaahi."
+                                }
+                            ].map((sec, idx) => (
+                                <View key={idx} style={{ marginBottom: 16 }}>
+                                    <Text style={{ fontSize: 13, fontWeight: '700', color: colors.primary, marginBottom: 4 }}>
+                                        {sec.title}
+                                    </Text>
+                                    <Text style={[styles.consentPointText, { color: colors.subtextColor, fontSize: 12, lineHeight: 18 }]}>
+                                        {sec.body}
+                                    </Text>
+                                </View>
+                            ))}
+                        </ScrollView>
+
+                        <TouchableOpacity
+                            style={styles.checkboxContainer}
+                            onPress={() => setDriverConsentChecked(!driverConsentChecked)}
+                            activeOpacity={0.8}>
+                            <View style={[styles.checkbox, { borderColor: colors.primary, backgroundColor: driverConsentChecked ? colors.primary : 'transparent' }]}>
+                                {driverConsentChecked && <Icon name="checkmark" size={14} color="#FFF" />}
+                            </View>
+                            <Text style={[styles.checkboxLabel, { color: colors.textColor, fontSize: 12 }]}>
+                                I have read, understood, and agree to the GoRaahi Driver Consent & Terms of Onboarding and authorize GoRaahi to verify the information and documents submitted by me.
+                            </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={[styles.button, { backgroundColor: colors.primary }, !driverConsentChecked && styles.buttonDisabled]}
+                            onPress={() => navigateToStep('vehicle')}
+                            disabled={!driverConsentChecked}>
+                            <Text style={styles.buttonText}>Agree & Proceed to Vehicle KYC</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity onPress={() => handleBackStep('role')} style={styles.backButton}>
+                            <Text style={[styles.switchText, { color: colors.primary }]}>← Back to Role Selection</Text>
                         </TouchableOpacity>
                     </View>
                 )}

@@ -15,12 +15,12 @@ import Icon from 'react-native-vector-icons/Ionicons';
 
 interface LegalScreenProps {
     onClose?: () => void;
-    initialTab?: 'terms' | 'privacy' | 'combined';
+    initialTab?: 'terms' | 'privacy' | 'driver' | 'combined';
 }
 
 export const LegalScreen: React.FC<LegalScreenProps> = ({ onClose, initialTab = 'combined' }) => {
     const { colors, isDark } = useTheme();
-    const [activeTab, setActiveTab] = useState<'terms' | 'privacy' | 'combined'>(initialTab);
+    const [activeTab, setActiveTab] = useState<'terms' | 'privacy' | 'driver' | 'combined'>(initialTab);
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -34,7 +34,7 @@ export const LegalScreen: React.FC<LegalScreenProps> = ({ onClose, initialTab = 
                     </TouchableOpacity>
                 )}
                 <View style={styles.headerTitleContainer}>
-                    <Text style={[styles.headerTitle, { color: colors.textColor }]}>Terms & Privacy Policy</Text>
+                    <Text style={[styles.headerTitle, { color: colors.textColor }]}>Terms & Legal Policies</Text>
                     <Text style={[styles.headerSubtitle, { color: colors.accentColor }]}>GoRaahi Mountain Mobility LLP</Text>
                 </View>
                 {onClose && <View style={{ width: 40 }} />}
@@ -57,7 +57,16 @@ export const LegalScreen: React.FC<LegalScreenProps> = ({ onClose, initialTab = 
                         activeTab === 'terms' && { backgroundColor: colors.primary }
                     ]}
                     onPress={() => setActiveTab('terms')}>
-                    <Text style={[styles.tabText, { color: activeTab === 'terms' ? '#FFF' : colors.subtextColor }]}>Terms & Conditions</Text>
+                    <Text style={[styles.tabText, { color: activeTab === 'terms' ? '#FFF' : colors.subtextColor }]}>User Terms</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={[
+                        styles.tab,
+                        activeTab === 'driver' && { backgroundColor: colors.primary }
+                    ]}
+                    onPress={() => setActiveTab('driver')}>
+                    <Text style={[styles.tabText, { color: activeTab === 'driver' ? '#FFF' : colors.subtextColor }]}>Driver Terms</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -66,7 +75,7 @@ export const LegalScreen: React.FC<LegalScreenProps> = ({ onClose, initialTab = 
                         activeTab === 'privacy' && { backgroundColor: colors.primary }
                     ]}
                     onPress={() => setActiveTab('privacy')}>
-                    <Text style={[styles.tabText, { color: activeTab === 'privacy' ? '#FFF' : colors.subtextColor }]}>Privacy Policy</Text>
+                    <Text style={[styles.tabText, { color: activeTab === 'privacy' ? '#FFF' : colors.subtextColor }]}>Privacy</Text>
                 </TouchableOpacity>
             </View>
 
@@ -138,6 +147,72 @@ export const LegalScreen: React.FC<LegalScreenProps> = ({ onClose, initialTab = 
                             GoRaahi Mountain Mobility LLP{'\n'}
                             Website: https://goraahi.in
                         </Text>
+                    </View>
+                )}
+
+                {/* DRIVER CONSENT & TERMS OF ONBOARDING SECTION */}
+                {(activeTab === 'driver' || activeTab === 'combined') && (
+                    <View style={[styles.card, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}>
+                        <View style={styles.docHeader}>
+                            <Text style={[styles.docTitle, { color: colors.textColor }]}>Driver Consent & Terms of Onboarding</Text>
+                            <Text style={[styles.docMeta, { color: colors.accentColor }]}>GoRaahi Mountain Mobility LLP · Driver & Operator Agreement</Text>
+                        </View>
+
+                        <Text style={[styles.paragraph, { color: colors.textColor }]}>
+                            By registering as a driver/vehicle operator with GoRaahi / GORAAHI MOUNTAIN MOBILITY LLP (“GoRaahi”, “we”, “us”, or “our”), I confirm that I have read, understood, and agree to the following Driver Consent and Terms of Onboarding.
+                        </Text>
+
+                        {[
+                            {
+                                title: "1. Driver Information & Documents",
+                                text: "I confirm that all information and documents submitted by me during onboarding are true, accurate, valid, and belong to me or the vehicle/operator represented by me.\n\nThis may include, where applicable: Driving Licence, Vehicle Registration Certificate (RC), Vehicle Insurance, Fitness Certificate, Permit, Pollution Under Control (PUC) Certificate, Vehicle photographs, Identity/address proof, Bank/payment details, and any other documents reasonably required for verification."
+                            },
+                            {
+                                title: "2. Verification & Approval",
+                                text: "I understand that submission of documents does not automatically guarantee approval. GoRaahi may verify submitted information, request additional documents, reject incomplete applications, or suspend accounts if material information is found false or misleading."
+                            },
+                            {
+                                title: "3. Driver Responsibility",
+                                text: "I agree to maintain all legally required licences, permits, registrations, insurance, fitness certificates, and vehicle documents. I will notify GoRaahi if any submitted document expires or becomes invalid. I am responsible for ensuring my vehicle is roadworthy and legally permitted to operate."
+                            },
+                            {
+                                title: "4. Passenger Safety & Service",
+                                text: "I agree to provide passengers with safe, lawful, respectful, and professional service. I will follow traffic laws, not drive under the influence, treat passengers respectfully, and adhere to confirmed booking details."
+                            },
+                            {
+                                title: "5. Booking & Payment",
+                                text: "I understand GoRaahi facilitates ride coordination. Unless another payment method is introduced, passengers pay the driver directly according to booking/fare information."
+                            },
+                            {
+                                title: "6. Platform Conduct",
+                                text: "I agree not to create duplicate accounts, submit false documents, use unregistered vehicles, manipulate bookings/ratings, or use GoRaahi for unlawful activities."
+                            },
+                            {
+                                title: "7. Verification, Suspension & Deactivation",
+                                text: "GoRaahi may temporarily restrict, suspend, or deactivate driver access where there is a reasonable concern relating to document validity, safety, fraud, serious complaints, or terms violations."
+                            },
+                            {
+                                title: "8. Data & Document Consent",
+                                text: "I authorize GoRaahi to collect, store, use, and process the information and documents I provide for driver onboarding, verification, booking management, customer support, safety, and compliance."
+                            },
+                            {
+                                title: "9. Accuracy of Declaration",
+                                text: "I understand that providing false, forged, altered, misleading, or unauthorized documents or information may result in rejection, account deactivation, and legal action."
+                            },
+                            {
+                                title: "10. Changes to Terms",
+                                text: "GoRaahi may update these Driver Terms from time to time and communicate updated terms through the platform."
+                            },
+                            {
+                                title: "11. Driver Declaration",
+                                text: "By checking the acceptance box during onboarding, I confirm I have read, understood, and agreed to these terms, authorizing GoRaahi to verify my submitted information."
+                            }
+                        ].map((sec, idx) => (
+                            <View key={idx} style={{ marginBottom: 14 }}>
+                                <Text style={[styles.sectionHeading, { color: colors.primary }]}>{sec.title}</Text>
+                                <Text style={[styles.paragraph, { color: colors.textColor }]}>{sec.text}</Text>
+                            </View>
+                        ))}
                     </View>
                 )}
 
