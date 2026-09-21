@@ -167,6 +167,22 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
         }
     }, [setStep]);
 
+    // Force user into completing profile if authenticated but missing name or role
+    useEffect(() => {
+        if (token && user && (!user.name || !user.role)) {
+            setTempToken(token);
+            setTempUser(user);
+            if (user.name) {
+                setName(user.name);
+            }
+            if (!user.name) {
+                setStep('name');
+            } else {
+                setStep('consent');
+            }
+        }
+    }, [token, user]);
+
     const handleSendOtp = async (isAdmin = false) => {
         if (phoneNumber.trim().length !== 10) {
             Alert.alert(t('common.error'), t('login.invalidPhone'));

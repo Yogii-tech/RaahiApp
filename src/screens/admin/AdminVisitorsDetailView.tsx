@@ -64,6 +64,26 @@ export default function AdminVisitorsDetailView({ isDark, searchQuery = '' }: { 
           u.id?.toLowerCase().includes(searchQuery.toLowerCase())
      );
 
+     const handleCleanupIncomplete = async () => {
+          try {
+               setLoading(true);
+               const res = await fetchWithAuth(`${API_BASE}/api/admin/users/incomplete`, {
+                    method: 'DELETE',
+               });
+               const data = await res.json();
+               if (res.ok) {
+                    alert(`Cleaned up ${data.deletedCount ?? 0} abandoned incomplete user registrations (older than 24h).`);
+                    fetchData();
+               } else {
+                    alert(data.error || 'Failed to cleanup incomplete users.');
+               }
+          } catch {
+               alert('Network error while cleaning up incomplete users.');
+          } finally {
+               setLoading(false);
+          }
+     };
+
      return (
           <ScrollView style={[styles.container, { backgroundColor: T.bg }]} showsVerticalScrollIndicator={false}>
                <View style={styles.header}>
@@ -71,6 +91,9 @@ export default function AdminVisitorsDetailView({ isDark, searchQuery = '' }: { 
                     <View style={styles.headerButtons}>
                          <TouchableOpacity onPress={fetchData} style={[styles.ghostBtn, { borderColor: T.border }]}>
                               <Text style={[styles.ghostBtnText, { color: T.text }]}>↻ Refresh</Text>
+                         </TouchableOpacity>
+                         <TouchableOpacity onPress={handleCleanupIncomplete} style={[styles.ghostBtn, { borderColor: '#E53E3E', backgroundColor: 'rgba(229, 62, 62, 0.08)' }]}>
+                              <Text style={[styles.ghostBtnText, { color: '#E53E3E' }]}>🧹 Clean Incomplete</Text>
                          </TouchableOpacity>
                          <TouchableOpacity onPress={() => downloadCSV(users, 'Users_Report')} style={styles.primaryBtn}>
                               <Text style={styles.primaryBtnText}>Export CSV</Text>
@@ -109,19 +132,27 @@ export default function AdminVisitorsDetailView({ isDark, searchQuery = '' }: { 
                          <Text style={{ color: T.subtext, textAlign: 'center', padding: 40 }}>No users found.</Text>
                     ) : (
                          filteredUsers.map((u, i) => {
-                              const roleColor = ROLE_COLORS[u.role] ?? '#6C757D';
+                              const isIncomplete = !u.name || !u.role;
+                              const displayName = u.name ? u.name : '(Incomplete Profile)';
+                              const displayRole = u.role ? u.role : 'Pending Setup';
+                              const roleColor = u.role ? (ROLE_COLORS[u.role] ?? '#6C757D') : '#E53E3E';
+
                               return (
                                    <View key={i} style={[styles.tableRow, { borderBottomColor: T.border }]}>
                                         <View style={[styles.cell, { flexDirection: 'row', alignItems: 'center' }]}>
                                              <View style={[styles.avatar, { backgroundColor: roleColor + '22' }]}>
                                                   <Text style={{ color: roleColor, fontWeight: 'bold' }}>{(u.name || 'U')[0].toUpperCase()}</Text>
                                              </View>
-                                             <Text style={{ color: T.text, fontWeight: '500', marginLeft: 10 }}>{u.name}</Text>
+                                             <Text style={{ color: isIncomplete ? '#E53E3E' : T.text, fontWeight: '500', marginLeft: 10, fontStyle: isIncomplete ? 'italic' : 'normal' }}>
+                                                  {displayName}
+                                             </Text>
                                         </View>
                                         <Text style={[styles.cell, { color: T.subtext }]}>{u.phone}</Text>
                                         <View style={styles.cell}>
                                              <View style={[styles.roleBadge, { backgroundColor: roleColor + '22' }]}>
-                                                  <Text style={{ color: roleColor, fontSize: 11, fontWeight: 'bold', textTransform: 'capitalize' }}>{u.role}</Text>
+                                                  <Text style={{ color: roleColor, fontSize: 11, fontWeight: 'bold', textTransform: 'capitalize' }}>
+                                                       {displayRole}
+                                                  </Text>
                                              </View>
                                         </View>
                                         <Text style={[styles.cell, { color: T.text, fontWeight: 'bold' }]}>{u.totalRides}</Text>

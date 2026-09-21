@@ -537,7 +537,7 @@ function RootApp() {
     }} />;
   }
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated || (!user?.name || !user?.role)) {
     return (
       <View style={{ flex: 1 }}>
         <StatusBar barStyle="light-content" />
