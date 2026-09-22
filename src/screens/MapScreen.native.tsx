@@ -40,7 +40,7 @@ const MapScreen: React.FC = () => {
         ws.onmessage = (e) => {
             try {
                 const data = JSON.parse(e.data);
-                riderLocation.timing({
+                (riderLocation as any).timing({
                     latitude: data.latitude,
                     longitude: data.longitude,
                     duration: 5000,
@@ -68,7 +68,7 @@ const MapScreen: React.FC = () => {
                         }}
                     >
                         <Marker.Animated
-                            coordinate={riderLocation}
+                            coordinate={riderLocation as any}
                             title="Rider Location"
                             description="Real-time interpolated movement"
                         >
@@ -130,7 +130,7 @@ const MapScreen: React.FC = () => {
                             Alert.alert("Locating...", "Fetching high-accuracy GPS coordinates...");
                             setTimeout(() => {
                                 // Simulate moving to a precise location in Uttarakhand
-                                riderLocation.timing({
+                                (riderLocation as any).timing({
                                     latitude: 30.3165,
                                     longitude: 78.0322,
                                     duration: 2000,
@@ -138,6 +138,7 @@ const MapScreen: React.FC = () => {
                                 }).start();
                             }, 1500);
                         }}
+
                         style={[styles.locationBtn, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}
                         activeOpacity={0.8}>
                         <Icon name="locate" size={24} color={colors.primary} />

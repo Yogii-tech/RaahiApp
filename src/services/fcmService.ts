@@ -28,8 +28,9 @@ async function getNativeMessaging() {
   if (Platform.OS === 'web') return null;
   if (!nativeMessaging) {
     try {
-      const mod = await import('@react-native-firebase/messaging');
-      nativeMessaging = mod.default;
+      const mod: any = await import('@react-native-firebase/messaging');
+      nativeMessaging = mod.default || mod;
+
     } catch (e) {
       console.warn('[FCM Native] @react-native-firebase/messaging not available:', e);
       nativeMessaging = null;
@@ -230,7 +231,8 @@ async function registerWebFCM(authToken: string, onNavigate: NavigateToScreen): 
               tag: payload?.data?.type || 'general',
               renotify: true,
               data: payload?.data || {},
-            });
+            } as any);
+
           }).catch(err => {
             console.warn('[FCM Web] SW showNotification error:', err);
           });

@@ -87,10 +87,11 @@ const ResubmitDocsView: React.FC<ResubmitDocsViewProps> = ({ onClose }) => {
                     { text: 'Cancel', style: 'cancel' },
                     {
                         text: 'Upload',
-                        onPress: (url) => {
+                        onPress: (url?: string) => {
                             const finalUrl = url && url.trim() ? url.trim() : 'https://via.placeholder.com/600x400.png?text=Document+Uploaded';
                             setVehicleDocs(prev => ({ ...prev, [type]: finalUrl }));
                         }
+
                     }
                 ],
                 'plain-text',

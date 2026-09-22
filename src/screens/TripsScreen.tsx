@@ -77,9 +77,11 @@ interface TripsScreenProps {
     isParcelHistory?: boolean;
     isRideHistory?: boolean;
     title?: string;
+    onOpenChat?: (booking: any) => void;
 }
 
-const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory, isRideHistory, title }) => {
+const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory, isRideHistory, title, onOpenChat }) => {
+
     const { colors, isDark } = useTheme();
     const { user, token, logout } = useAuth();
     const { t } = useLanguage();
