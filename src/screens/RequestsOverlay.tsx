@@ -155,9 +155,8 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
         const statusIcon = item.status === 'accepted' ? '✓'
             : item.status === 'rejected' ? '✗' : '⏳';
 
-        const seatList = item.seatLayout && item.seatLayout.length > 0
-            ? item.seatLayout.map((s: number) => `Seat ${s + 1}`).join(', ')
-            : `${item.seatsRequested || 1} seat(s)`;
+        const requestedSeatsCount = item.seatsRequested || (item.seatLayout ? item.seatLayout.length : 1);
+        const seatList = `${requestedSeatsCount} ${requestedSeatsCount === 1 ? 'Seat' : 'Seats'} Requested`;
 
         return (
             <TouchableOpacity
@@ -256,9 +255,8 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
         const statusColor = isAccepted ? '#00C853' : isRejected ? '#F44336' : colors.primary;
         const statusIcon = isAccepted ? '✓' : isRejected ? '✗' : '⏳';
 
-        const seatList = item.seatLayout && item.seatLayout.length > 0
-            ? item.seatLayout.map((s: number) => `Seat ${s + 1}`).join(', ')
-            : `${item.seatsRequested || 1} seat(s)`;
+        const requestedSeatsCount = item.seatsRequested || (item.seatLayout ? item.seatLayout.length : 1);
+        const seatList = `${requestedSeatsCount} ${requestedSeatsCount === 1 ? 'Seat' : 'Seats'}`;
 
         return (
             <TouchableOpacity

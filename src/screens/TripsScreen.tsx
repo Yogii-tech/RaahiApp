@@ -573,7 +573,7 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
                                                     {isParcel ? 'Parcel' : 'Pass.'} RA-{booking.id.slice(-4).toUpperCase()}
                                                 </Text>
                                                 <Text style={{ color: colors.subtextColor, fontSize: 11 }}>
-                                                    {isParcel ? `Size: ${booking.parcelSize || 'Standard'}` : `Seats: ${booking.seatLayout?.join(', ') || booking.seatsRequested || 0}`}
+                                                    {isParcel ? `Size: ${booking.parcelSize || 'Standard'}` : `Seats: ${booking.seatsRequested || (booking.seatLayout ? booking.seatLayout.length : 0)}`}
                                                 </Text>
                                             </View>
                                             {booking.status === 'accepted' ? (
