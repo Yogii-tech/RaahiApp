@@ -148,12 +148,12 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
         return () => clearInterval(interval);
     }, [fetchData]);
 
-    // For driver, auto-expand if there's only one active ride
+    // For driver, auto-expand if there's only one active ride and in detailed mode
     useEffect(() => {
-        if (isDriver && bookings && bookings.length === 1 && !expandedRideId) {
+        if (isDriver && bookings && bookings.length === 1 && !expandedRideId && viewMode === 'detailed') {
             setExpandedRideId(bookings[0].id);
         }
-    }, [isDriver, bookings, expandedRideId]);
+    }, [isDriver, bookings, expandedRideId, viewMode]);
 
     // Start GPS tracking for driver
     useEffect(() => {
@@ -341,12 +341,12 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
                     {item.roofCarrier && <Text style={[styles.detailText, { color: colors.subtextColor }]}>• {t('trips.needsRoofCarrier')}</Text>}
                 </View>
 
-                {isDriver && (
+                {isDriver && viewMode === 'list' && (
                     <TouchableOpacity
-                        style={[styles.viewLayoutBtn, { borderColor: colors.primary }]}
+                        style={[styles.viewLayoutBtn, { borderColor: colors.primary, marginTop: 10 }]}
                         onPress={() => setExpandedRideId(isExpanded ? null : item.id)}>
                         <Text style={[styles.viewLayoutText, { color: colors.primary }]}>
-                            {isExpanded ? t('trips.hideSeating') : t('trips.viewSeating')}
+                            {isExpanded ? (t('trips.hideSeating') || 'Hide Seating & Actions ▴') : (t('trips.viewSeating') || 'View Seating & Actions ▾')}
                         </Text>
                     </TouchableOpacity>
                 )}
@@ -518,7 +518,7 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
                     </View>
                 )}
 
-                {isExpanded && isDriver && (
+                {isDriver && (viewMode === 'detailed' || isExpanded) && (
                     <View style={{ marginTop: 20 }}>
                         <JeepLayout
                             interactive={!isCompleted}
@@ -655,7 +655,10 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
                     borderColor: colors.borderColor
                 }}>
                     <TouchableOpacity
-                        onPress={() => setViewMode('list')}
+                        onPress={() => {
+                            setViewMode('list');
+                            setExpandedRideId(null);
+                        }}
                         style={{
                             flexDirection: 'row',
                             alignItems: 'center',
@@ -671,7 +674,10 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                        onPress={() => setViewMode('detailed')}
+                        onPress={() => {
+                            setViewMode('detailed');
+                            setExpandedRideId(null);
+                        }}
                         style={{
                             flexDirection: 'row',
                             alignItems: 'center',
