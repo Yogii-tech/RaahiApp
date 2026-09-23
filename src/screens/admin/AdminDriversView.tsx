@@ -41,6 +41,10 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
 
     const { fetchWithAuth } = useAuth();
 
+    // Driver reviews state
+    const [driverReviews, setDriverReviews] = useState<{ reviews: any[]; averageRating: number; totalReviews: number } | null>(null);
+    const [reviewsLoading, setReviewsLoading] = useState(false);
+
     useEffect(() => {
         loadDrivers();
     }, []);
@@ -63,6 +67,18 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
         setSelectedDriver(driver);
         setRejectionReason(driver.rejectionReason || '');
         setInspectModalVisible(true);
+        // Fetch reviews for this driver
+        setDriverReviews(null);
+        setReviewsLoading(true);
+        fetchWithAuth(`${API_BASE}/api/admin/reviews/driver/${driver.id}`)
+            .then(async (res: Response) => {
+                if (res.ok) {
+                    const d = await res.json();
+                    setDriverReviews(d);
+                }
+            })
+            .catch(() => {})
+            .finally(() => setReviewsLoading(false));
     };
 
     const handleVerifyAction = async (status: 'verified' | 'rejected') => {
@@ -410,6 +426,51 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                                         onPreview={() => setPreviewImage(getFullUrl(selectedDriver.ownershipUrl))}
                                     />
                                 ) : null}
+
+                                {/* Passenger Reviews Section */}
+                                <Text style={[styles.sectionHeader, { marginTop: 20 }]}>PASSENGER REVIEWS</Text>
+                                {reviewsLoading ? (
+                                    <ActivityIndicator color="#3B7DDD" style={{ marginVertical: 16 }} />
+                                ) : driverReviews && driverReviews.totalReviews > 0 ? (
+                                    <View style={{ backgroundColor: '#F0F4FF', borderRadius: 12, padding: 14, marginBottom: 12 }}>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+                                            <Text style={{ fontSize: 28, fontWeight: '900', color: '#FFB300' }}>
+                                                {driverReviews.averageRating.toFixed(1)}
+                                            </Text>
+                                            <Text style={{ fontSize: 24, marginLeft: 4 }}>⭐</Text>
+                                            <Text style={{ marginLeft: 8, color: '#6B7280', fontSize: 13 }}>
+                                                {driverReviews.totalReviews} {driverReviews.totalReviews === 1 ? 'review' : 'reviews'}
+                                            </Text>
+                                        </View>
+                                        {driverReviews.reviews.map((rev: any, idx: number) => (
+                                            <View key={idx} style={{ borderTopWidth: idx > 0 ? 1 : 0, borderTopColor: '#E5E7EB', paddingTop: idx > 0 ? 10 : 0, marginTop: idx > 0 ? 10 : 0 }}>
+                                                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                    <Text style={{ fontWeight: '700', color: '#1F2937', fontSize: 13 }}>
+                                                        {rev.passengerName || 'Passenger'}
+                                                    </Text>
+                                                    <Text style={{ color: '#FFB300', fontSize: 13, fontWeight: '700' }}>
+                                                        {'⭐'.repeat(rev.rating)} {rev.rating}/5
+                                                    </Text>
+                                                </View>
+                                                {rev.comment ? (
+                                                    <Text style={{ color: '#374151', fontSize: 12, marginTop: 4, lineHeight: 18 }}>
+                                                        "{rev.comment}"
+                                                    </Text>
+                                                ) : null}
+                                                <Text style={{ color: '#9CA3AF', fontSize: 11, marginTop: 4 }}>
+                                                    {new Date(rev.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                </Text>
+                                            </View>
+                                        ))}
+                                    </View>
+                                ) : (
+                                    <View style={{ backgroundColor: '#F9FAFB', borderRadius: 10, padding: 16, alignItems: 'center', marginBottom: 12 }}>
+                                        <Text style={{ fontSize: 24, marginBottom: 4 }}>⭐</Text>
+                                        <Text style={{ color: '#6B7280', fontSize: 13, textAlign: 'center' }}>
+                                            No reviews yet for this driver.
+                                        </Text>
+                                    </View>
+                                )}
 
                                 {/* Rejection Reason Input */}
                                 <View style={styles.reasonSection}>

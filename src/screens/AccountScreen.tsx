@@ -39,6 +39,7 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
     const [supportVisible, setSupportVisible] = useState(false);
     const supportNumber = '9275243642';
     const ratingColor = isDark ? '#FFC107' : '#FFB300';
+    const [driverRating, setDriverRating] = useState<{ avg: number; total: number } | null>(null);
 
     const navigateToSubView = (v: 'main' | 'trusted' | 'vehicle' | 'legal') => {
         if (v !== 'main') {
@@ -69,6 +70,18 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
                     }
                 })
                 .catch(() => { /* silent */ });
+
+            // Fetch real driver rating
+            if (user?.id) {
+                apiRequest(`/api/reviews/driver/${user.id}`, {}, logout)
+                    .then(async res => {
+                        if (res.ok) {
+                            const d = await res.json();
+                            setDriverRating({ avg: d.averageRating ?? 0, total: d.totalReviews ?? 0 });
+                        }
+                    })
+                    .catch(() => {});
+            }
         }
     }, [isFocused]);
 
@@ -207,10 +220,21 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
                             })()}
                             <View style={styles.spacer8} />
                             <View style={styles.ratingRow}>
-                                <Icon name="star" size={16} color={ratingColor} style={styles.star} />
-                                <Text style={[styles.ratingText, { color: ratingColor }]}>
-                                    4.8 {t('account.rating')}
-                                </Text>
+                                {driverRating && driverRating.total > 0 ? (
+                                    <>
+                                        <Icon name="star" size={16} color={ratingColor} style={styles.star} />
+                                        <Text style={[styles.ratingText, { color: ratingColor }]}>
+                                            {driverRating.avg.toFixed(1)} {t('account.rating')} · {driverRating.total} {driverRating.total === 1 ? 'review' : 'reviews'}
+                                        </Text>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Icon name="star-outline" size={16} color={colors.subtextColor} style={styles.star} />
+                                        <Text style={[styles.ratingText, { color: colors.subtextColor }]}>
+                                            N/A — No reviews yet
+                                        </Text>
+                                    </>
+                                )}
                             </View>
                         </>
                     )}
