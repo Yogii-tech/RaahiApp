@@ -8,6 +8,7 @@ import {
     ScrollView,
     Alert,
     Modal,
+    Platform,
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
@@ -112,14 +113,21 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
                 setShowSuccessModal(true);
             } else {
                 const errorData = await response.json().catch(() => ({}));
-                Alert.alert(
-                    t('common.error'),
-                    `${t('book.failBook')}\n\nStatus: ${response.status}\n${errorData.error || ''}`
-                );
+                const errorMsg = errorData.error || t('book.failBook') || 'Failed to book ride';
+                if (Platform.OS === 'web') {
+                    window.alert(errorMsg);
+                } else {
+                    Alert.alert(t('common.error'), errorMsg);
+                }
             }
         } catch (err) {
             console.error('Booking error:', err);
-            Alert.alert(t('common.error'), t('book.errorConnect'));
+            const errStr = t('book.errorConnect') || 'Error connecting to server';
+            if (Platform.OS === 'web') {
+                window.alert(errStr);
+            } else {
+                Alert.alert(t('common.error'), errStr);
+            }
         } finally {
             setLoading(false);
         }
