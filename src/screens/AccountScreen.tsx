@@ -37,7 +37,7 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
     const [logoutVisible, setLogoutVisible] = useState(false);
     const [languageVisible, setLanguageVisible] = useState(false);
     const [supportVisible, setSupportVisible] = useState(false);
-    const supportNumber = '8434405463';
+    const supportNumber = '9275243642';
     const ratingColor = isDark ? '#FFC107' : '#FFB300';
 
     const navigateToSubView = (v: 'main' | 'trusted' | 'vehicle' | 'legal') => {
