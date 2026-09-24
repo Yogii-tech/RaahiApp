@@ -1,4 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Dimensions } from 'react-native';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+// 48 = 2×24 horizontal padding; each box has marginHorizontal:4 (8px/box × 6 = 48px margin total)
+const OTP_BOX_WIDTH = Math.floor((SCREEN_WIDTH - 48 - 48) / 6);
 import {
     View,
     Text,
@@ -10,7 +15,6 @@ import {
     Alert,
     ActivityIndicator,
     ScrollView,
-    Dimensions,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -1447,18 +1451,18 @@ const styles = StyleSheet.create({
     spacer40: { height: 40 },
     otpRow: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'center',
-        gap: 8,
+        marginHorizontal: -4,
     },
     otpBox: {
-        flex: 1,
+        width: OTP_BOX_WIDTH,
         height: 56,
         borderRadius: 12,
         borderWidth: 2,
         fontSize: 22,
         fontWeight: '700',
         textAlign: 'center',
+        marginHorizontal: 4,
     },
     sectionTitle: {
         fontSize: 10,
