@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View,
     Text,
@@ -58,6 +58,24 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
     const [confirmationResult, setConfirmationResult] = useState<any>(null);
     const recaptchaVerifierRef = React.useRef<any>(null);
     const [resendTimer, setResendTimer] = useState<number>(119);
+    const otpRefs = useRef<(any)[]>([]);
+
+    const handleOtpChange = (value: string, index: number) => {
+        const digit = value.replace(/[^0-9]/g, '').slice(-1);
+        const otpArr = otp.split('');
+        while (otpArr.length < 6) otpArr.push('');
+        otpArr[index] = digit;
+        setOtp(otpArr.join(''));
+        if (digit && index < 5) {
+            otpRefs.current[index + 1]?.focus();
+        }
+    };
+
+    const handleOtpKeyPress = (e: any, index: number) => {
+        if (e.nativeEvent.key === 'Backspace' && !otp[index] && index > 0) {
+            otpRefs.current[index - 1]?.focus();
+        }
+    };
 
     const formatTime = (seconds: number) => {
         const mins = Math.floor(seconds / 60);
@@ -881,20 +899,38 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
 
                 {step === 'otp' && (
                     <>
-                        <TextInput
-                            style={[styles.input, {
-                                backgroundColor: colors.inputFillColor,
-                                color: colors.textColor,
-                                borderColor: colors.inputBorderColor
-                            }]}
-                            placeholder={t('login.enterOtp')}
-                            placeholderTextColor={isDark ? 'rgba(255,255,255,0.24)' : 'rgba(34,34,96,0.3)'}
-                            keyboardType="number-pad"
-                            autoCapitalize="none"
-                            value={otp}
-                            onChangeText={setOtp}
-                            maxLength={6}
-                        />
+                        {/* 6-box OTP input */}
+                        <View style={styles.otpRow}>
+                            {[0,1,2,3,4,5].map((i) => (
+                                <TextInput
+                                    key={i}
+                                    ref={(ref) => { otpRefs.current[i] = ref; }}
+                                    style={[
+                                        styles.otpBox,
+                                        {
+                                            backgroundColor: colors.inputFillColor,
+                                            color: colors.textColor,
+                                            borderColor: otp[i]
+                                                ? colors.primary
+                                                : (otpRefs.current[i] ? colors.primary : colors.inputBorderColor),
+                                            shadowColor: colors.primary,
+                                            shadowOpacity: otp[i] ? 0.25 : 0,
+                                            shadowRadius: 6,
+                                            shadowOffset: { width: 0, height: 2 },
+                                            elevation: otp[i] ? 3 : 0,
+                                        }
+                                    ]}
+                                    value={otp[i] || ''}
+                                    onChangeText={(v) => handleOtpChange(v, i)}
+                                    onKeyPress={(e) => handleOtpKeyPress(e, i)}
+                                    keyboardType="number-pad"
+                                    maxLength={1}
+                                    textAlign="center"
+                                    autoFocus={i === 0}
+                                    selectTextOnFocus
+                                />
+                            ))}
+                        </View>
 
                         <View style={styles.spacer16} />
 
@@ -1187,15 +1223,36 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                             <Text style={{ color: '#1FAF63', fontWeight: 'bold', fontSize: 13 }}>⚙️  ADMIN ACCESS — Step 2 of 3</Text>
                         </View>
                         <View style={styles.spacer16} />
-                        <TextInput
-                            style={[styles.input, { backgroundColor: colors.inputFillColor, color: colors.textColor, borderColor: '#1FAF63' }]}
-                            placeholder="Enter OTP"
-                            placeholderTextColor="rgba(31,175,99,0.4)"
-                            keyboardType="number-pad"
-                            value={otp}
-                            onChangeText={setOtp}
-                            maxLength={6}
-                        />
+                        {/* 6-box OTP input (admin) */}
+                        <View style={styles.otpRow}>
+                            {[0,1,2,3,4,5].map((i) => (
+                                <TextInput
+                                    key={i}
+                                    ref={(ref) => { otpRefs.current[i] = ref; }}
+                                    style={[
+                                        styles.otpBox,
+                                        {
+                                            backgroundColor: colors.inputFillColor,
+                                            color: colors.textColor,
+                                            borderColor: otp[i] ? '#1FAF63' : 'rgba(31,175,99,0.35)',
+                                            shadowColor: '#1FAF63',
+                                            shadowOpacity: otp[i] ? 0.3 : 0,
+                                            shadowRadius: 6,
+                                            shadowOffset: { width: 0, height: 2 },
+                                            elevation: otp[i] ? 3 : 0,
+                                        }
+                                    ]}
+                                    value={otp[i] || ''}
+                                    onChangeText={(v) => handleOtpChange(v, i)}
+                                    onKeyPress={(e) => handleOtpKeyPress(e, i)}
+                                    keyboardType="number-pad"
+                                    maxLength={1}
+                                    textAlign="center"
+                                    autoFocus={i === 0}
+                                    selectTextOnFocus
+                                />
+                            ))}
+                        </View>
                         <View style={styles.spacer16} />
                         <TouchableOpacity onPress={() => handleBackStep('admin_phone')} style={{ alignItems: 'center' }}>
                             <Text style={[styles.switchText, { color: colors.subtextColor }]}>← Change number</Text>
@@ -1388,6 +1445,21 @@ const styles = StyleSheet.create({
     spacer16: { height: 16 },
     spacer24: { height: 24 },
     spacer40: { height: 40 },
+    otpRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: 8,
+    },
+    otpBox: {
+        flex: 1,
+        height: 56,
+        borderRadius: 12,
+        borderWidth: 2,
+        fontSize: 22,
+        fontWeight: '700',
+        textAlign: 'center',
+    },
     sectionTitle: {
         fontSize: 10,
         fontWeight: 'bold',
