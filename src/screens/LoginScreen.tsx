@@ -1,9 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Dimensions } from 'react-native';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-// 48 = 2×24 horizontal padding; each box has marginHorizontal:4 (8px/box × 6 = 48px margin total)
-const OTP_BOX_WIDTH = Math.floor((SCREEN_WIDTH - 48 - 48) / 6);
 import {
     View,
     Text,
@@ -63,6 +58,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
     const recaptchaVerifierRef = React.useRef<any>(null);
     const [resendTimer, setResendTimer] = useState<number>(119);
     const otpRefs = useRef<(any)[]>([]);
+    const [otpRowWidth, setOtpRowWidth] = useState(0);
 
     const handleOtpChange = (value: string, index: number) => {
         const digit = value.replace(/[^0-9]/g, '').slice(-1);
@@ -904,36 +900,46 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 {step === 'otp' && (
                     <>
                         {/* 6-box OTP input */}
-                        <View style={styles.otpRow}>
-                            {[0,1,2,3,4,5].map((i) => (
-                                <TextInput
-                                    key={i}
-                                    ref={(ref) => { otpRefs.current[i] = ref; }}
-                                    style={[
-                                        styles.otpBox,
-                                        {
-                                            backgroundColor: colors.inputFillColor,
-                                            color: colors.textColor,
-                                            borderColor: otp[i]
-                                                ? colors.primary
-                                                : (otpRefs.current[i] ? colors.primary : colors.inputBorderColor),
-                                            shadowColor: colors.primary,
-                                            shadowOpacity: otp[i] ? 0.25 : 0,
-                                            shadowRadius: 6,
-                                            shadowOffset: { width: 0, height: 2 },
-                                            elevation: otp[i] ? 3 : 0,
-                                        }
-                                    ]}
-                                    value={otp[i] || ''}
-                                    onChangeText={(v) => handleOtpChange(v, i)}
-                                    onKeyPress={(e) => handleOtpKeyPress(e, i)}
-                                    keyboardType="number-pad"
-                                    maxLength={1}
-                                    textAlign="center"
-                                    autoFocus={i === 0}
-                                    selectTextOnFocus
-                                />
-                            ))}
+                        <View
+                            style={styles.otpRow}
+                            onLayout={(e) => setOtpRowWidth(e.nativeEvent.layout.width)}
+                        >
+                            {[0,1,2,3,4,5].map((i) => {
+                                const boxW = otpRowWidth > 0
+                                    ? Math.floor((otpRowWidth - 5 * 8) / 6)
+                                    : 44;
+                                return (
+                                    <TextInput
+                                        key={i}
+                                        ref={(ref) => { otpRefs.current[i] = ref; }}
+                                        style={[
+                                            styles.otpBox,
+                                            {
+                                                width: boxW,
+                                                backgroundColor: colors.inputFillColor,
+                                                color: colors.textColor,
+                                                borderColor: otp[i]
+                                                    ? colors.primary
+                                                    : colors.inputBorderColor,
+                                                shadowColor: colors.primary,
+                                                shadowOpacity: otp[i] ? 0.25 : 0,
+                                                shadowRadius: 6,
+                                                shadowOffset: { width: 0, height: 2 },
+                                                elevation: otp[i] ? 3 : 0,
+                                                marginRight: i < 5 ? 8 : 0,
+                                            }
+                                        ]}
+                                        value={otp[i] || ''}
+                                        onChangeText={(v) => handleOtpChange(v, i)}
+                                        onKeyPress={(e) => handleOtpKeyPress(e, i)}
+                                        keyboardType="number-pad"
+                                        maxLength={1}
+                                        textAlign="center"
+                                        autoFocus={i === 0}
+                                        selectTextOnFocus
+                                    />
+                                );
+                            })}
                         </View>
 
                         <View style={styles.spacer16} />
@@ -1228,34 +1234,44 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                         </View>
                         <View style={styles.spacer16} />
                         {/* 6-box OTP input (admin) */}
-                        <View style={styles.otpRow}>
-                            {[0,1,2,3,4,5].map((i) => (
-                                <TextInput
-                                    key={i}
-                                    ref={(ref) => { otpRefs.current[i] = ref; }}
-                                    style={[
-                                        styles.otpBox,
-                                        {
-                                            backgroundColor: colors.inputFillColor,
-                                            color: colors.textColor,
-                                            borderColor: otp[i] ? '#1FAF63' : 'rgba(31,175,99,0.35)',
-                                            shadowColor: '#1FAF63',
-                                            shadowOpacity: otp[i] ? 0.3 : 0,
-                                            shadowRadius: 6,
-                                            shadowOffset: { width: 0, height: 2 },
-                                            elevation: otp[i] ? 3 : 0,
-                                        }
-                                    ]}
-                                    value={otp[i] || ''}
-                                    onChangeText={(v) => handleOtpChange(v, i)}
-                                    onKeyPress={(e) => handleOtpKeyPress(e, i)}
-                                    keyboardType="number-pad"
-                                    maxLength={1}
-                                    textAlign="center"
-                                    autoFocus={i === 0}
-                                    selectTextOnFocus
-                                />
-                            ))}
+                        <View
+                            style={styles.otpRow}
+                            onLayout={(e) => setOtpRowWidth(e.nativeEvent.layout.width)}
+                        >
+                            {[0,1,2,3,4,5].map((i) => {
+                                const boxW = otpRowWidth > 0
+                                    ? Math.floor((otpRowWidth - 5 * 8) / 6)
+                                    : 44;
+                                return (
+                                    <TextInput
+                                        key={i}
+                                        ref={(ref) => { otpRefs.current[i] = ref; }}
+                                        style={[
+                                            styles.otpBox,
+                                            {
+                                                width: boxW,
+                                                backgroundColor: colors.inputFillColor,
+                                                color: colors.textColor,
+                                                borderColor: otp[i] ? '#1FAF63' : 'rgba(31,175,99,0.35)',
+                                                shadowColor: '#1FAF63',
+                                                shadowOpacity: otp[i] ? 0.3 : 0,
+                                                shadowRadius: 6,
+                                                shadowOffset: { width: 0, height: 2 },
+                                                elevation: otp[i] ? 3 : 0,
+                                                marginRight: i < 5 ? 8 : 0,
+                                            }
+                                        ]}
+                                        value={otp[i] || ''}
+                                        onChangeText={(v) => handleOtpChange(v, i)}
+                                        onKeyPress={(e) => handleOtpKeyPress(e, i)}
+                                        keyboardType="number-pad"
+                                        maxLength={1}
+                                        textAlign="center"
+                                        autoFocus={i === 0}
+                                        selectTextOnFocus
+                                    />
+                                );
+                            })}
                         </View>
                         <View style={styles.spacer16} />
                         <TouchableOpacity onPress={() => handleBackStep('admin_phone')} style={{ alignItems: 'center' }}>
@@ -1452,17 +1468,15 @@ const styles = StyleSheet.create({
     otpRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginHorizontal: -4,
+        width: '100%',
     },
     otpBox: {
-        width: OTP_BOX_WIDTH,
         height: 56,
         borderRadius: 12,
         borderWidth: 2,
         fontSize: 22,
         fontWeight: '700',
         textAlign: 'center',
-        marginHorizontal: 4,
     },
     sectionTitle: {
         fontSize: 10,
