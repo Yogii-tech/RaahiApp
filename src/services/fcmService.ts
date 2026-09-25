@@ -1,43 +1,24 @@
 /**
  * fcmService.ts
- * Firebase Cloud Messaging integration for RaahiApp.
- * Supports both Native (Android/iOS) and Web.
+ * Firebase Cloud Messaging integration for RaahiApp (Web PWA).
  */
 
-import { Platform, Vibration, Alert } from 'react-native';
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE } from '../apiConfig';
 import { firebaseWebConfig, VAPID_KEY } from '../config/firebaseWebConfig';
 
-// ─── Type Definitions ─────────────────────────────────────────────────────────
+// ─── Type Definitions ──────────────────────────────────────────────────────────
 
 export type FCMNotificationPayload = {
   type?: string;
   bookingId?: string;
   rideId?: string;
   status?: string;
+  relatedId?: string;
 };
 
 type NavigateToScreen = (type: string, data: FCMNotificationPayload) => void;
-
-// ─── Native Firebase Lazy Imports ──────────────────────────────────────────────
-
-let nativeMessaging: any = null;
-
-async function getNativeMessaging() {
-  if (Platform.OS === 'web') return null;
-  if (!nativeMessaging) {
-    try {
-      const mod: any = await import('@react-native-firebase/messaging');
-      nativeMessaging = mod.default || mod;
-
-    } catch (e) {
-      console.warn('[FCM Native] @react-native-firebase/messaging not available:', e);
-      nativeMessaging = null;
-    }
-  }
-  return nativeMessaging;
-}
 
 // ─── Web Firebase Lazy Imports ─────────────────────────────────────────────────
 
@@ -49,11 +30,10 @@ async function getWebMessaging() {
     try {
       const { initializeApp, getApps, getApp } = await import('firebase/app');
       const { getMessaging, isSupported } = await import('firebase/messaging');
-      
-      // Guard against "duplicate-app" error if this function is called more than once
+
       const app = getApps().length === 0 ? initializeApp(firebaseWebConfig) : getApp();
       const supported = await isSupported();
-      
+
       if (supported) {
         webMessaging = getMessaging(app);
       } else {
@@ -87,7 +67,7 @@ async function uploadToken(fcmToken: string, authToken: string): Promise<void> {
       await AsyncStorage.setItem('pending_fcm_token', fcmToken);
     }
   } catch (e) {
-    console.warn('[FCM] Failed to upload token to backend (Network). Caching for retry:', e);
+    console.warn('[FCM] Failed to upload token (network error). Caching for retry:', e);
     await AsyncStorage.setItem('pending_fcm_token', fcmToken);
   }
 }
@@ -96,88 +76,33 @@ async function syncPendingToken(authToken: string): Promise<void> {
   try {
     const pendingToken = await AsyncStorage.getItem('pending_fcm_token');
     if (pendingToken) {
-      console.log('[FCM] Found pending token, attempting sync...');
+      console.log('[FCM] Found pending token, syncing...');
       await uploadToken(pendingToken, authToken);
     }
   } catch (e) {
-    console.warn('[FCM] Failed to sync pending token', e);
+    console.warn('[FCM] Failed to sync pending token:', e);
   }
 }
 
 function handleNotificationNavigation(data: FCMNotificationPayload, navigate: NavigateToScreen): void {
   if (!data?.type) return;
-  console.log('[FCM] Handling notification tap, type:', data.type);
+  console.log('[FCM] Notification tap → type:', data.type);
   navigate(data.type, data);
 }
 
 // ─── Main Registration ─────────────────────────────────────────────────────────
 
-let tokenRefreshUnsubscribe: (() => void) | null = null;
 let foregroundUnsubscribe: (() => void) | null = null;
+// Track whether SW message listener is already attached to avoid duplicates
+let swMessageListenerAttached = false;
 
 export async function registerFCM(authToken: string, onNavigate: NavigateToScreen): Promise<void> {
-  // Try to sync any previously failed token uploads
   await syncPendingToken(authToken);
 
   if (Platform.OS === 'web') {
     await registerWebFCM(authToken, onNavigate);
-  } else {
-    await registerNativeFCM(authToken, onNavigate);
   }
-}
-
-// ─── Native Registration Logic ─────────────────────────────────────────────────
-async function registerNativeFCM(authToken: string, onNavigate: NavigateToScreen): Promise<void> {
-  const fcm = await getNativeMessaging();
-  if (!fcm) return;
-
-  try {
-    const authStatus = await fcm().requestPermission();
-    const granted = authStatus === fcm.AuthorizationStatus.AUTHORIZED || authStatus === fcm.AuthorizationStatus.PROVISIONAL;
-    if (!granted) {
-      console.log('[FCM Native] Notifications not permitted');
-      return;
-    }
-    
-    const token = await fcm().getToken();
-    if (token) {
-      console.log('[FCM Native] Got device token');
-      await uploadToken(token, authToken);
-    }
-  } catch (e) {
-    console.warn('[FCM Native] Failed to register:', e);
-  }
-
-  if (tokenRefreshUnsubscribe) tokenRefreshUnsubscribe();
-  tokenRefreshUnsubscribe = fcm().onTokenRefresh(async (newToken: string) => {
-    console.log('[FCM Native] Token refreshed');
-    await uploadToken(newToken, authToken);
-  });
-
-  if (foregroundUnsubscribe) foregroundUnsubscribe();
-  foregroundUnsubscribe = fcm().onMessage(async (remoteMessage: any) => {
-    const title = remoteMessage?.notification?.title || 'GoRaahi';
-    const body  = remoteMessage?.notification?.body  || '';
-    console.log('[FCM Native] Foreground message:', title);
-
-    // Vibrate: 0ms delay → 300ms on → 150ms off → 300ms on
-    Vibration.vibrate([0, 300, 150, 300]);
-
-    // Show an in-app alert so the user sees the notification while using the app
-    Alert.alert(title, body, [{ text: 'OK', style: 'default' }], { cancelable: true });
-  });
-
-  fcm().onNotificationOpenedApp((remoteMessage: any) => {
-    if (remoteMessage?.data) handleNotificationNavigation(remoteMessage.data as FCMNotificationPayload, onNavigate);
-  });
-
-  fcm().getInitialNotification().then((remoteMessage: any) => {
-    if (remoteMessage?.data) {
-      setTimeout(() => {
-        handleNotificationNavigation(remoteMessage.data as FCMNotificationPayload, onNavigate);
-      }, 500);
-    }
-  });
+  // Native (Android/iOS) is not used — this is a web-only PWA.
 }
 
 // ─── Web Registration Logic ────────────────────────────────────────────────────
@@ -186,101 +111,109 @@ async function registerWebFCM(authToken: string, onNavigate: NavigateToScreen): 
   if (!messaging) return;
 
   try {
+    // 1. Request notification permission from the browser
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') {
-      console.log('[FCM Web] Notifications not permitted');
+      console.warn('[FCM Web] Notification permission denied. Lock screen notifications will not work.');
       return;
     }
 
     const { getToken, onMessage } = await import('firebase/messaging');
 
-    // Wait for the service worker to be fully active before requesting a token.
+    // 2. Register & activate the service worker BEFORE getting the FCM token.
+    //    The SW MUST be active for the FCM token to be tied to it — otherwise
+    //    background/lock screen messages have nowhere to land.
     let swRegistration: ServiceWorkerRegistration | undefined;
     if ('serviceWorker' in navigator) {
-      // Explicitly register the service worker with root scope for PWA standalone mode
-      swRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' });
-      await navigator.serviceWorker.ready;
+      try {
+        swRegistration = await navigator.serviceWorker.register(
+          '/firebase-messaging-sw.js',
+          { scope: '/', updateViaCache: 'none' }  // updateViaCache: 'none' bypasses browser cache
+        );
+
+        // If there's a new SW waiting, force it to activate immediately.
+        // This ensures users always have the latest SW without needing a tab close.
+        if (swRegistration.waiting) {
+          swRegistration.waiting.postMessage({ type: 'SKIP_WAITING' });
+        }
+
+        // Also trigger an update check on every app load so stale SWs get replaced
+        swRegistration.update().catch(() => {/* ignore — SW update is best-effort */});
+
+        await navigator.serviceWorker.ready;
+        console.log('[FCM Web] Service worker active at scope:', swRegistration.scope);
+      } catch (swErr) {
+        console.error('[FCM Web] Service worker registration failed:', swErr);
+        // Continue — FCM token can still work for foreground, but background will be broken.
+      }
     }
 
-    // Get token using VAPID key and explicitly pass the SW registration
-    const token = await getToken(messaging, { 
+    // 3. Get the FCM registration token tied to this SW + VAPID key combination.
+    //    This token is what the backend uses to send push notifications.
+    const token = await getToken(messaging, {
       vapidKey: VAPID_KEY,
-      serviceWorkerRegistration: swRegistration 
+      serviceWorkerRegistration: swRegistration,
     });
+
     if (token) {
-      console.log('[FCM Web] Got browser token');
+      console.log('[FCM Web] Got web push token');
       await uploadToken(token, authToken);
     } else {
-      console.warn('[FCM Web] No registration token available. Ensure firebase-messaging-sw.js is served at the root and the page is on HTTP or trusted HTTPS.');
+      console.warn('[FCM Web] Empty token — check VAPID key and SW registration. Notifications will not work.');
     }
 
-    // Foreground message handler
+    // 4. Foreground message handler: when the tab is open and visible, Firebase
+    //    suppresses the system notification and calls this handler instead.
+    //    We explicitly show a notification via the SW so behaviour is consistent.
     if (foregroundUnsubscribe) foregroundUnsubscribe();
     foregroundUnsubscribe = onMessage(messaging, (payload: any) => {
-      console.log('[FCM Web] Foreground message:', payload);
-      const title = payload?.notification?.title || payload?.data?.title || 'GoRaahi Notification';
-      const body = payload?.notification?.body || payload?.data?.body || '';
-      
-      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-        if ('serviceWorker' in navigator) {
-          navigator.serviceWorker.ready.then(reg => {
-            reg.showNotification(title, {
-              body,
-              icon: '/logo192.png',
-              badge: '/logo192.png',
-              tag: payload?.data?.type || 'general',
-              renotify: true,
-              data: payload?.data || {},
-            } as any);
+      console.log('[FCM Web] Foreground message received:', payload);
+      const title = payload?.notification?.title || payload?.data?.title || 'GoRaahi';
+      const body  = payload?.notification?.body  || payload?.data?.body  || '';
+      const type  = payload?.data?.type  || 'general';
+      const related = payload?.data?.relatedId || '';
 
-          }).catch(err => {
-            console.warn('[FCM Web] SW showNotification error:', err);
-          });
-        } else {
-          try {
-            new Notification(title, { body, icon: '/logo192.png' });
-          } catch (e) {
-            console.warn('[FCM Web] Notification fallback error:', e);
-          }
-        }
+      if (Notification.permission === 'granted' && 'serviceWorker' in navigator) {
+        navigator.serviceWorker.ready.then(reg => {
+          reg.showNotification(title, {
+            body,
+            icon:               '/logo192.png',
+            badge:              '/logo192.png',
+            tag:                `${type}-${related}`,
+            renotify:           true,
+            requireInteraction: false, // foreground — don't block the UI
+            data:               payload?.data || {},
+          } as NotificationOptions);
+        }).catch(err => console.warn('[FCM Web] Foreground showNotification error:', err));
       }
     });
 
-    // Note: Web background messages are handled by firebase-messaging-sw.js.
-    // Notification clicks on web are handled by the service worker bringing the window to focus,
-    // which may not directly trigger `onNavigate` inside the React lifecycle like Native does.
-    if ('serviceWorker' in navigator) {
-      // Force update the service worker to bypass aggressive caching
-      navigator.serviceWorker.getRegistration().then(reg => {
-        if (reg) {
-          reg.update();
-        }
-      });
-
+    // 5. Listen for messages posted FROM the service worker (e.g. notification click).
+    //    Guard with a flag so multiple registerFCM calls don't stack duplicate listeners.
+    if ('serviceWorker' in navigator && !swMessageListenerAttached) {
+      swMessageListenerAttached = true;
       navigator.serviceWorker.addEventListener('message', (event) => {
-        if (event.data && event.data.type === 'NOTIFICATION_CLICK') {
-          console.log('[FCM Web] Service worker notification click:', event.data.data);
+        if (event.data?.type === 'NOTIFICATION_CLICK') {
+          console.log('[FCM Web] SW notification click relayed:', event.data.data);
           handleNotificationNavigation(event.data.data as FCMNotificationPayload, onNavigate);
         }
       });
     }
 
   } catch (e) {
-    console.warn('[FCM Web] Failed to register:', e);
+    console.error('[FCM Web] Registration failed:', e);
   }
 }
 
 /**
- * Unsubscribes all FCM listeners.
+ * Unsubscribes foreground FCM listener on logout.
  */
 export function unregisterFCM(): void {
-  if (tokenRefreshUnsubscribe) {
-    tokenRefreshUnsubscribe();
-    tokenRefreshUnsubscribe = null;
-  }
   if (foregroundUnsubscribe) {
     foregroundUnsubscribe();
     foregroundUnsubscribe = null;
   }
-  console.log('[FCM] Listeners unregistered');
+  // Keep swMessageListenerAttached = true — the listener is on navigator.serviceWorker
+  // which persists across login/logout; removing it would break notification clicks.
+  console.log('[FCM] Foreground listener unregistered');
 }
