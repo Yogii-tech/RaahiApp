@@ -62,6 +62,8 @@ const RatingModal: React.FC<RatingModalProps> = ({ visible, rideId, driverName, 
     const [comment, setComment] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [submitted, setSubmitted] = useState(false);
+    // Ref-based guard prevents double-submit even before React state propagates
+    const submittingRef = React.useRef(false);
 
     // Import TextInput inline to avoid adding to outer component
     const { TextInput } = require('react-native');
@@ -72,6 +74,9 @@ const RatingModal: React.FC<RatingModalProps> = ({ visible, rideId, driverName, 
             else Alert.alert('Rating Required', 'Please select at least 1 star.');
             return;
         }
+        // Guard: block if a submission is already in flight
+        if (submittingRef.current) return;
+        submittingRef.current = true;
         setSubmitting(true);
         try {
             const res = await apiRequest('/api/reviews/', {
@@ -82,14 +87,19 @@ const RatingModal: React.FC<RatingModalProps> = ({ visible, rideId, driverName, 
                 setSubmitted(true);
             } else {
                 const d = await res.json().catch(() => ({}));
-                const msg = d.error || 'Failed to submit review';
+                // Provide a friendlier message for rate-limit errors (HTTP 429)
+                const isRateLimit = res.status === 429 || (d.error || '').toLowerCase().includes('rate limit');
+                const msg = isRateLimit
+                    ? 'You\'re submitting too quickly. Please wait a moment and try again.'
+                    : (d.error || 'Failed to submit review');
                 if (Platform.OS === 'web') window.alert(msg);
                 else Alert.alert('Error', msg);
             }
         } catch {
-            if (Platform.OS === 'web') window.alert('Connection error');
-            else Alert.alert('Error', 'Connection error');
+            if (Platform.OS === 'web') window.alert('Connection error. Please try again.');
+            else Alert.alert('Error', 'Connection error. Please try again.');
         } finally {
+            submittingRef.current = false;
             setSubmitting(false);
         }
     };
