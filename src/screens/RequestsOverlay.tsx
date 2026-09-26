@@ -87,11 +87,14 @@ const RatingModal: React.FC<RatingModalProps> = ({ visible, rideId, driverName, 
                 setSubmitted(true);
             } else {
                 const d = await res.json().catch(() => ({}));
-                // Provide a friendlier message for rate-limit errors (HTTP 429)
-                const isRateLimit = res.status === 429 || (d.error || '').toLowerCase().includes('rate limit');
-                const msg = isRateLimit
-                    ? 'You\'re submitting too quickly. Please wait a moment and try again.'
-                    : (d.error || 'Failed to submit review');
+                let msg: string;
+                if (res.status === 429) {
+                    msg = 'Too many review submissions. Please wait a minute and try again.';
+                } else if (res.status === 409) {
+                    msg = 'You have already reviewed this ride.';
+                } else {
+                    msg = d.error || 'Failed to submit review. Please try again.';
+                }
                 if (Platform.OS === 'web') window.alert(msg);
                 else Alert.alert('Error', msg);
             }
