@@ -16,6 +16,9 @@ export type FCMNotificationPayload = {
   rideId?: string;
   status?: string;
   relatedId?: string;
+  pickup?: string;
+  dropoff?: string;
+  url?: string;
 };
 
 type NavigateToScreen = (type: string, data: FCMNotificationPayload) => void;
@@ -164,14 +167,39 @@ async function registerWebFCM(authToken: string, onNavigate: NavigateToScreen): 
 
     // 4. Foreground message handler: when the tab is open and visible, Firebase
     //    suppresses the system notification and calls this handler instead.
-    //    We explicitly show a notification via the SW so behaviour is consistent.
+    //    We explicitly show a notification via the SW so behaviour is consistent
+    //    with background messages. A dedup set prevents double-firing.
+    const shownForegroundIds = new Set<string>();
+
     if (foregroundUnsubscribe) foregroundUnsubscribe();
     foregroundUnsubscribe = onMessage(messaging, (payload: any) => {
       console.log('[FCM Web] Foreground message received:', payload);
-      const title = payload?.notification?.title || payload?.data?.title || 'GoRaahi';
-      const body  = payload?.notification?.body  || payload?.data?.body  || '';
-      const type  = payload?.data?.type  || 'general';
-      const related = payload?.data?.relatedId || '';
+
+      // Deduplicate by message ID
+      const msgId = payload?.messageId || payload?.fcmMessageId || '';
+      if (msgId && shownForegroundIds.has(msgId)) {
+        console.log('[FCM Web] Duplicate foreground message suppressed:', msgId);
+        return;
+      }
+      if (msgId) shownForegroundIds.add(msgId);
+
+      const data     = payload?.data || {};
+      const type     = data.type     || 'general';
+      const relatedId = data.relatedId || data.bookingId || '';
+      const bookingId = data.bookingId || '';
+      const pickup    = data.pickup   || '';
+      const dropoff   = data.dropoff  || '';
+
+      const title = payload?.notification?.title || data.title || 'GoRaahi';
+      let   body  = payload?.notification?.body  || data.body  || '';
+
+      // Build rich body for booking_request (same as SW background handler)
+      if (type === 'booking_request' && pickup && dropoff) {
+        body = body + `\n📍 ${pickup} → ${dropoff}`;
+        if (bookingId) {
+          body = body + `\n🔖 Booking #${bookingId.slice(-6).toUpperCase()}`;
+        }
+      }
 
       if (Notification.permission === 'granted' && 'serviceWorker' in navigator) {
         navigator.serviceWorker.ready.then(reg => {
@@ -179,10 +207,11 @@ async function registerWebFCM(authToken: string, onNavigate: NavigateToScreen): 
             body,
             icon:               '/logo192.png',
             badge:              '/logo192.png',
-            tag:                `${type}-${related}`,
+            tag:                `${type}-${relatedId}`,
             renotify:           true,
-            requireInteraction: false, // foreground — don't block the UI
-            data:               payload?.data || {},
+            requireInteraction: type === 'booking_request' || type === 'chat',
+            vibrate:            [200, 100, 200, 100, 200],
+            data:               data,
           } as NotificationOptions);
         }).catch(err => console.warn('[FCM Web] Foreground showNotification error:', err));
       }

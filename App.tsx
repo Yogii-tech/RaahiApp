@@ -268,15 +268,29 @@ function MainTabs() {
     }
   }, []);
 
-  // Handle Cold-Start Web Deep Links
+  // Handle Cold-Start Web Deep Links (notification taps that open a new window)
   useEffect(() => {
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && user) {
       const urlParams = new URLSearchParams(window.location.search);
       const chatId = urlParams.get('chat');
-      if (chatId && user) {
+      const openRequests = urlParams.get('openRequests');
+      const openTrips = urlParams.get('openTrips');
+
+      if (chatId) {
         setActiveChat({ id: chatId });
         pushSubViewHistory('chat');
-        // Clean up the URL
+      } else if (openRequests === 'true') {
+        // Driver tapped a booking_request notification — open requests overlay
+        setNotificationsVisible(true);
+        pushSubViewHistory('notifications');
+      } else if (openTrips === 'true') {
+        // Passenger tapped a booking_status/ride_started notification — open overlay
+        setNotificationsVisible(true);
+        pushSubViewHistory('notifications');
+      }
+
+      // Always clean up the URL so a refresh doesn't re-trigger
+      if (chatId || openRequests || openTrips) {
         window.history.replaceState({}, document.title, '/');
       }
     }
