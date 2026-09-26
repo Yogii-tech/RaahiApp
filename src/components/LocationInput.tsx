@@ -76,6 +76,10 @@ const LocationInput: React.FC<LocationInputProps> = ({
     const [showDropdown, setShowDropdown] = useState(false);
     const [isFocused, setIsFocused] = useState(false);
     const timerRef = useRef<NodeJS.Timeout | null>(null);
+    // On web, a click on a dropdown item fires: mousedown → input blur → mouseup → click.
+    // If we close the dropdown on blur, the item's click never fires.
+    // We track mousedown-on-dropdown so the blur handler knows to keep the dropdown open.
+    const mouseDownOnDropdown = useRef(false);
 
     // Fetch popular locations on mount or focus
     useEffect(() => {
@@ -190,11 +194,20 @@ const LocationInput: React.FC<LocationInputProps> = ({
     };
 
     const handleSelect = async (item: GeoResult) => {
-        onSelect(item);
+        // Commit the FULL selected name (e.g. "Bageshwar") to both the parent's
+        // value state AND the displayed input — this is the core fix for the
+        // "typed partial text is submitted instead of selected full name" bug.
+        const selectedName = item.display_name.split(',')[0].trim();
+        onChangeText(selectedName);   // keep input in sync with selected value
+        onSelect(item);               // inform parent with full GeoResult for coords etc.
+
+        // Clear suggestions and close dropdown immediately after selection
+        setSuggestions([]);
         setShowDropdown(false);
         setIsFocused(false);
+        mouseDownOnDropdown.current = false;
 
-        // Record the selection
+        // Record the selection (best-effort)
         try {
             await fetch(`${API_BASE}/api/locations/record`, {
                 method: 'POST',
@@ -242,10 +255,16 @@ const LocationInput: React.FC<LocationInputProps> = ({
                         setShowDropdown(true);
                     }}
                     onBlur={() => {
-                        // Delay hide to allow clicks on suggestions
+                        // On web: if the user is pressing a dropdown item (mousedown fired on
+                        // the dropdown container), keep the dropdown open so the click completes.
+                        // The dropdown will be closed inside handleSelect instead.
+                        if (mouseDownOnDropdown.current) return;
+                        // Small delay for native touch — gives time for onPress to register
                         setTimeout(() => {
-                            setIsFocused(false);
-                            setShowDropdown(false);
+                            if (!mouseDownOnDropdown.current) {
+                                setIsFocused(false);
+                                setShowDropdown(false);
+                            }
                         }, 200);
                     }}
                     placeholder={placeholder}
@@ -256,14 +275,22 @@ const LocationInput: React.FC<LocationInputProps> = ({
             </View>
 
             {shouldShow && (
-                <View style={[
-                    styles.dropdown,
-                    {
-                        backgroundColor: colors.cardColor,
-                        borderColor: colors.borderColor,
-                        shadowColor: isDark ? '#000' : colors.primary
-                    }
-                ]}>
+                <View
+                    style={[
+                        styles.dropdown,
+                        {
+                            backgroundColor: colors.cardColor,
+                            borderColor: colors.borderColor,
+                            shadowColor: isDark ? '#000' : colors.primary
+                        }
+                    ]}
+                    // Web-only: track mousedown so blur doesn't close dropdown before click fires
+                    {...(Platform.OS === 'web' ? {
+                        onMouseDown: () => { mouseDownOnDropdown.current = true; },
+                        onMouseUp:   () => { mouseDownOnDropdown.current = false; },
+                        onMouseLeave:() => { mouseDownOnDropdown.current = false; },
+                    } as any : {})}
+                >
                     {popular.length > 0 && suggestions.length === 0 && (
                         <View style={styles.sectionHeader}>
                             <Text style={styles.sectionHeaderText}>🔥 POPULAR RECOMMENDATIONS</Text>
@@ -297,6 +324,9 @@ const LocationInput: React.FC<LocationInputProps> = ({
         </View>
     );
 };
+
+
+
 
 const styles = StyleSheet.create({
     container: {
