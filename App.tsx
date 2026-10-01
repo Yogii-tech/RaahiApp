@@ -64,10 +64,19 @@ const linking = {
 const Tab = createBottomTabNavigator();
 
 // ─── Custom Header ───────────────────────────────────────────────────
-function AppHeader({ onToggleNotifications, notificationCount = 0 }: { onToggleNotifications?: () => void, notificationCount?: number }) {
+function AppHeader({ onToggleNotifications, notificationCount = 0, onPressLogo }: { onToggleNotifications?: () => void, notificationCount?: number, onPressLogo?: () => void }) {
   const { isDark, toggleTheme, colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const navigation = useNavigation();
+
+  const handlePressLogo = () => {
+    if (onPressLogo) {
+      onPressLogo();
+    } else {
+      navigation.navigate('Home' as never);
+    }
+  };
 
   return (
     <View
@@ -78,17 +87,24 @@ function AppHeader({ onToggleNotifications, notificationCount = 0 }: { onToggleN
           backgroundColor: colors.background,
         },
       ]}>
-      {/* Logo */}
-      <View style={headerStyles.logoContainer}>
-        <Image
-          source={require('./src/assets/logo_brand.png')}
-          style={headerStyles.logo}
-          resizeMode="contain"
-        />
-      </View>
-      <Text style={[headerStyles.title, { color: colors.primary }]}>
-        GoRaahi
-      </Text>
+      {/* Clickable Logo and Title */}
+      <TouchableOpacity
+        onPress={handlePressLogo}
+        style={headerStyles.brandContainer}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel="Go to Home page">
+        <View style={headerStyles.logoContainer}>
+          <Image
+            source={require('./src/assets/logo_brand.png')}
+            style={headerStyles.logo}
+            resizeMode="contain"
+          />
+        </View>
+        <Text style={[headerStyles.title, { color: colors.primary }]}>
+          GoRaahi
+        </Text>
+      </TouchableOpacity>
 
       <View style={headerStyles.spacer} />
 
@@ -137,6 +153,11 @@ const headerStyles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingBottom: 16,
+  },
+  brandContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    ...(Platform.OS === 'web' ? ({ cursor: 'pointer' } as any) : {}),
   },
   logoContainer: {
     width: 60,
@@ -235,6 +256,7 @@ function MainTabs() {
   const [currentRoute, setCurrentRoute] = useState('Home');
   const insets = useSafeAreaInsets();
   const tabNavRef = useRef<any>(null);
+  const navigation = useNavigation();
 
   const isDriver = user?.role === 'driver';
 
@@ -375,6 +397,12 @@ function MainTabs() {
       {(
         <AppHeader
           notificationCount={notificationCount}
+          onPressLogo={() => {
+            setNotificationsVisible(false);
+            setActiveChat(null);
+            setParcelMode(false);
+            navigation.navigate('Home' as never);
+          }}
           onToggleNotifications={() => {
             const newState = !notificationsVisible;
             if (newState) {

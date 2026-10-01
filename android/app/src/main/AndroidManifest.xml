@@ -1,6 +1,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Required on Android 13+ (API 33+) to show push notifications on the lock screen.
+         Without this, FCM messages are silently dropped by the OS. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Allows notification vibration patterns -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Allows re-registering FCM token after device reboot so notifications
+         continue working without the user needing to open the app. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
       android:name=".MainApplication"
@@ -23,5 +31,20 @@
             <category android:name="android.intent.category.LAUNCHER" />
         </intent-filter>
       </activity>
+
+      <!--
+        Explicitly declares the Firebase Cloud Messaging service so Android's system
+        can route incoming FCM messages to it even when the app is killed.
+        android:exported="false" prevents other apps from binding to it directly.
+        Without this declaration some OEM launchers (Xiaomi, OPPO, Vivo) silently
+        drop FCM messages when the app is not in the foreground.
+      -->
+      <service
+        android:name="com.google.firebase.messaging.FirebaseMessagingService"
+        android:exported="false">
+        <intent-filter>
+          <action android:name="com.google.firebase.MESSAGING_EVENT" />
+        </intent-filter>
+      </service>
     </application>
 </manifest>

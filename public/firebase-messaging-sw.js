@@ -1,6 +1,6 @@
 // public/firebase-messaging-sw.js
 // Firebase Cloud Messaging Service Worker — handles background & lock screen notifications.
-// v3 — fixes: deduplication, rich booking_request notifications, deep-link on cold-start.
+// v4 — fixes: reliable lock-screen delivery via raw push event, proper event.waitUntil usage.
 
 importScripts('https://www.gstatic.com/firebasejs/11.7.1/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/11.7.1/firebase-messaging-compat.js');
@@ -64,37 +64,27 @@ function buildNotificationOptions(data, notificationType) {
 }
 
 // ─── Background message handler ──────────────────────────────────────────────
-// Firebase calls this for every FCM message received while the app is in
-// background or the screen is locked. We MUST call showNotification ourselves.
+// NOTE: The raw `push` event listener below is the PRIMARY handler for ALL FCM
+// messages (including those with a notification block). The Firebase compat SDK's
+// onBackgroundMessage has historically had issues with event.waitUntil not being
+// properly propagated, causing the SW to terminate before showNotification completes.
+//
+// We register onBackgroundMessage as a secondary safety net ONLY. It will be a
+// no-op for any message the `push` event already deduplicated.
 messaging.onBackgroundMessage((payload) => {
-  console.log('[SW] Background message received:', JSON.stringify(payload));
-
-  // FCM messages have a unique message_id — use it to deduplicate
-  const msgId = payload.messageId || payload.fcmMessageId || '';
-  if (isDuplicate(msgId)) {
-    console.log('[SW] Duplicate message suppressed:', msgId);
-    return;
-  }
-
-  const data   = payload.data   || {};
-  const type   = data.type || 'general';
-
-  const title  = payload.notification?.title || data.title || 'GoRaahi';
-  const opts   = buildNotificationOptions(data, type);
-
-  // Compose body: use notification block body first, then data body, then generic
-  let body = payload.notification?.body || data.body || 'You have a new update.';
-  if (opts.data?._extraLines) {
-    body = body + opts.data._extraLines;
-  }
-
-  return self.registration.showNotification(title, { body, ...opts });
+  console.log('[SW] onBackgroundMessage (secondary handler):', payload?.messageId || '');
+  // The raw push handler below has already shown or will show this notification.
+  // Return undefined (no-op) to prevent the compat SDK from showing a generic
+  // notification on its own.
+  return Promise.resolve();
 });
 
-// ─── Raw push fallback ────────────────────────────────────────────────────────
-// Catches data-only FCM messages that Firebase's SDK may not surface through
-// onBackgroundMessage (messages sent with content_available but no notification block).
-// We use a separate tag ('raw-*') to avoid duplicating what onBackgroundMessage shows.
+// ─── Primary push event handler ───────────────────────────────────────────────
+// This is the ONLY reliable way to show lock-screen notifications for ALL FCM
+// message types (data-only AND notification+data). The raw `push` event fires
+// for every FCM delivery, regardless of whether the Firebase compat SDK surfaces
+// it through onBackgroundMessage. We handle everything here and deduplicate so
+// the compat SDK's secondary handler is always a no-op.
 self.addEventListener('push', (event) => {
   if (!event.data) return;
 
@@ -102,27 +92,42 @@ self.addEventListener('push', (event) => {
   try { payload = event.data.json(); }
   catch { payload = { data: { body: event.data.text() } }; }
 
-  // If FCM included a notification block, onBackgroundMessage already handled it.
-  const hasNotificationBlock = !!(payload.notification?.title);
-  if (hasNotificationBlock) return;
+  // FCM wraps data-only pushes under payload.data and notification pushes under
+  // payload.notification (and also under payload.data.FCM_MSG in some cases).
+  // We normalise both shapes into a single `data` object and `notification` object.
+  const notifBlock = payload.notification || {};
+  const dataBlock  = payload.data        || {};
 
-  // Data-only push: deduplicate by messageId if present
-  const msgId = payload.messageId || payload.fcmMessageId || '';
-  if (isDuplicate('raw-' + msgId)) return;
+  // Extract the real message ID from whichever field FCM uses
+  const msgId = payload.messageId || payload.fcmMessageId ||
+                dataBlock.google?.c_id || '';
 
-  const data  = payload.data || {};
+  // Deduplicate — use the raw message ID (no prefix) so both this handler and
+  // onBackgroundMessage reference the same dedup set.
+  if (isDuplicate(msgId)) {
+    console.log('[SW] push: duplicate suppressed:', msgId);
+    return;
+  }
+
+  const data  = dataBlock;
   const type  = data.type || 'general';
-  const title = data.title || 'GoRaahi';
+  const title = notifBlock.title || data.title || 'GoRaahi';
   const opts  = buildNotificationOptions(data, type);
-  let body = data.body || 'You have a new update.';
+
+  let body = notifBlock.body || data.body || 'You have a new update.';
   if (opts.data?._extraLines) {
     body = body + opts.data._extraLines;
   }
 
-  // Use a distinct tag prefix so it doesn't collide with onBackgroundMessage
-  opts.tag = 'raw-' + opts.tag;
+  console.log('[SW] push: showing notification — type:', type, 'title:', title);
 
-  event.waitUntil(self.registration.showNotification(title, { body, ...opts }));
+  // CRITICAL: event.waitUntil keeps the SW alive until showNotification resolves.
+  // Without this the browser may kill the SW before the OS delivers the notification.
+  event.waitUntil(
+    self.registration.showNotification(title, { body, ...opts })
+      .then(() => console.log('[SW] push: showNotification resolved for type:', type))
+      .catch(err => console.error('[SW] push: showNotification error:', err))
+  );
 });
 
 // ─── Notification click handler ───────────────────────────────────────────────

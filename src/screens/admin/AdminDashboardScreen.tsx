@@ -260,8 +260,13 @@ export default function AdminDashboardScreen() {
             {/* Sidebar */}
             {(!isMobile || isSidebarOpen) && (
                 <View style={[styles.sidebar, isMobile && styles.sidebarMobile, { backgroundColor: T.sidebar }]}>
-                    {/* Profile Area */}
-                    <View style={styles.profileArea}>
+                    {/* Profile & Logo Area */}
+                    <TouchableOpacity
+                        style={[styles.profileArea, Platform.OS === 'web' ? ({ cursor: 'pointer' } as any) : {}]}
+                        onPress={() => navigate('dashboard')}
+                        activeOpacity={0.7}
+                        accessibilityRole="button"
+                        accessibilityLabel="Go to Admin Dashboard Overview">
                         <View style={styles.avatarWrapper}>
                             <RaahiLogo size={32} />
                         </View>
@@ -271,7 +276,7 @@ export default function AdminDashboardScreen() {
                             </Text>
                             <Text style={[styles.profileRole, { color: T.sidebarText }]}>System Admin</Text>
                         </View>
-                    </View>
+                    </TouchableOpacity>
 
                     <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
                         {NAV_SECTIONS.map(section => (

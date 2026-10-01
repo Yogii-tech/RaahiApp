@@ -1,6 +1,8 @@
 /**
  * fcmService.ts
- * Firebase Cloud Messaging integration for RaahiApp (Web PWA).
+ * Firebase Cloud Messaging integration for RaahiApp.
+ * Supports both Web (PWA via Firebase JS SDK) and Native Android/iOS
+ * (via @react-native-firebase/messaging).
  */
 
 import { Platform } from 'react-native';
@@ -98,14 +100,100 @@ function handleNotificationNavigation(data: FCMNotificationPayload, navigate: Na
 let foregroundUnsubscribe: (() => void) | null = null;
 // Track whether SW message listener is already attached to avoid duplicates
 let swMessageListenerAttached = false;
+// Track native unsubscribe handle
+let nativeForegroundUnsubscribe: (() => void) | null = null;
 
 export async function registerFCM(authToken: string, onNavigate: NavigateToScreen): Promise<void> {
   await syncPendingToken(authToken);
 
   if (Platform.OS === 'web') {
     await registerWebFCM(authToken, onNavigate);
+  } else if (Platform.OS === 'android' || Platform.OS === 'ios') {
+    await registerNativeFCM(authToken, onNavigate);
   }
-  // Native (Android/iOS) is not used — this is a web-only PWA.
+}
+
+// ─── Native (Android / iOS) Registration Logic ────────────────────────────────
+async function registerNativeFCM(authToken: string, onNavigate: NavigateToScreen): Promise<void> {
+  try {
+    // Dynamically import @react-native-firebase/messaging (not available on web build)
+    const { default: messaging } = await import('@react-native-firebase/messaging');
+
+    // Android 13+ (API 33+) requires POST_NOTIFICATIONS at runtime.
+    // Declaring it in the manifest is not enough — the user must also grant it interactively.
+    if (Platform.OS === 'android' && typeof Platform.Version === 'number' && Platform.Version >= 33) {
+      // Lazy-require PermissionsAndroid so the web webpack bundle never sees it
+      // (react-native-web does not export it and webpack would warn).
+      const { PermissionsAndroid } = require('react-native');
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+        {
+          title: 'GoRaahi Notifications',
+          message: 'Allow GoRaahi to send you ride and booking notifications.',
+          buttonPositive: 'Allow',
+          buttonNegative: 'Deny',
+        }
+      );
+      if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+        console.warn('[FCM Native] POST_NOTIFICATIONS permission denied. Lock screen notifications will not work.');
+        return;
+      }
+    }
+
+    // iOS: request notification permission via Firebase Messaging
+    if (Platform.OS === 'ios') {
+      const authStatus = await messaging().requestPermission();
+      const enabled =
+        authStatus === (messaging as any).AuthorizationStatus?.AUTHORIZED ||
+        authStatus === (messaging as any).AuthorizationStatus?.PROVISIONAL;
+      if (!enabled) {
+        console.warn('[FCM Native iOS] Notification permission denied.');
+        return;
+      }
+    }
+
+    // Get the native device FCM token
+    const token = await messaging().getToken();
+    if (token) {
+      console.log('[FCM Native] Got device token, uploading...');
+      await uploadToken(token, authToken);
+    } else {
+      console.warn('[FCM Native] Empty token — check google-services.json / APNs configuration.');
+    }
+
+    // Handle foreground messages (app is open and in focus)
+    if (nativeForegroundUnsubscribe) nativeForegroundUnsubscribe();
+    nativeForegroundUnsubscribe = messaging().onMessage(async (remoteMessage: any) => {
+      console.log('[FCM Native] Foreground message:', remoteMessage?.messageId);
+      const data = remoteMessage?.data || {};
+      handleNotificationNavigation(data as FCMNotificationPayload, onNavigate);
+    });
+
+    // Handle notification taps when app is in background (not fully quit)
+    messaging().onNotificationOpenedApp((remoteMessage: any) => {
+      console.log('[FCM Native] Background tap:', remoteMessage?.messageId);
+      const data = remoteMessage?.data || {};
+      handleNotificationNavigation(data as FCMNotificationPayload, onNavigate);
+    });
+
+    // Handle notification taps when app was fully quit (cold start)
+    const initialMessage = await messaging().getInitialNotification();
+    if (initialMessage) {
+      console.log('[FCM Native] Cold-start tap:', initialMessage?.messageId);
+      const data = initialMessage?.data || {};
+      handleNotificationNavigation(data as FCMNotificationPayload, onNavigate);
+    }
+
+    // Listen for token refreshes and re-upload to keep backend in sync
+    messaging().onTokenRefresh(async (newToken: string) => {
+      console.log('[FCM Native] Token refreshed, uploading...');
+      await uploadToken(newToken, authToken);
+    });
+
+    console.log('[FCM Native] Registration complete.');
+  } catch (e) {
+    console.warn('[FCM Native] Registration failed (google-services.json may be missing or this is a web build):', e);
+  }
 }
 
 // ─── Web Registration Logic ────────────────────────────────────────────────────
@@ -183,8 +271,8 @@ async function registerWebFCM(authToken: string, onNavigate: NavigateToScreen): 
       }
       if (msgId) shownForegroundIds.add(msgId);
 
-      const data     = payload?.data || {};
-      const type     = data.type     || 'general';
+      const data      = payload?.data || {};
+      const type      = data.type     || 'general';
       const relatedId = data.relatedId || data.bookingId || '';
       const bookingId = data.bookingId || '';
       const pickup    = data.pickup   || '';
@@ -235,14 +323,18 @@ async function registerWebFCM(authToken: string, onNavigate: NavigateToScreen): 
 }
 
 /**
- * Unsubscribes foreground FCM listener on logout.
+ * Unsubscribes foreground FCM listeners on logout.
  */
 export function unregisterFCM(): void {
   if (foregroundUnsubscribe) {
     foregroundUnsubscribe();
     foregroundUnsubscribe = null;
   }
+  if (nativeForegroundUnsubscribe) {
+    nativeForegroundUnsubscribe();
+    nativeForegroundUnsubscribe = null;
+  }
   // Keep swMessageListenerAttached = true — the listener is on navigator.serviceWorker
   // which persists across login/logout; removing it would break notification clicks.
-  console.log('[FCM] Foreground listener unregistered');
+  console.log('[FCM] Foreground listeners unregistered');
 }
