@@ -41,6 +41,8 @@ export const downloadCSV = (data: any[], filename: string) => {
           // Fallback for mobile if needed (using Alert for now)
           console.log('CSV Data:', csvString);
           // In a real app we would use react-native-fs or expo-file-system
-          alert('CSV Export is currently supported on Web. Data logged to console.');
+          if (typeof alert !== 'undefined') {
+               alert('CSV Export is currently supported on Web. Data logged to console.');
+          }
      }
 };

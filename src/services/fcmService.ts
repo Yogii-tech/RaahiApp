@@ -54,8 +54,11 @@ async function getWebMessaging() {
 
 // ─── Token Upload ──────────────────────────────────────────────────────────────
 
+let currentFCMToken: string | null = null;
+
 async function uploadToken(fcmToken: string, authToken: string): Promise<void> {
   try {
+    currentFCMToken = fcmToken;
     const res = await fetch(`${API_BASE}/api/user/fcm-token`, {
       method: 'PUT',
       headers: {
@@ -323,9 +326,9 @@ async function registerWebFCM(authToken: string, onNavigate: NavigateToScreen): 
 }
 
 /**
- * Unsubscribes foreground FCM listeners on logout.
+ * Unsubscribes foreground FCM listeners on logout and removes token from backend.
  */
-export function unregisterFCM(): void {
+export async function unregisterFCM(authToken?: string): Promise<void> {
   if (foregroundUnsubscribe) {
     foregroundUnsubscribe();
     foregroundUnsubscribe = null;
@@ -334,6 +337,24 @@ export function unregisterFCM(): void {
     nativeForegroundUnsubscribe();
     nativeForegroundUnsubscribe = null;
   }
+
+  if (currentFCMToken && authToken) {
+    try {
+      await fetch(`${API_BASE}/api/user/fcm-token`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ fcmToken: currentFCMToken }),
+      });
+      console.log('[FCM] Token removed from backend on logout');
+    } catch (e) {
+      console.warn('[FCM] Failed to remove token from backend on logout:', e);
+    }
+    currentFCMToken = null;
+  }
+
   // Keep swMessageListenerAttached = true — the listener is on navigator.serviceWorker
   // which persists across login/logout; removing it would break notification clicks.
   console.log('[FCM] Foreground listeners unregistered');
