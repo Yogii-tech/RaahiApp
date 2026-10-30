@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
     View, Text, StyleSheet, FlatList, ActivityIndicator,
-    ScrollView, TouchableOpacity, Modal, Image, TextInput, Alert, Platform
+    ScrollView, TouchableOpacity, Modal, Image, TextInput, Alert, Platform, Linking
 } from 'react-native';
 import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
@@ -33,7 +33,12 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
     const [loading, setLoading] = useState(true);
     const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
     const [inspectModalVisible, setInspectModalVisible] = useState(false);
-    const [previewImage, setPreviewImage] = useState<string | null>(null);
+    const [previewImage, setPreviewImageRaw] = useState<string | null>(null);
+    const [previewStatus, setPreviewStatus] = useState<'loading' | 'loaded' | 'error'>('loading');
+    const setPreviewImage = (url: string | null) => {
+        setPreviewStatus('loading');
+        setPreviewImageRaw(url);
+    };
     const [rejectionReason, setRejectionReason] = useState('');
     const [submittingAction, setSubmittingAction] = useState(false);
     const [deletingDriverId, setDeletingDriverId] = useState<string | null>(null);
@@ -188,7 +193,23 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
 
     const getFullUrl = (url?: string) => {
         if (!url) return '';
-        return url.startsWith('http') ? url : `${API_BASE}${url}`;
+        let full = url.trim();
+        if (!/^https?:\/\//i.test(full)) {
+            full = `${API_BASE}${full.startsWith('/') ? '' : '/'}${full}`;
+        }
+        // Browsers block http:// images on an https:// page (mixed content), which
+        // rendered as an empty preview in production. Upgrade non-local URLs.
+        if (full.startsWith('http://') && !/^http:\/\/(localhost|127\.0\.0\.1|10\.|192\.168\.)/.test(full)) {
+            full = 'https://' + full.slice('http://'.length);
+        }
+        return full;
+    };
+
+    const isPdf = (url: string) => /\.pdf(\?|#|$)/i.test(url);
+
+    const openExternally = (url: string) => {
+        if (Platform.OS === 'web' && typeof window !== 'undefined') window.open(url, '_blank', 'noopener');
+        else Linking.openURL(url).catch(() => {});
     };
 
     if (loading) return <ActivityIndicator color="#3B7DDD" size="large" style={{ marginTop: 60 }} />;
@@ -535,8 +556,38 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                                 </TouchableOpacity>
                             </View>
                             <View style={styles.previewImgBox}>
-                                <Image source={{ uri: previewImage }} style={styles.fullImage} resizeMode="contain" />
+                                {isPdf(previewImage) ? (
+                                    Platform.OS === 'web' ? (
+                                        React.createElement('iframe', {
+                                            src: previewImage,
+                                            title: 'Document Preview',
+                                            style: { width: '100%', height: '100%', border: 0, backgroundColor: '#fff', borderRadius: 8 },
+                                        })
+                                    ) : (
+                                        <Text style={styles.previewMsg}>PDF documents open in your browser.</Text>
+                                    )
+                                ) : previewStatus === 'error' ? (
+                                    <Text style={styles.previewMsg}>
+                                        ⚠ Could not load this document.{'\n'}The file may be missing on the server.
+                                    </Text>
+                                ) : (
+                                    <>
+                                        <Image
+                                            source={{ uri: previewImage }}
+                                            style={styles.fullImage}
+                                            resizeMode="contain"
+                                            onLoad={() => setPreviewStatus('loaded')}
+                                            onError={() => setPreviewStatus('error')}
+                                        />
+                                        {previewStatus === 'loading' && (
+                                            <ActivityIndicator color="#3B7DDD" size="large" style={StyleSheet.absoluteFill} />
+                                        )}
+                                    </>
+                                )}
                             </View>
+                            <TouchableOpacity style={styles.openExternalBtn} onPress={() => openExternally(previewImage)}>
+                                <Text style={styles.viewDocBtnText}>Open in new tab ↗</Text>
+                            </TouchableOpacity>
                         </View>
                     </View>
                 </Modal>
@@ -704,6 +755,8 @@ const styles = StyleSheet.create({
     previewBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center', padding: 20 },
     previewCard: { width: '100%', maxWidth: 850, height: '85%', backgroundColor: '#0F172A', borderRadius: 16, overflow: 'hidden' },
     previewHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 16, backgroundColor: '#1E293B' },
-    previewImgBox: { flex: 1, padding: 10, justifyContent: 'center', alignItems: 'center' },
-    fullImage: { width: '100%', height: '100%' }
+    previewImgBox: { flex: 1, padding: 10, justifyContent: 'center', alignItems: 'stretch' },
+    fullImage: { flex: 1, width: '100%', height: '100%' },
+    previewMsg: { color: '#CBD5E1', fontSize: 14, textAlign: 'center', lineHeight: 22 },
+    openExternalBtn: { backgroundColor: '#3B7DDD', margin: 12, paddingVertical: 12, borderRadius: 8, alignItems: 'center' }
 });
