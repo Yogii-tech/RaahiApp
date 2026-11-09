@@ -35,5 +35,5 @@ jobs:
         args: deploy --only hosting
       env:
         GCP_SA_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-        PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+        PROJECT_ID: project-4e312d2c-0d4c-4929-860
 
