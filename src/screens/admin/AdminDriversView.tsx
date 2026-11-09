@@ -42,6 +42,10 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
     const [rejectionReason, setRejectionReason] = useState('');
     const [submittingAction, setSubmittingAction] = useState(false);
     const [deletingDriverId, setDeletingDriverId] = useState<string | null>(null);
+    const [rekycModalVisible, setRekycModalVisible] = useState(false);
+    const [rekycDriver, setRekycDriver] = useState<Driver | null>(null);
+    const [rekycReason, setRekycReason] = useState('');
+    const [rekycLoading, setRekycLoading] = useState(false);
     const [activeFilter, setActiveFilter] = useState<'all' | 'pending' | 'verified' | 'rejected'>(initialFilter);
 
     const { fetchWithAuth } = useAuth();
@@ -173,6 +177,48 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
         }
     };
 
+    const handleOpenReKYC = (driver: Driver) => {
+        setRekycDriver(driver);
+        setRekycReason('Your uploaded documents could not be verified or are missing. Please re-upload your driving license, vehicle RC, and other KYC documents.');
+        setRekycModalVisible(true);
+    };
+
+    const handleExecuteReKYC = async () => {
+        if (!rekycDriver) return;
+        setRekycLoading(true);
+        try {
+            const res = await fetchWithAuth(`${API_BASE}/api/admin/drivers/${rekycDriver.id}/rekyc`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    reason: rekycReason.trim()
+                })
+            });
+
+            if (res.ok) {
+                const msg = `Re-KYC request sent to ${rekycDriver.name} (${rekycDriver.phone}). The driver will be notified to re-upload documents.`;
+                if (Platform.OS === 'web') alert(msg);
+                else Alert.alert('Notification Sent', msg);
+
+                setRekycModalVisible(false);
+                setRekycDriver(null);
+                if (inspectModalVisible) setInspectModalVisible(false);
+                loadDrivers();
+            } else {
+                const data = await res.json();
+                const msg = data.error || 'Failed to request Re-KYC';
+                if (Platform.OS === 'web') alert(msg);
+                else Alert.alert('Error', msg);
+            }
+        } catch (err) {
+            const msg = 'Connection error while requesting Re-KYC';
+            if (Platform.OS === 'web') alert(msg);
+            else Alert.alert('Error', msg);
+        } finally {
+            setRekycLoading(false);
+        }
+    };
+
     const pendingCount = drivers.filter(d => (d.verificationStatus || 'pending') === 'pending').length;
     const verifiedCount = drivers.filter(d => d.verificationStatus === 'verified').length;
     const rejectedCount = drivers.filter(d => d.verificationStatus === 'rejected').length;
@@ -266,7 +312,7 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                 </View>
 
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ minWidth: '100%' }}>
-                    <View style={{ minWidth: 1150, flex: 1 }}>
+                    <View style={{ minWidth: 1250, flex: 1 }}>
                         {/* Table Header */}
                         <View style={styles.tableHeader}>
                             <Text style={[styles.headerCell, { flex: 2 }]}>DRIVER NAME & PHONE</Text>
@@ -275,7 +321,7 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                             <Text style={[styles.headerCell, { flex: 2.5 }]}>DOCUMENTS STATUS</Text>
                             <Text style={[styles.headerCell, { flex: 1.5 }]}>SUBMITTED</Text>
                             <Text style={[styles.headerCell, { flex: 1.5 }]}>VERIFICATION STATUS</Text>
-                            <Text style={[styles.headerCell, { flex: 1.5, textAlign: 'center' }]}>ACTIONS</Text>
+                            <Text style={[styles.headerCell, { flex: 2.4, textAlign: 'center' }]}>ACTIONS</Text>
                         </View>
 
                         {/* Table Body */}
@@ -343,14 +389,22 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                                         </View>
 
                                         {/* Actions */}
-                                        <View style={{ flex: 1.5, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 }}>
+                                        <View style={{ flex: 2.4, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6 }}>
                                             <TouchableOpacity
                                                 style={styles.inspectBtn}
                                                 onPress={() => handleInspect(item)}
                                                 activeOpacity={0.8}
                                             >
-                                                <Text style={{ fontSize: 13, marginRight: 4 }}>👁</Text>
+                                                <Text style={{ fontSize: 12, marginRight: 3 }}>👁</Text>
                                                 <Text style={styles.inspectBtnText}>Inspect</Text>
+                                            </TouchableOpacity>
+                                            <TouchableOpacity
+                                                style={styles.rekycBtn}
+                                                onPress={() => handleOpenReKYC(item)}
+                                                activeOpacity={0.8}
+                                            >
+                                                <Text style={{ fontSize: 12, marginRight: 3 }}>🔄</Text>
+                                                <Text style={styles.rekycBtnText}>Re-KYC</Text>
                                             </TouchableOpacity>
                                             <TouchableOpacity
                                                 style={[styles.deleteBtn, deletingDriverId === item.id && { opacity: 0.6 }]}
@@ -358,7 +412,7 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                                                 activeOpacity={0.8}
                                                 disabled={deletingDriverId === item.id}
                                             >
-                                                <Text style={{ fontSize: 13, marginRight: 4 }}>🗑</Text>
+                                                <Text style={{ fontSize: 12, marginRight: 3 }}>🗑</Text>
                                                 <Text style={styles.deleteBtnText}>{deletingDriverId === item.id ? '...' : 'Delete'}</Text>
                                             </TouchableOpacity>
                                         </View>
@@ -515,7 +569,15 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                                     onPress={() => handleDeleteDriver(selectedDriver)}
                                     disabled={submittingAction || deletingDriverId === selectedDriver.id}
                                 >
-                                    <Text style={styles.actionBtnText}>🗑 Delete Driver</Text>
+                                    <Text style={styles.actionBtnText}>🗑 Delete</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={[styles.actionBtn, styles.rekycModalBtn, submittingAction && { opacity: 0.6 }]}
+                                    onPress={() => handleOpenReKYC(selectedDriver)}
+                                    disabled={submittingAction}
+                                >
+                                    <Text style={styles.actionBtnText}>🔄 Re-KYC</Text>
                                 </TouchableOpacity>
 
                                 <TouchableOpacity
@@ -538,6 +600,77 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                                         <Text style={styles.actionBtnText}>✓ Approve</Text>
                                     )}
                                 </TouchableOpacity>
+                            </View>
+                        </View>
+                    </View>
+                </Modal>
+            )}
+
+            {/* Re-KYC Confirmation Modal */}
+            {rekycModalVisible && rekycDriver && (
+                <Modal
+                    visible={rekycModalVisible}
+                    transparent={true}
+                    animationType="fade"
+                    onRequestClose={() => setRekycModalVisible(false)}
+                >
+                    <View style={styles.modalBackdrop}>
+                        <View style={styles.rekycModalCard}>
+                            <View style={styles.modalHeader}>
+                                <View>
+                                    <Text style={styles.modalTitle}>Request Re-KYC</Text>
+                                    <Text style={styles.modalSub}>
+                                        Driver: {rekycDriver.name} ({rekycDriver.phone})
+                                    </Text>
+                                </View>
+                                <TouchableOpacity onPress={() => setRekycModalVisible(false)} style={styles.closeBtn}>
+                                    <Text style={{ color: '#9CA3AF', fontSize: 20, fontWeight: 'bold' }}>✕</Text>
+                                </TouchableOpacity>
+                            </View>
+
+                            <View style={{ padding: 20 }}>
+                                <View style={styles.rekycInfoBox}>
+                                    <Text style={styles.rekycInfoIcon}>ℹ️</Text>
+                                    <Text style={styles.rekycInfoText}>
+                                        This will notify the driver via push notification and in-app banner to re-upload their documents.
+                                        Old document links will be cleared so they can submit fresh copies.
+                                    </Text>
+                                </View>
+
+                                <Text style={styles.reasonLabel}>INSTRUCTIONS / REASON FOR DRIVER</Text>
+                                <TextInput
+                                    style={styles.reasonInput}
+                                    placeholder="Enter instructions for re-uploading documents..."
+                                    placeholderTextColor="#6B7280"
+                                    multiline={true}
+                                    numberOfLines={3}
+                                    value={rekycReason}
+                                    onChangeText={setRekycReason}
+                                />
+
+                                <View style={{ flexDirection: 'row', gap: 12, marginTop: 20 }}>
+                                    <TouchableOpacity
+                                        style={[styles.actionBtn, { backgroundColor: '#374151' }]}
+                                        onPress={() => setRekycModalVisible(false)}
+                                        disabled={rekycLoading}
+                                    >
+                                        <Text style={styles.actionBtnText}>Cancel</Text>
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity
+                                        style={[styles.actionBtn, styles.rekycConfirmBtn, rekycLoading && { opacity: 0.6 }]}
+                                        onPress={handleExecuteReKYC}
+                                        disabled={rekycLoading}
+                                    >
+                                        {rekycLoading ? (
+                                            <ActivityIndicator color="#FFFFFF" size="small" />
+                                        ) : (
+                                            <Text style={styles.actionBtnText}>
+                                                🔄 Send Re-KYC Request
+                                            </Text>
+                                        )}
+                                    </TouchableOpacity>
+                                </View>
                             </View>
                         </View>
                     </View>
@@ -690,6 +823,11 @@ const styles = StyleSheet.create({
         paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8
     },
     inspectBtnText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 12 },
+    rekycBtn: {
+        backgroundColor: '#D97706', flexDirection: 'row', alignItems: 'center',
+        paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8
+    },
+    rekycBtnText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 12 },
     deleteBtn: {
         backgroundColor: '#991B1B', flexDirection: 'row', alignItems: 'center',
         paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8,
@@ -747,9 +885,27 @@ const styles = StyleSheet.create({
     },
     actionBtn: { flex: 1, paddingVertical: 14, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
     deleteDriverBtn: { backgroundColor: '#7F1D1D', borderWidth: 1, borderColor: 'rgba(239,68,68,0.5)' },
+    rekycModalBtn: { backgroundColor: '#D97706' },
+    rekycConfirmBtn: { backgroundColor: '#D97706' },
     rejectBtn: { backgroundColor: '#EF4444' },
     approveBtn: { backgroundColor: '#22C55E' },
     actionBtnText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 14 },
+
+    // Re-KYC Modal
+    rekycModalCard: {
+        width: '100%', maxWidth: 540,
+        backgroundColor: '#1E293B', borderRadius: 16,
+        borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+        overflow: 'hidden'
+    },
+    rekycInfoBox: {
+        flexDirection: 'row', alignItems: 'flex-start',
+        backgroundColor: 'rgba(217, 119, 6, 0.15)',
+        borderWidth: 1, borderColor: 'rgba(217, 119, 6, 0.4)',
+        borderRadius: 10, padding: 12, marginBottom: 16
+    },
+    rekycInfoIcon: { fontSize: 16, marginRight: 8, marginTop: 2 },
+    rekycInfoText: { flex: 1, color: '#FDE68A', fontSize: 13, lineHeight: 18 },
 
     // Preview Sub-modal
     previewBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center', padding: 20 },
