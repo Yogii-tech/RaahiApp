@@ -16,6 +16,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
 import { API_BASE } from '../apiConfig';
 import { apiRequest } from '../utils/api';
+import { pickAndUploadDocument, notify } from '../utils/documentUpload';
 
 interface ResubmitDocsViewProps {
     onClose: () => void;
@@ -45,40 +46,15 @@ const ResubmitDocsView: React.FC<ResubmitDocsViewProps> = ({ onClose }) => {
 
     const handleFileUpload = (type: keyof typeof vehicleDocs) => {
         if (Platform.OS === 'web' || typeof document !== 'undefined') {
-            // @ts-ignore
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = 'image/*,application/pdf';
-            input.onchange = async (e: any) => {
-                const file = e.target.files[0];
-                if (file) {
-                    setLoading(true);
-                    try {
-                        const formData = new FormData();
-                        formData.append('file', file);
-
-                        const response = await fetch(`${API_BASE}/api/upload`, {
-                            method: 'POST',
-                            headers: {
-                                'Authorization': `Bearer ${token}`
-                            },
-                            body: formData
-                        });
-
-                        const data = await response.json();
-                        if (response.ok) {
-                            setVehicleDocs(prev => ({ ...prev, [type]: data.url }));
-                        } else {
-                            Alert.alert(t('common.error'), data.error || 'Upload failed');
-                        }
-                    } catch (err) {
-                        Alert.alert(t('common.error'), 'Upload failed');
-                    } finally {
-                        setLoading(false);
-                    }
+            pickAndUploadDocument(
+                token,
+                () => setLoading(true),
+                () => setLoading(false),
+            ).then(url => {
+                if (url) {
+                    setVehicleDocs(prev => ({ ...prev, [type]: url }));
                 }
-            };
-            input.click();
+            });
         } else {
             Alert.prompt(
                 'Upload Document',
@@ -102,11 +78,11 @@ const ResubmitDocsView: React.FC<ResubmitDocsViewProps> = ({ onClose }) => {
 
     const handleCompleteRegistration = async () => {
         if (!vehicleDocs.name || !vehicleDocs.type || !vehicleDocs.seats || !vehicleDocs.number) {
-            Alert.alert(t('common.error'), 'Please fill in all vehicle details (Name, Type, Seats, Number).');
+            notify(t('common.error'), 'Please fill in all vehicle details (Name, Type, Seats, Number).');
             return;
         }
         if (!vehicleDocs.dl || !vehicleDocs.rc || !vehicleDocs.pollution || !vehicleDocs.image) {
-            Alert.alert(t('common.error'), t('login.uploadError'));
+            notify(t('common.error'), t('login.uploadError'));
             return;
         }
 
@@ -143,10 +119,10 @@ const ResubmitDocsView: React.FC<ResubmitDocsViewProps> = ({ onClose }) => {
                 await setAuth(token, null, updatedUser as any);
                 setShowDocSubmittedModal(true);
             } else {
-                Alert.alert(t('common.error'), t('login.failProfile'));
+                notify(t('common.error'), t('login.failProfile'));
             }
         } catch {
-            Alert.alert(t('common.error'), t('login.connectionError'));
+            notify(t('common.error'), t('login.connectionError'));
         } finally {
             setLoading(false);
         }
