@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import {
     View, Text, StyleSheet, FlatList, ActivityIndicator,
-    TouchableOpacity, ScrollView, TextInput, Modal, Image, Alert
+    TouchableOpacity, ScrollView, TextInput, Modal, Image
 } from 'react-native';
 import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
 import { downloadCSV } from '../../utils/exportUtils';
+import { notify } from '../../utils/notify';
 
 interface Booking {
     id: string;
@@ -67,10 +68,10 @@ export default function AdminBookingsView({ token, searchQuery = '' }: { token: 
                 setSelectedBookingDetails(data);
                 setDetailModalVisible(true);
             } else {
-                alert(data.error || 'Booking not found with specified BID');
+                notify('Not Found', data.error || 'Booking not found with specified BID');
             }
         } catch {
-            alert('Failed to fetch booking details');
+            notify('Error', 'Failed to fetch booking details');
         } finally {
             setFetchingDetails(false);
         }

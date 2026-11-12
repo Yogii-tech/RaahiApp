@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, Platform, ActivityIndicator, Text, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, Platform, Text, TouchableOpacity } from 'react-native';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useTheme } from '../context/ThemeContext';
@@ -11,17 +11,18 @@ interface TripTrackingMapProps {
     onClose: () => void;
 }
 
+// Mock coordinates for demo (Dehradun area)
+const DEMO_PICKUP_COORDS: [number, number] = [30.3165, 78.0322];
+const DEMO_DROPOFF_COORDS: [number, number] = [30.4599, 78.0664]; // Mussoorie
+
 const TripTrackingMap: React.FC<TripTrackingMapProps> = ({ bookingId, pickup, dropoff, onClose }) => {
     const { colors, isDark } = useTheme();
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<maplibregl.Map | null>(null);
-    const [loading, setLoading] = useState(true);
     const [driverLoc, setDriverLoc] = useState<{ lat: number, lng: number } | null>(null);
     const [passengerLoc, setPassengerLoc] = useState<{ lat: number, lng: number } | null>(null);
-
-    // Mock coordinates for demo (Dehradun area)
-    const pickupCoords: [number, number] = [30.3165, 78.0322];
-    const dropoffCoords: [number, number] = [30.4599, 78.0664]; // Mussoorie
+    const driverMarkerRef = useRef<maplibregl.Marker | null>(null);
+    const passengerMarkerRef = useRef<maplibregl.Marker | null>(null);
 
     useEffect(() => {
         if (Platform.OS !== 'web' || !mapContainerRef.current) return;
@@ -47,13 +48,11 @@ const TripTrackingMap: React.FC<TripTrackingMapProps> = ({ bookingId, pickup, dr
         const map = new maplibregl.Map({
             container: mapContainerRef.current,
             style: mapStyle,
-            center: [pickupCoords[1], pickupCoords[0]],
+            center: [DEMO_PICKUP_COORDS[1], DEMO_PICKUP_COORDS[0]],
             zoom: 12,
         });
 
         map.on('load', () => {
-            setLoading(false);
-
             // Add Route Layer
             map.addSource('route', {
                 type: 'geojson',
@@ -63,8 +62,8 @@ const TripTrackingMap: React.FC<TripTrackingMapProps> = ({ bookingId, pickup, dr
                     geometry: {
                         type: 'LineString',
                         coordinates: [
-                            [pickupCoords[1], pickupCoords[0]],
-                            [dropoffCoords[1], dropoffCoords[0]]
+                            [DEMO_PICKUP_COORDS[1], DEMO_PICKUP_COORDS[0]],
+                            [DEMO_DROPOFF_COORDS[1], DEMO_DROPOFF_COORDS[0]]
                         ]
                     }
                 }
@@ -85,18 +84,18 @@ const TripTrackingMap: React.FC<TripTrackingMapProps> = ({ bookingId, pickup, dr
             // Markers
             // Destination (Dropoff)
             new maplibregl.Marker({ color: '#ff0000' })
-                .setLngLat([dropoffCoords[1], dropoffCoords[0]])
+                .setLngLat([DEMO_DROPOFF_COORDS[1], DEMO_DROPOFF_COORDS[0]])
                 .addTo(map);
 
             // Pickup
             new maplibregl.Marker({ color: '#2ecc71' })
-                .setLngLat([pickupCoords[1], pickupCoords[0]])
+                .setLngLat([DEMO_PICKUP_COORDS[1], DEMO_PICKUP_COORDS[0]])
                 .addTo(map);
 
             // Fit bounds
             map.fitBounds([
-                [Math.min(pickupCoords[1], dropoffCoords[1]), Math.min(pickupCoords[0], dropoffCoords[0])],
-                [Math.max(pickupCoords[1], dropoffCoords[1]), Math.max(pickupCoords[0], dropoffCoords[0])]
+                [Math.min(DEMO_PICKUP_COORDS[1], DEMO_DROPOFF_COORDS[1]), Math.min(DEMO_PICKUP_COORDS[0], DEMO_DROPOFF_COORDS[0])],
+                [Math.max(DEMO_PICKUP_COORDS[1], DEMO_DROPOFF_COORDS[1]), Math.max(DEMO_PICKUP_COORDS[0], DEMO_DROPOFF_COORDS[0])]
             ], { padding: 50 });
         });
 
@@ -106,24 +105,23 @@ const TripTrackingMap: React.FC<TripTrackingMapProps> = ({ bookingId, pickup, dr
         const interval = setInterval(() => {
             // Mock driver moving from pickup to dropoff
             const progress = (Date.now() % 30000) / 30000;
-            const currentLat = pickupCoords[0] + (dropoffCoords[0] - pickupCoords[0]) * progress;
-            const currentLng = pickupCoords[1] + (dropoffCoords[1] - pickupCoords[1]) * progress;
+            const currentLat = DEMO_PICKUP_COORDS[0] + (DEMO_DROPOFF_COORDS[0] - DEMO_PICKUP_COORDS[0]) * progress;
+            const currentLng = DEMO_PICKUP_COORDS[1] + (DEMO_DROPOFF_COORDS[1] - DEMO_PICKUP_COORDS[1]) * progress;
 
             setDriverLoc({ lat: currentLat, lng: currentLng });
         }, 1000);
 
         // Passenger location set to pickup location directly without requesting browser GPS
-        setPassengerLoc({ lat: pickupCoords[0], lng: pickupCoords[1] });
+        setPassengerLoc({ lat: DEMO_PICKUP_COORDS[0], lng: DEMO_PICKUP_COORDS[1] });
 
         return () => {
             clearInterval(interval);
+            driverMarkerRef.current = null;
+            passengerMarkerRef.current = null;
+            mapRef.current = null;
             map.remove();
         };
-    }, []);
-
-    // Update markers
-    const driverMarkerRef = useRef<maplibregl.Marker | null>(null);
-    const passengerMarkerRef = useRef<maplibregl.Marker | null>(null);
+    }, [isDark]);
 
     useEffect(() => {
         if (!mapRef.current || !driverLoc) return;
@@ -166,8 +164,13 @@ const TripTrackingMap: React.FC<TripTrackingMapProps> = ({ bookingId, pickup, dr
             </TouchableOpacity>
 
             <View style={[styles.infoPanel, { backgroundColor: colors.cardColor }]}>
-                <Text style={[styles.infoTitle, { color: colors.textColor }]}>Live Tracking: RA-{bookingId.slice(-4).toUpperCase()}</Text>
-                <Text style={[styles.infoSub, { color: colors.subtextColor }]}>🚖 Driver is on the way to {dropoff.split(',')[0]}</Text>
+                <View style={styles.previewBadge}>
+                    <Text style={styles.previewBadgeText}>PREVIEW / DEMO MODE</Text>
+                </View>
+                <Text style={[styles.infoTitle, { color: colors.textColor }]}>Tracking Preview: RA-{bookingId.slice(-4).toUpperCase()}</Text>
+                <Text style={[styles.infoSub, { color: colors.subtextColor }]}>
+                    Simulated route from {pickup.split(',')[0]} to {dropoff.split(',')[0]} (demo coordinates — live GPS telemetry not connected).
+                </Text>
             </View>
         </View>
     );
@@ -210,6 +213,22 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.25,
         shadowRadius: 3.84,
+    },
+    previewBadge: {
+        alignSelf: 'flex-start',
+        backgroundColor: 'rgba(252, 185, 44, 0.18)',
+        borderColor: 'rgba(252, 185, 44, 0.5)',
+        borderWidth: 1,
+        borderRadius: 4,
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        marginBottom: 6,
+    },
+    previewBadgeText: {
+        color: '#D97706',
+        fontSize: 10,
+        fontWeight: '700',
+        letterSpacing: 0.5,
     },
     infoTitle: {
         fontSize: 16,

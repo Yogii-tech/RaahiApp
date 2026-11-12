@@ -21,6 +21,7 @@ import { fetchRoute, reverseGeocode, GeoResult } from './services/geocoding';
 import type { DriverLocation } from './services/socket';
 import styles from './ModernMapApp.module.css';
 import { useTheme } from '../context/ThemeContext';
+import { notify } from '../utils/notify';
 
 const DEMO_ORDER_ID = 'raahi_order_demo_001';
 
@@ -122,7 +123,7 @@ export default function ModernMapApp({ initialParams }: { initialParams?: any })
   // Alert on GPS Error
   useEffect(() => {
     if (gpsError) {
-      alert(`GPS Error: ${gpsError}`);
+      notify('GPS Error', gpsError);
     }
   }, [gpsError]);
 

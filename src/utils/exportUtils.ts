@@ -1,12 +1,10 @@
 import { Platform } from 'react-native';
 
 /**
- * Downloads a CSV file with the given data and filename.
- * @param data Array of objects representing the rows.
- * @param filename Desired filename for the download.
+ * Generates a properly escaped CSV string from an array of row objects.
  */
-export const downloadCSV = (data: any[], filename: string) => {
-     if (data.length === 0) return;
+export const generateCSV = (data: any[]): string => {
+     if (data.length === 0) return '';
 
      // Get headers from the first object
      const headers = Object.keys(data[0]);
@@ -25,7 +23,17 @@ export const downloadCSV = (data: any[], filename: string) => {
           csvRows.push(values.join(','));
      }
 
-     const csvString = csvRows.join('\n');
+     return csvRows.join('\n');
+};
+
+/**
+ * Downloads a CSV file with the given data and filename.
+ * @param data Array of objects representing the rows.
+ * @param filename Desired filename for the download.
+ */
+export const downloadCSV = (data: any[], filename: string) => {
+     const csvString = generateCSV(data);
+     if (!csvString) return;
 
      if (Platform.OS === 'web') {
           const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });

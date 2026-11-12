@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLanguage, LanguageType } from '../context/LanguageContext';
 import Icon from 'react-native-vector-icons/Ionicons';
 
@@ -30,7 +31,7 @@ interface AccountScreenProps {
 
 const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
     const { isDark, colors } = useTheme();
-    const { user, token, logout, setAuth } = useAuth();
+    const { user, token, refreshToken, logout, setAuth } = useAuth();
     const { t, language, setLanguage } = useLanguage();
     const [view, setView] = useState<'main' | 'trusted' | 'vehicle' | 'legal'>('main');
     const isFocused = useIsFocused();
@@ -61,7 +62,9 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
                         const fresh = await res.json();
                         if (fresh.verification_status !== user?.verification_status ||
                             fresh.rejection_reason !== user?.rejection_reason) {
-                            await setAuth(token, null, {
+                            const latestToken = (await AsyncStorage.getItem('auth_token').catch(() => null)) || token;
+                            const latestRefresh = (await AsyncStorage.getItem('auth_refresh_token').catch(() => null)) || refreshToken;
+                            await setAuth(latestToken, latestRefresh, {
                                 ...user,
                                 verification_status: fresh.verification_status,
                                 rejection_reason: fresh.rejection_reason,
@@ -112,8 +115,10 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
                 }, logout);
 
                 if (response.ok) {
-                    // Update local user state to keep in sync
-                    await setAuth(token, null, { ...user, language: lang });
+                    // Update local user state to keep in sync while preserving active tokens
+                    const latestToken = (await AsyncStorage.getItem('auth_token').catch(() => null)) || token;
+                    const latestRefresh = (await AsyncStorage.getItem('auth_refresh_token').catch(() => null)) || refreshToken;
+                    await setAuth(latestToken, latestRefresh, { ...user, language: lang });
                 }
             } catch (err) {
                 console.error('Failed to sync language to backend:', err);

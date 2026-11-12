@@ -7,7 +7,6 @@ import {
     StyleSheet,
     ScrollView,
     Dimensions,
-    Alert,
     Platform,
     Image,
     ActivityIndicator,
@@ -138,6 +137,12 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
         }
     };
 
+    const getRatePerKm = (size: 'small' | 'medium' | 'large'): number =>
+        size === 'small' ? 2 : size === 'medium' ? 2.5 : 3;
+
+    const calculateParcelPrice = (distanceKm: number, size: 'small' | 'medium' | 'large'): number =>
+        Math.ceil(distanceKm * getRatePerKm(size));
+
     const getEffectivePickup = (ride?: any): string => {
         if (!ride) return pickup.trim();
         if (ride.matchedPickup) return ride.matchedPickup;
@@ -199,7 +204,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
 
     const fetchAvailableRides = async () => {
         if (!pickup.trim() || !dropoff.trim()) {
-            Alert.alert(t('common.error'), 'Please enter pickup and dropoff locations.');
+            notify(t('common.error'), 'Please enter pickup and dropoff locations.');
             return;
         }
 
@@ -218,10 +223,10 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                 setAvailableRides(Array.isArray(data) ? data : []);
                 navigateToStep('rides');
             } else {
-                Alert.alert(t('common.error'), data.error || 'Failed to fetch vehicles');
+                notify(t('common.error'), data.error || 'Failed to fetch vehicles');
             }
         } catch (err) {
-            Alert.alert(t('common.error'), 'Connection error');
+            notify(t('common.error'), 'Connection error');
         } finally {
             setLoading(false);
         }
@@ -253,13 +258,13 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
             };
             input.click();
         } else {
-            Alert.alert('Mobile Upload', 'Image picker would be triggered here.');
+            notify('Mobile Upload', 'Image picker would be triggered here.');
         }
     };
 
     const handleConfirmDetails = async () => {
         if (!recipientName.trim() || !contactNumber.trim() || !dropLocation.trim()) {
-            Alert.alert(t('common.error'), 'Please fill in all required recipient details.');
+            notify(t('common.error'), 'Please fill in all required recipient details.');
             return;
         }
 
@@ -286,9 +291,8 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
             const rideId = selectedRide.id || selectedRide._id;
             const fullUrl = `${API_BASE}/api/rides/${rideId}/book`;
             const stats = getTravelStats(effectivePickup, effectiveDropoff, selectedRide.departureTime, selectedRide);
-            const distNum = parseInt(stats.distance) || 0;
-            const rate = selectedSize === 'small' ? 2 : selectedSize === 'medium' ? 2.5 : 3;
-            const calculatedPrice = Math.ceil(distNum * rate);
+            const distNum = parseInt(stats.distance, 10) || 0;
+            const calculatedPrice = calculateParcelPrice(distNum, selectedSize);
 
             const response = await fetch(fullUrl, {
                 method: 'POST',
@@ -316,19 +320,19 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                 const displayId = data.bookingId ? `RA-P-${data.bookingId.slice(-4).toUpperCase()}` : 'Booked';
 
                 clearParcelDrafts();
-                Alert.alert(
+                notify(
                     t('common.success'),
                     `Your parcel was successfully scheduled!\n\nBooking ID: ${displayId}\n\nYou can track this in your notifications.`,
-                    [{ text: 'OK', onPress: () => onBack && onBack() }]
+                    () => onBack && onBack()
                 );
             } else {
                 const errorData = await response.json().catch(() => ({}));
                 console.error("Booking failed:", errorData);
-                Alert.alert(t('common.error'), errorData.error || 'Failed to schedule pickup. Please try again.');
+                notify(t('common.error'), errorData.error || 'Failed to schedule pickup. Please try again.');
             }
         } catch (err) {
             console.error("Booking catch error:", err);
-            Alert.alert(t('common.error'), t('login.connectionError'));
+            notify(t('common.error'), t('login.connectionError'));
         } finally {
             setLoading(false);
         }
@@ -339,9 +343,9 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
         const effectivePickup = getEffectivePickup(selectedRide);
         const effectiveDropoff = getEffectiveDropoff(selectedRide);
         const stats = getTravelStats(effectivePickup, effectiveDropoff, selectedRide.departureTime, selectedRide);
-        const distNum = parseInt(stats.distance);
-        const rate = selectedSize === 'small' ? 2 : selectedSize === 'medium' ? 2.5 : 3;
-        const totalPrice = Math.ceil(distNum * rate);
+        const distNum = parseInt(stats.distance, 10) || 0;
+        const rate = getRatePerKm(selectedSize);
+        const totalPrice = calculateParcelPrice(distNum, selectedSize);
 
         return (
             <View style={styles.content}>
@@ -462,10 +466,16 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                             {t(`parcel.size${selectedSize.charAt(0).toUpperCase() + selectedSize.slice(1)}` as any)} · {selectedSize === 'small' ? '< 2 kg' : selectedSize === 'medium' ? '2-10 kg' : '> 10 kg'}
                         </Text>
                         <Text style={[styles.summarySubtitle, { color: colors.subtextColor }]}>
-                            {t('parcel.pickupScheduled')} · {t('parcel.estPrice')}: ₹{selectedSize === 'small' ? '150' : selectedSize === 'medium' ? '280' : '450'}
+                            {t('parcel.pickupScheduled')} · {roadDistance !== null
+                                ? `${t('parcel.estPrice')}: ₹${calculateParcelPrice(roadDistance, selectedSize)}`
+                                : `Rate: ₹${getRatePerKm(selectedSize)}/km`}
                         </Text>
                     </View>
-                    <Text style={[styles.priceTag, { color: colors.primary }]}>₹{selectedSize === 'small' ? '150' : selectedSize === 'medium' ? '280' : '450'}</Text>
+                    <Text style={[styles.priceTag, { color: colors.primary }]}>
+                        {roadDistance !== null
+                            ? `₹${calculateParcelPrice(roadDistance, selectedSize)}`
+                            : `₹${getRatePerKm(selectedSize)}/km`}
+                    </Text>
                 </View>
             </View>
 
@@ -623,10 +633,11 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                             </View>
                         )}
                         {orderedRides.map((ride, index) => {
-                            const price = selectedSize === 'small' ? '150' : selectedSize === 'medium' ? '280' : '450';
                             const effectivePickup = getEffectivePickup(ride);
                             const effectiveDropoff = getEffectiveDropoff(ride);
                             const stats = getTravelStats(effectivePickup, effectiveDropoff, ride.departureTime, ride);
+                            const distNum = parseInt(stats.distance, 10) || 0;
+                            const estimatedPrice = calculateParcelPrice(distNum, selectedSize);
                             const showCommonPointDivider =
                                 directRides.length > 0 && commonPointRides.length > 0 && index === directRides.length;
                             const badgeLabel =
@@ -676,8 +687,8 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                                                 <Text style={[styles.vehicleNumber, { color: colors.subtextColor }]}>{ride.vehicleNumber}</Text>
                                             </View>
                                             <View style={styles.priceContainer}>
-                                                <Text style={[styles.label, { color: colors.subtextColor }]}>FIXED FAIR</Text>
-                                                <Text style={[styles.priceText, { color: '#00C853' }]}>₹ {price}</Text>
+                                                <Text style={[styles.label, { color: colors.subtextColor }]}>EST. FARE</Text>
+                                                <Text style={[styles.priceText, { color: '#00C853' }]}>₹ {estimatedPrice}</Text>
                                             </View>
                                         </View>
 
@@ -885,7 +896,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                                 setLoading(false);
                                 setStep('details');
                             } else {
-                                Alert.alert(t('common.error'), 'Please enter pickup and dropoff locations.');
+                                notify(t('common.error'), 'Please enter pickup and dropoff locations.');
                             }
                         }}>
                         <Text style={styles.scheduleButtonText}>

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity
 import { downloadCSV } from '../../utils/exportUtils';
 import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
+import { notify } from '../../utils/notify';
 
 interface UserStats {
      total: number;
@@ -72,13 +73,13 @@ export default function AdminVisitorsDetailView({ isDark, searchQuery = '' }: { 
                });
                const data = await res.json();
                if (res.ok) {
-                    alert(`Cleaned up ${data.deletedCount ?? 0} abandoned incomplete user registrations (older than 24h).`);
+                    notify('Cleanup Complete', `Cleaned up ${data.deletedCount ?? 0} abandoned incomplete user registrations (older than 24h).`);
                     fetchData();
                } else {
-                    alert(data.error || 'Failed to cleanup incomplete users.');
+                    notify('Error', data.error || 'Failed to cleanup incomplete users.');
                }
           } catch {
-               alert('Network error while cleaning up incomplete users.');
+               notify('Error', 'Network error while cleaning up incomplete users.');
           } finally {
                setLoading(false);
           }

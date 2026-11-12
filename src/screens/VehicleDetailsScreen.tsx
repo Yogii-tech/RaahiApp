@@ -5,13 +5,13 @@ import {
     TouchableOpacity,
     StyleSheet,
     ScrollView,
-    Alert,
     Modal,
     Image,
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
+import { notify } from '../utils/notify';
 
 import { API_BASE } from '../apiConfig';
 
@@ -26,7 +26,7 @@ const VehicleDetailsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
     const handleViewDocument = (label: string, url: string) => {
         if (!url) {
-            Alert.alert(t('common.error'), 'No document uploaded');
+            notify(t('common.error'), 'No document uploaded');
             return;
         }
 

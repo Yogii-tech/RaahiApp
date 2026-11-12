@@ -10,14 +10,15 @@ import {
     Platform,
     Image,
     ActivityIndicator,
-    Alert,
     Linking,
     BackHandler,
+    AppState,
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { apiRequest } from '../utils/api';
+import { notify, confirmAction } from '../utils/notify';
 import { useRoute, useNavigation } from '@react-navigation/native';
 
 interface Message {
@@ -67,6 +68,32 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
     const [isLoading, setIsLoading] = useState(true);
     const [isSending, setIsSending] = useState(false);
     const flatListRef = useRef<FlatList>(null);
+    const lastMarkedReadRef = useRef<string>('');
+    const [isAppActive, setIsAppActive] = useState<boolean>(() => {
+        if (Platform.OS === 'web') {
+            return typeof document === 'undefined' || document.visibilityState === 'visible';
+        }
+        return AppState.currentState === 'active';
+    });
+
+    useEffect(() => {
+        if (Platform.OS === 'web') {
+            if (typeof document === 'undefined') return;
+            const handleVisibility = () => {
+                setIsAppActive(document.visibilityState === 'visible');
+            };
+            document.addEventListener('visibilitychange', handleVisibility);
+            return () => document.removeEventListener('visibilitychange', handleVisibility);
+        }
+        const sub = AppState.addEventListener('change', (nextState) => {
+            setIsAppActive(nextState === 'active');
+        });
+        return () => sub?.remove?.();
+    }, []);
+
+    useEffect(() => {
+        lastMarkedReadRef.current = '';
+    }, [bookingId]);
 
     const fetchMessages = async () => {
         if (!bookingId) {
@@ -77,11 +104,23 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
             const response = await apiRequest(`/api/chat/${bookingId}`, { method: 'GET' }, logout);
             if (response.ok) {
                 const data = await response.json();
-                const safeMessages = Array.isArray(data) ? data : [];
+                const safeMessages: Message[] = Array.isArray(data) ? data : [];
                 setMessages(safeMessages);
-                // Mark as read
-                if (safeMessages.length > 0) {
-                    apiRequest(`/api/chat/${bookingId}/read`, { method: 'POST' }, logout).catch(() => {});
+                // Mark as read only when new incoming messages arrive
+                const myId = user?.id || (user as any)?._id;
+                const incoming = safeMessages.filter(m => !myId || m.senderId !== myId);
+                const latestIncoming = incoming[incoming.length - 1];
+                const latestIncomingId = latestIncoming
+                    ? (latestIncoming.id || (latestIncoming as any)._id || latestIncoming.createdAt || String(incoming.length))
+                    : '';
+                const readMarker = latestIncoming ? `${incoming.length}:${latestIncomingId}` : '';
+                if (readMarker && readMarker !== lastMarkedReadRef.current) {
+                    lastMarkedReadRef.current = readMarker;
+                    apiRequest(`/api/chat/${bookingId}/read`, { method: 'POST' }, logout).catch(() => {
+                        if (lastMarkedReadRef.current === readMarker) {
+                            lastMarkedReadRef.current = '';
+                        }
+                    });
                 }
             }
         } catch (err) {
@@ -92,10 +131,15 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
     };
 
     useEffect(() => {
+        if (!isAppActive) return;
         fetchMessages();
-        const interval = setInterval(fetchMessages, 3000); // Poll every 3s
+        const interval = setInterval(() => {
+            if (Platform.OS === 'web' && typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+            if (Platform.OS !== 'web' && AppState.currentState !== 'active') return;
+            fetchMessages();
+        }, 3000); // Poll every 3s while active
         return () => clearInterval(interval);
-    }, [bookingId]);
+    }, [bookingId, isAppActive]);
 
     useEffect(() => {
         const handleHardwareBack = () => {
@@ -123,7 +167,7 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
                 // Wait a bit then scroll to bottom
                 setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
             } else {
-                Alert.alert('Error', 'Failed to send message');
+                notify('Error', 'Failed to send message');
             }
         } catch (err) {
             console.error('Send message error:', err);
@@ -204,18 +248,16 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
                         onPress={() => {
                             const safePhone = (recipientPhone || '').replace(/[^0-9+]/g, '');
                             if (!safePhone) {
-                                Alert.alert('Phone Unavailable', 'The phone number for this user is not available.');
+                                notify('Phone Unavailable', 'The phone number for this user is not available.');
                                 return;
                             }
                             if (Platform.OS === 'web') {
-                                // On web, tel: links open the dialer app if available; else show the number
-                                const confirmed = window.confirm(`Call ${recipientName} at ${safePhone}?`);
-                                if (confirmed) {
+                                confirmAction('Call', `Call ${recipientName} at ${safePhone}?`, () => {
                                     window.open(`tel:${safePhone}`, '_self');
-                                }
+                                }, 'Call');
                             } else {
                                 Linking.openURL(`tel:${safePhone}`).catch(() => {
-                                    Alert.alert('Error', 'Could not open phone dialer. Number: ' + safePhone);
+                                    notify('Error', 'Could not open phone dialer. Number: ' + safePhone);
                                 });
                             }
                         }}

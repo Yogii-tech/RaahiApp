@@ -11,13 +11,14 @@ import {
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLanguage } from '../context/LanguageContext';
 import { apiRequest } from '../utils/api';
 import Icon from 'react-native-vector-icons/Ionicons';
 
 const PricingSettingsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
      const { colors, isDark } = useTheme();
-     const { user, token, setAuth, logout } = useAuth();
+     const { user, token, refreshToken, setAuth, logout } = useAuth();
      const { t } = useLanguage();
      const [rate, setRate] = useState<string>(user?.vehicle?.rate_per_km?.toString() || '5');
      const [loading, setLoading] = useState(false);
@@ -45,7 +46,9 @@ const PricingSettingsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
                }, logout);
 
                if (response.ok) {
-                    await setAuth(token!, null, { ...user!, vehicle: updatedVehicle });
+                    const latestToken = (await AsyncStorage.getItem('auth_token').catch(() => null)) || token;
+                    const latestRefresh = (await AsyncStorage.getItem('auth_refresh_token').catch(() => null)) || refreshToken;
+                    await setAuth(latestToken, latestRefresh, { ...user!, vehicle: updatedVehicle });
                     Alert.alert('Success', 'Pricing rate updated successfully');
                     onBack();
                } else {

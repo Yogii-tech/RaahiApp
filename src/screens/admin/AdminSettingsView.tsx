@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, TextInput } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
+import { notify } from '../../utils/notify';
 
 interface AdminUserEntry {
     id: string;
@@ -66,16 +67,23 @@ export default function AdminSettingsView({ isDark, activeTab: initialTab = 'adm
         ));
     };
 
+    const showPreviewNotice = (actionName: string) => {
+        notify(
+            'Preview / Demo Mode',
+            `"${actionName}" is preview-only in this release and does not persist changes to the backend.`
+        );
+    };
+
     const renderAdminsTab = () => (
         <View>
             <View style={[styles.tabCard, { backgroundColor: T.card, borderColor: T.border }]}>
                 <View style={styles.tabCardHeader}>
                     <View>
                         <Text style={[styles.tabCardTitle, { color: T.text }]}>Admin User Accounts</Text>
-                        <Text style={[styles.tabCardSubtitle, { color: T.subtext }]}>Manage who can access this portal.</Text>
+                        <Text style={[styles.tabCardSubtitle, { color: T.subtext }]}>Manage who can access this portal (demo directory).</Text>
                     </View>
-                    <TouchableOpacity style={styles.addBtn}>
-                        <Text style={styles.addBtnText}>+ Add Admin</Text>
+                    <TouchableOpacity style={styles.addBtn} onPress={() => showPreviewNotice('Add Admin')}>
+                        <Text style={styles.addBtnText}>+ Add Admin (Preview)</Text>
                     </TouchableOpacity>
                 </View>
 
@@ -104,7 +112,10 @@ export default function AdminSettingsView({ isDark, activeTab: initialTab = 'adm
                             </View>
                         </View>
                         {admin.role !== 'superadmin' && (
-                            <TouchableOpacity style={[styles.actionBtn, { borderColor: T.border }]}>
+                            <TouchableOpacity
+                                style={[styles.actionBtn, { borderColor: T.border }]}
+                                onPress={() => showPreviewNotice(`Manage ${admin.name}`)}
+                            >
                                 <Text style={[styles.actionBtnText, { color: T.subtext }]}>Manage</Text>
                             </TouchableOpacity>
                         )}
@@ -120,11 +131,11 @@ export default function AdminSettingsView({ isDark, activeTab: initialTab = 'adm
                 <View>
                     <Text style={[styles.tabCardTitle, { color: T.text }]}>Module Access Permissions (Admin Role)</Text>
                     <Text style={[styles.tabCardSubtitle, { color: T.subtext }]}>
-                        Fine-tune what the standard "Admin" role can view, edit, or delete.
+                        Fine-tune what the standard "Admin" role can view, edit, or delete (preview toggles only).
                     </Text>
                 </View>
-                <TouchableOpacity style={styles.savePermBtn}>
-                    <Text style={styles.savePermBtnText}>Save Changes</Text>
+                <TouchableOpacity style={styles.savePermBtn} onPress={() => showPreviewNotice('Save Permission Changes')}>
+                    <Text style={styles.savePermBtnText}>Save Changes (Preview)</Text>
                 </TouchableOpacity>
             </View>
 
@@ -210,13 +221,15 @@ export default function AdminSettingsView({ isDark, activeTab: initialTab = 'adm
             {/* Danger Zone */}
             <View style={[styles.tabCard, { backgroundColor: T.card, borderColor: '#DC354520' }]}>
                 <Text style={[styles.tabCardTitle, { color: '#DC3545', marginBottom: 4 }]}>Danger Zone</Text>
-                <Text style={[styles.tabCardSubtitle, { color: T.subtext, marginBottom: 20 }]}>Irreversible actions. Proceed with extreme caution.</Text>
+                <Text style={[styles.tabCardSubtitle, { color: T.subtext, marginBottom: 20 }]}>
+                    Destructive admin actions are disabled in Preview / Demo Mode. Sign Out remains active.
+                </Text>
                 <View style={{ flexDirection: 'row', gap: 12, flexWrap: 'wrap' }}>
-                    <TouchableOpacity style={styles.dangerBtn}>
-                        <Text style={styles.dangerBtnText}>🗑 Purge Audit Logs</Text>
+                    <TouchableOpacity style={styles.dangerBtn} onPress={() => showPreviewNotice('Purge Audit Logs')}>
+                        <Text style={styles.dangerBtnText}>🗑 Purge Audit Logs (Preview)</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.dangerBtn}>
-                        <Text style={styles.dangerBtnText}>⚙️ Reset All Settings</Text>
+                    <TouchableOpacity style={styles.dangerBtn} onPress={() => showPreviewNotice('Reset All Settings')}>
+                        <Text style={styles.dangerBtnText}>⚙️ Reset All Settings (Preview)</Text>
                     </TouchableOpacity>
                     <TouchableOpacity onPress={logout} style={[styles.dangerBtn, { backgroundColor: '#DC3545', borderColor: '#DC3545' }]}>
                         <Text style={[styles.dangerBtnText, { color: '#fff' }]}>🚪 Sign Out</Text>
@@ -233,6 +246,15 @@ export default function AdminSettingsView({ isDark, activeTab: initialTab = 'adm
                 <Text style={[styles.pageTitle, { color: T.text }]}>System Administration</Text>
                 <Text style={[styles.pageSubtitle, { color: T.subtext }]}>
                     Configure admin accounts, access control, and platform behavior.
+                </Text>
+            </View>
+
+            <View style={[styles.previewBanner, { borderColor: '#FCB92C66', backgroundColor: isDark ? 'rgba(252, 185, 44, 0.12)' : '#FFFBEB' }]}>
+                <Text style={[styles.previewBannerTitle, { color: isDark ? '#FCD34D' : '#92400E' }]}>
+                    Preview / Demo Mode
+                </Text>
+                <Text style={[styles.previewBannerText, { color: isDark ? '#FDE68A' : '#78350F' }]}>
+                    Admin accounts, permission toggles, route multipliers, and platform configuration here are local preview controls and do not persist to the backend.
                 </Text>
             </View>
 
@@ -266,7 +288,10 @@ export default function AdminSettingsView({ isDark, activeTab: initialTab = 'adm
 
 const styles = StyleSheet.create({
     container: { flex: 1, padding: 24 },
-    pageHeader: { marginBottom: 24 },
+    pageHeader: { marginBottom: 16 },
+    previewBanner: { borderWidth: 1, borderRadius: 8, paddingVertical: 10, paddingHorizontal: 14, marginBottom: 18 },
+    previewBannerTitle: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
+    previewBannerText: { fontSize: 12, lineHeight: 18 },
     pageTitle: { fontSize: 20, fontWeight: '600' },
     pageSubtitle: { fontSize: 13, marginTop: 4 },
     tabNav: { flexDirection: 'row', borderBottomWidth: 1, marginBottom: 0 },

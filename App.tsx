@@ -11,6 +11,7 @@ import {
   Image,
   StyleSheet,
   Platform,
+  AppState,
 } from 'react-native';
 import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -259,6 +260,27 @@ function MainTabs() {
   const navigation = useNavigation();
 
   const isDriver = user?.role === 'driver';
+  const [isAppActive, setIsAppActive] = useState<boolean>(() => {
+    if (Platform.OS === 'web') {
+      return typeof document === 'undefined' || document.visibilityState === 'visible';
+    }
+    return AppState.currentState === 'active';
+  });
+
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      if (typeof document === 'undefined') return;
+      const handleVisibilityChange = () => {
+        setIsAppActive(document.visibilityState === 'visible');
+      };
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    }
+    const sub = AppState.addEventListener('change', (nextState) => {
+      setIsAppActive(nextState === 'active');
+    });
+    return () => sub?.remove?.();
+  }, []);
 
   // ─── FCM: register when authenticated, unregister on logout ─────────────
   const handleFCMNavigate = useCallback((type: string, data: any) => {
@@ -318,13 +340,30 @@ function MainTabs() {
     }
   }, [user]);
 
+  const fcmRegisteredTokenRef = useRef<string | null>(null);
+  const activeTokenRef = useRef<string | null>(token);
+  activeTokenRef.current = token;
+
   useEffect(() => {
-    if (token) {
+    if (token && !fcmRegisteredTokenRef.current) {
+      fcmRegisteredTokenRef.current = token;
       registerFCM(token, handleFCMNavigate);
-    } else {
-      unregisterFCM();
+    } else if (!token && fcmRegisteredTokenRef.current) {
+      const lastToken = fcmRegisteredTokenRef.current;
+      fcmRegisteredTokenRef.current = null;
+      unregisterFCM(lastToken);
     }
   }, [token, handleFCMNavigate]);
+
+  useEffect(() => {
+    return () => {
+      if (fcmRegisteredTokenRef.current) {
+        const lastToken = activeTokenRef.current || fcmRegisteredTokenRef.current;
+        fcmRegisteredTokenRef.current = null;
+        unregisterFCM(lastToken);
+      }
+    };
+  }, []);
   // ────────────────────────────────────────────────────────────────────────
 
 
@@ -337,10 +376,15 @@ function MainTabs() {
   });
 
   useEffect(() => {
+    if (!token || !isAppActive) return;
     fetchNotificationCount();
-    const interval = setInterval(fetchNotificationCount, 10000);
+    const interval = setInterval(() => {
+      if (Platform.OS === 'web' && typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      if (Platform.OS !== 'web' && AppState.currentState !== 'active') return;
+      fetchNotificationCount();
+    }, 10000);
     return () => clearInterval(interval);
-  }, [user, token]);
+  }, [user, token, isAppActive]);
 
   const fetchNotificationCount = async () => {
     try {

@@ -22,8 +22,16 @@ jobs:
       with:
         node-version: ${{ matrix.node-version }}
 
+    - name: Install Dependencies
+      run: npm install
+
+    - name: Type-check
+      run: npx tsc --noEmit
+
+    - name: Run Tests
+      run: npm test -- --watchAll=false --forceExit
+
     - name: Build
       run: |
-        npm install
         npm run build
         # NOTE: do not run `npm run web` here - it starts the webpack dev server, which never exits and hangs CI.

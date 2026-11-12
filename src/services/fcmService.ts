@@ -204,7 +204,8 @@ async function registerNativeFCM(authToken: string, onNavigate: NavigateToScreen
     if (nativeTokenRefreshUnsubscribe) nativeTokenRefreshUnsubscribe();
     nativeTokenRefreshUnsubscribe = onTokenRefresh(messagingInstance, async (newToken: string) => {
       console.log('[FCM Native] Token refreshed, uploading...');
-      await uploadToken(newToken, authToken);
+      const latestAuthToken = (await AsyncStorage.getItem('auth_token').catch(() => null)) || authToken;
+      await uploadToken(newToken, latestAuthToken);
     });
 
     console.log('[FCM Native] Registration complete.');
@@ -367,6 +368,7 @@ export async function unregisterFCM(authToken?: string): Promise<void> {
           Authorization: `Bearer ${authToken}`,
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({ fcmToken: currentFCMToken }),
       });
       console.log('[FCM] Token removed from backend on logout');

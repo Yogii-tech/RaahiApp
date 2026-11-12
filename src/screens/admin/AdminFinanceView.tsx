@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, ScrollView, TouchableOpacity, TextInput } from 'react-native';
 import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
 import { downloadCSV } from '../../utils/exportUtils';
+import { notify } from '../../utils/notify';
 
 interface FinancialTransaction {
     id: string;
@@ -15,12 +16,14 @@ interface FinancialTransaction {
     date: string;
 }
 
-export default function AdminFinanceView({ token, searchQuery = '', isDark }: { token: string; searchQuery?: string; isDark: boolean }) {
+export default function AdminFinanceView({ token: _token, searchQuery = '', isDark }: { token: string; searchQuery?: string; isDark: boolean }) {
     const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
     const [loading, setLoading] = useState(true);
     const [commissionRate, setCommissionRate] = useState('10.0');
     const [activeTab, setActiveTab] = useState<'all' | 'settled' | 'pending'>('all');
     const { fetchWithAuth } = useAuth();
+    const fetchWithAuthRef = useRef(fetchWithAuth);
+    fetchWithAuthRef.current = fetchWithAuth;
 
     const T = {
         bg: isDark ? '#111827' : '#F7F9FC',
@@ -33,7 +36,7 @@ export default function AdminFinanceView({ token, searchQuery = '', isDark }: { 
 
     useEffect(() => {
         // Fetch rides list to build mock financial ledger
-        fetchWithAuth(`${API_BASE}/api/admin/rides`)
+        fetchWithAuthRef.current(`${API_BASE}/api/admin/rides`)
             .then(res => res.json())
             .then(rides => {
                 if (Array.isArray(rides)) {
@@ -81,7 +84,17 @@ export default function AdminFinanceView({ token, searchQuery = '', isDark }: { 
     });
 
     const handleSaveCommission = () => {
-        alert(`Commission rate successfully updated to ${commissionRate}%!`);
+        notify(
+            'Preview / Demo Mode',
+            `Commission rate preview updated locally to ${commissionRate}%. Changes are not persisted to the backend.`
+        );
+    };
+
+    const handleSchedulePreview = (schedule: string) => {
+        notify(
+            'Preview / Demo Mode',
+            `Settlement schedule "${schedule}" is a demo control and does not persist to the backend.`
+        );
     };
 
     const exportData = filteredTx.map(t => ({
@@ -112,6 +125,15 @@ export default function AdminFinanceView({ token, searchQuery = '', isDark }: { 
                 >
                     <Text style={styles.exportBtnText}>Export Ledger CSV</Text>
                 </TouchableOpacity>
+            </View>
+
+            <View style={[styles.previewBanner, { borderColor: '#FCB92C66', backgroundColor: isDark ? 'rgba(252, 185, 44, 0.12)' : '#FFFBEB' }]}>
+                <Text style={[styles.previewBannerTitle, { color: isDark ? '#FCD34D' : '#92400E' }]}>
+                    Preview / Demo Mode
+                </Text>
+                <Text style={[styles.previewBannerText, { color: isDark ? '#FDE68A' : '#78350F' }]}>
+                    Ledger entries, commission calculations, and settlement schedules are simulated client-side from ride records and do not persist to the backend.
+                </Text>
             </View>
 
             {/* Financial Summary Cards */}
@@ -148,21 +170,22 @@ export default function AdminFinanceView({ token, searchQuery = '', isDark }: { 
                             <Text style={[styles.percentSign, { color: T.text }]}>%</Text>
                         </View>
                         <TouchableOpacity style={styles.saveBtn} onPress={handleSaveCommission}>
-                            <Text style={styles.saveBtnText}>Update Rate</Text>
+                            <Text style={styles.saveBtnText}>Preview Rate (Demo)</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
 
                 {/* Auto Settlement Config */}
                 <View style={[styles.configCard, { backgroundColor: T.card, borderColor: T.border }]}>
-                    <Text style={[styles.cardTitle, { color: T.text }]}>Settlement Schedule</Text>
+                    <Text style={[styles.cardTitle, { color: T.text }]}>Settlement Schedule (Preview Only)</Text>
                     <Text style={[styles.cardSubtitle, { color: T.subtext }]}>
-                        System trigger for moving pending ledger balances to bank accounts.
+                        Demo UI only — automated bank settlement triggers are not connected to a backend payout service.
                     </Text>
                     <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
                         {['Daily', 'Weekly (Fri)', 'Monthly'].map(opt => (
                             <TouchableOpacity
                                 key={opt}
+                                onPress={() => handleSchedulePreview(opt)}
                                 style={[
                                     styles.optBtn,
                                     { borderColor: T.border },
@@ -248,7 +271,10 @@ export default function AdminFinanceView({ token, searchQuery = '', isDark }: { 
 
 const styles = StyleSheet.create({
     container: { flex: 1, padding: 24 },
-    headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
+    headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+    previewBanner: { borderWidth: 1, borderRadius: 8, paddingVertical: 10, paddingHorizontal: 14, marginBottom: 20 },
+    previewBannerTitle: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
+    previewBannerText: { fontSize: 12, lineHeight: 18 },
     sectionTitle: { fontSize: 20, fontWeight: '600' },
     sectionSubtitle: { fontSize: 13, marginTop: 4 },
     exportBtn: { backgroundColor: '#3B7DDD', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 4 },

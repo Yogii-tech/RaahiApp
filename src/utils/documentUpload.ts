@@ -1,24 +1,14 @@
-import { Alert, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE } from '../apiConfig';
+import { notify, confirmAction } from './notify';
+import { refreshAuthToken } from './api';
+
+export { notify, confirmAction };
 
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024; // must match backend limit (5MB)
 const COMPRESS_ABOVE_BYTES = 1.5 * 1024 * 1024;
 const MAX_IMAGE_DIMENSION = 2000;
 const UPLOAD_TIMEOUT_MS = 60000;
-
-/**
- * Shows a message the user can actually see.
- * NOTE: React Native's Alert.alert is a silent no-op on react-native-web, which is
- * why upload failures used to be invisible in the browser.
- */
-export const notify = (title: string, message: string) => {
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-        window.alert(`${title}\n\n${message}`);
-    } else {
-        Alert.alert(title, message);
-    }
-};
 
 /**
  * Downscales large photos (typical phone camera shots are 3-12MB) so the upload is fast
@@ -77,45 +67,6 @@ export interface UploadAuthOptions {
     onTokenRefreshed?: (newToken: string) => void;
 }
 
-/**
- * Exchanges a refresh token for a new access token. Returns null if it is not possible.
- * The upload endpoint is called with a raw token (not through apiRequest), so without this
- * an expired 24h access token made every document upload fail with "Invalid or expired token".
- */
-const refreshAccessToken = async (refreshToken?: string | null): Promise<string | null> => {
-    let refresh = refreshToken || null;
-    if (!refresh) {
-        try {
-            refresh = await AsyncStorage.getItem('auth_refresh_token');
-        } catch {
-            refresh = null;
-        }
-    }
-    if (!refresh) return null;
-    try {
-        const res = await fetch(`${API_BASE}/api/auth/refresh`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ refresh_token: refresh }),
-        });
-        if (!res.ok) return null;
-        const data = await res.json();
-        if (data?.token) {
-            try {
-                await AsyncStorage.setItem('auth_token', data.token);
-                if (data.refresh_token) {
-                    await AsyncStorage.setItem('auth_refresh_token', data.refresh_token);
-                }
-            } catch {
-                // ignore storage write failures
-            }
-        }
-        return data?.token || null;
-    } catch {
-        return null;
-    }
-};
-
 /** Uploads one file to the backend and returns its public URL. Throws Error with a user-readable message. */
 export const uploadDocumentFile = async (
     file: File,
@@ -146,6 +97,7 @@ export const uploadDocumentFile = async (
                 method: 'POST',
                 headers: { Authorization: `Bearer ${token}` },
                 body: formData,
+                credentials: 'include',
                 signal: controller ? controller.signal : undefined,
             });
         } catch (err: any) {
@@ -160,9 +112,12 @@ export const uploadDocumentFile = async (
 
     let response = await sendOnce(authToken);
 
-    // Access token expired/invalid: silently refresh once and retry.
+    // Access token expired/invalid: silently refresh once via shared mutex and retry.
     if (response.status === 401) {
-        const newToken = await refreshAccessToken(options.refreshToken);
+        const latestToken = await AsyncStorage.getItem('auth_token').catch(() => null);
+        const newToken = (latestToken && latestToken !== authToken)
+            ? latestToken
+            : await refreshAuthToken(options.refreshToken);
         if (newToken) {
             options.onTokenRefreshed?.(newToken);
             response = await sendOnce(newToken);

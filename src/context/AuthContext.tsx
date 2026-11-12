@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE } from '../apiConfig';
 import { setGlobalAuthenticated } from '../utils/browserHistory';
+import { normalizeHeaders, refreshAuthToken, registerAuthTokenListener } from '../utils/api';
+import { unregisterFCM } from '../services/fcmService';
 
 interface User {
     id: string;
@@ -81,6 +83,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loadCredentials();
     }, []);
 
+    // Keep React state in sync whenever apiRequest or uploadDocumentFile refreshes a token
+    useEffect(() => {
+        const unsubscribe = registerAuthTokenListener((newToken, newRefresh) => {
+            if (newToken) {
+                setToken(newToken);
+                setGlobalAuthenticated(true);
+            }
+            if (newRefresh) {
+                setRefreshToken(newRefresh);
+            }
+        });
+        return unsubscribe;
+    }, []);
+
     const setAuth = async (newToken: string | null, newRefresh: string | null, newUser: User | null) => {
         setToken(newToken);
         setRefreshToken(newRefresh);
@@ -102,12 +118,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     const logout = async () => {
+        const currentToken = (await AsyncStorage.getItem('auth_token').catch(() => null)) || token;
         try {
-            const currentToken = await AsyncStorage.getItem('auth_token');
+            // Unregister FCM while the Bearer token is still valid and before clearing storage
+            await unregisterFCM(currentToken || undefined);
+        } catch (e) {
+            console.warn('FCM unregister on logout failed:', e);
+        }
+        try {
             await fetch(`${API_BASE}/api/user/logout`, {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${currentToken}`,
+                    ...(currentToken ? { 'Authorization': `Bearer ${currentToken}` } : {}),
                     'Content-Type': 'application/json'
                 },
                 credentials: 'include',
@@ -118,55 +140,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await setAuth(null, null, null);
     };
 
-    // Try to get a new access token using the stored refresh token
+    // Try to get a new access token using the shared single-flight refresh mutex
     const tryRefreshToken = async (): Promise<string | null> => {
-        const storedRefresh = await AsyncStorage.getItem('auth_refresh_token');
-        if (!storedRefresh) return null;
-        try {
-            const res = await fetch(`${API_BASE}/api/auth/refresh`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ refresh_token: storedRefresh }),
-                credentials: 'include',
-            });
-            if (!res.ok) {
-                // Refresh token itself is invalid/expired - force logout
-                await setAuth(null, null, null);
-                return null;
-            }
-            const data = await res.json();
-            const newToken = data.token;
-            if (newToken) {
-                setToken(newToken);
-                await AsyncStorage.setItem('auth_token', newToken);
-            }
-            if (data.refresh_token) {
-                setRefreshToken(data.refresh_token);
-                await AsyncStorage.setItem('auth_refresh_token', data.refresh_token);
-            }
-            return newToken || null;
-        } catch (e) {
-            console.error('Token refresh failed:', e);
-            return null;
-        }
+        return refreshAuthToken();
     };
 
-    // A fetch wrapper that auto-refreshes token on 401
+    // A fetch wrapper that auto-refreshes token on 401 using the shared mutex
     const fetchWithAuth = async (url: string, options: RequestInit = {}): Promise<Response> => {
         const currentToken = await AsyncStorage.getItem('auth_token');
-        const headers = {
-            ...options.headers,
-            Authorization: `Bearer ${currentToken}`,
-            'Content-Type': 'application/json',
+        const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+        const customHeaders = normalizeHeaders(options.headers);
+        const headers: Record<string, string> = {
+            ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
+            ...customHeaders,
         };
-        let res = await fetch(url, { ...options, headers });
+        if (currentToken) {
+            headers['Authorization'] = `Bearer ${currentToken}`;
+        }
+
+        let res = await fetch(url, {
+            ...options,
+            headers,
+            credentials: 'include',
+        });
+
         if (res.status === 401) {
-            // Access token expired — try to refresh silently
-            const newToken = await tryRefreshToken();
+            // Access token expired — check if another concurrent request already rotated it, else refresh
+            const latestToken = await AsyncStorage.getItem('auth_token').catch(() => null);
+            const newToken = (latestToken && latestToken !== currentToken)
+                ? latestToken
+                : await tryRefreshToken();
             if (newToken) {
                 res = await fetch(url, {
                     ...options,
                     headers: { ...headers, Authorization: `Bearer ${newToken}` },
+                    credentials: 'include',
                 });
             }
             // If still 401 after retry or if refresh was not possible, force logout

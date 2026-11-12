@@ -6,16 +6,18 @@ import {
     TouchableOpacity,
     Switch,
     ScrollView,
-    Alert,
     Modal,
+    AppState,
     Platform,
 } from 'react-native';
+import { useIsFocused } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE } from '../apiConfig';
 import JeepLayout from '../components/JeepLayout';
 import { useLanguage } from '../context/LanguageContext';
 import { apiRequest } from '../utils/api';
+import { notify } from '../utils/notify';
 
 interface BookRideScreenProps {
     ride: {
@@ -48,12 +50,34 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
     const { colors, isDark } = useTheme();
     const { token, logout } = useAuth();
     const { t } = useLanguage();
+    const isFocused = useIsFocused();
     const [ride, setRide] = useState(initialRide);
     const [selectedSeats, setSelectedSeats] = useState<number[]>([]);
     const [roofCarrier, setRoofCarrier] = useState(false);
     const [loading, setLoading] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [bookingId, setBookingId] = useState('');
+    const [isAppActive, setIsAppActive] = useState<boolean>(() => {
+        if (Platform.OS === 'web') {
+            return typeof document === 'undefined' || document.visibilityState === 'visible';
+        }
+        return AppState.currentState === 'active';
+    });
+
+    useEffect(() => {
+        if (Platform.OS === 'web') {
+            if (typeof document === 'undefined') return;
+            const handleVisibility = () => {
+                setIsAppActive(document.visibilityState === 'visible');
+            };
+            document.addEventListener('visibilitychange', handleVisibility);
+            return () => document.removeEventListener('visibilitychange', handleVisibility);
+        }
+        const sub = AppState.addEventListener('change', (nextState) => {
+            setIsAppActive(nextState === 'active');
+        });
+        return () => sub?.remove?.();
+    }, []);
 
     const isPartialMatch = Boolean(ride.isPartialMatch ?? initialRide.isPartialMatch);
     const matchType = ride.matchType || initialRide.matchType;
@@ -78,10 +102,15 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
     const totalPrice = Math.round(unitPrice * selectedSeats.length);
 
     useEffect(() => {
+        if (!isFocused || !isAppActive) return;
         fetchRideDetails();
-        const interval = setInterval(fetchRideDetails, 5000); // Poll every 5 seconds for real-time
+        const interval = setInterval(() => {
+            if (Platform.OS === 'web' && typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+            if (Platform.OS !== 'web' && AppState.currentState !== 'active') return;
+            fetchRideDetails();
+        }, 5000); // Poll every 5 seconds while focused and active
         return () => clearInterval(interval);
-    }, []);
+    }, [initialRide.id, isFocused, isAppActive]);
 
     const fetchRideDetails = async () => {
         try {
@@ -129,7 +158,7 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
 
     const handleBook = async () => {
         if (selectedSeats.length === 0) {
-            Alert.alert(t('book.wait'), t('book.selectAtLeastOne'));
+            notify(t('book.wait'), t('book.selectAtLeastOne'));
             return;
         }
 
@@ -155,20 +184,12 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
             } else {
                 const errorData = await response.json().catch(() => ({}));
                 const errorMsg = errorData.error || t('book.failBook') || 'Failed to book ride';
-                if (Platform.OS === 'web') {
-                    window.alert(errorMsg);
-                } else {
-                    Alert.alert(t('common.error'), errorMsg);
-                }
+                notify(t('common.error'), errorMsg);
             }
         } catch (err) {
             console.error('Booking error:', err);
             const errStr = t('book.errorConnect') || 'Error connecting to server';
-            if (Platform.OS === 'web') {
-                window.alert(errStr);
-            } else {
-                Alert.alert(t('common.error'), errStr);
-            }
+            notify(t('common.error'), errStr);
         } finally {
             setLoading(false);
         }

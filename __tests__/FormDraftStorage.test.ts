@@ -1,7 +1,9 @@
+import { Platform } from 'react-native';
 import { saveFormDraft, loadFormDraft, clearFormDraft } from '../src/utils/formDraftStorage';
 
 describe('FormDraftStorage Utility Tests', () => {
   const originalSessionStorage = window.sessionStorage;
+  const originalOS = Platform.OS;
 
   beforeEach(() => {
     let store: Record<string, string> = {};
@@ -18,6 +20,10 @@ describe('FormDraftStorage Utility Tests', () => {
       },
     };
 
+    Object.defineProperty(Platform, 'OS', {
+      value: 'web',
+      configurable: true,
+    });
     Object.defineProperty(window, 'sessionStorage', {
       value: mockStorage,
       writable: true,
@@ -25,13 +31,17 @@ describe('FormDraftStorage Utility Tests', () => {
   });
 
   afterAll(() => {
+    Object.defineProperty(Platform, 'OS', {
+      value: originalOS,
+      configurable: true,
+    });
     Object.defineProperty(window, 'sessionStorage', {
       value: originalSessionStorage,
       writable: true,
     });
   });
 
-  test('should save and load form draft correctly', () => {
+  test('should save and load form draft correctly on web', () => {
     const draftData = { pickup: 'Kotdwar', dropoff: 'Pauri', seats: 2 };
     saveFormDraft('test_route', draftData);
 
@@ -51,5 +61,15 @@ describe('FormDraftStorage Utility Tests', () => {
 
     const loaded = loadFormDraft('temp_draft', null);
     expect(loaded).toBeNull();
+  });
+
+  test('should return fallback without touching sessionStorage on native platforms', () => {
+    Object.defineProperty(Platform, 'OS', {
+      value: 'ios',
+      configurable: true,
+    });
+    const fallback = { pickup: 'Default' };
+    saveFormDraft('native_draft', { pickup: 'Saved' });
+    expect(loadFormDraft('native_draft', fallback)).toEqual(fallback);
   });
 });

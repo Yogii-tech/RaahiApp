@@ -97,6 +97,15 @@ export default function AdminAuditLogsView({ isDark, searchQuery = '' }: { isDar
                 </TouchableOpacity>
             </View>
 
+            <View style={[styles.previewBanner, { borderColor: '#FCB92C66', backgroundColor: isDark ? 'rgba(252, 185, 44, 0.12)' : '#FFFBEB' }]}>
+                <Text style={[styles.previewBannerTitle, { color: isDark ? '#FCD34D' : '#92400E' }]}>
+                    Preview / Demo Mode
+                </Text>
+                <Text style={[styles.previewBannerText, { color: isDark ? '#FDE68A' : '#78350F' }]}>
+                    Audit entries shown below are static sample records for UI preview. Live backend audit log streaming is not yet connected.
+                </Text>
+            </View>
+
             {/* KPI Summary Row */}
             <View style={styles.kpiRow}>
                 {[
@@ -207,7 +216,10 @@ export default function AdminAuditLogsView({ isDark, searchQuery = '' }: { isDar
 
 const styles = StyleSheet.create({
     container: { flex: 1, padding: 24 },
-    headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
+    headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+    previewBanner: { borderWidth: 1, borderRadius: 8, paddingVertical: 10, paddingHorizontal: 14, marginBottom: 20 },
+    previewBannerTitle: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
+    previewBannerText: { fontSize: 12, lineHeight: 18 },
     sectionTitle: { fontSize: 20, fontWeight: '600' },
     sectionSubtitle: { fontSize: 13, marginTop: 4 },
     exportBtn: { backgroundColor: '#3B7DDD', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 4 },

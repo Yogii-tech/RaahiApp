@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import {
     View, Text, StyleSheet, FlatList, ActivityIndicator,
-    TouchableOpacity, Alert, Platform, Modal
+    TouchableOpacity, Modal, AppState, Platform
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { apiRequest } from '../utils/api';
+import { notify } from '../utils/notify';
 import Icon from 'react-native-vector-icons/Ionicons';
 
 interface RequestsOverlayProps {
@@ -70,8 +71,7 @@ const RatingModal: React.FC<RatingModalProps> = ({ visible, rideId, driverName, 
 
     const handleSubmit = async () => {
         if (rating === 0) {
-            if (Platform.OS === 'web') window.alert('Please select a star rating before submitting.');
-            else Alert.alert('Rating Required', 'Please select at least 1 star.');
+            notify('Rating Required', 'Please select a star rating before submitting.');
             return;
         }
         // Guard: block if a submission is already in flight
@@ -95,12 +95,10 @@ const RatingModal: React.FC<RatingModalProps> = ({ visible, rideId, driverName, 
                 } else {
                     msg = d.error || 'Failed to submit review. Please try again.';
                 }
-                if (Platform.OS === 'web') window.alert(msg);
-                else Alert.alert('Error', msg);
+                notify('Error', msg);
             }
         } catch {
-            if (Platform.OS === 'web') window.alert('Connection error. Please try again.');
-            else Alert.alert('Error', 'Connection error. Please try again.');
+            notify('Error', 'Connection error. Please try again.');
         } finally {
             submittingRef.current = false;
             setSubmitting(false);
@@ -209,12 +207,38 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
     });
 
     const isDriver = user?.role === 'driver';
+    const [isAppActive, setIsAppActive] = useState<boolean>(() => {
+        if (Platform.OS === 'web') {
+            return typeof document === 'undefined' || document.visibilityState === 'visible';
+        }
+        return AppState.currentState === 'active';
+    });
 
     useEffect(() => {
-        fetchData();
-        const interval = setInterval(fetchData, 5000);
-        return () => clearInterval(interval);
+        if (Platform.OS === 'web') {
+            if (typeof document === 'undefined') return;
+            const handleVisibility = () => {
+                setIsAppActive(document.visibilityState === 'visible');
+            };
+            document.addEventListener('visibilitychange', handleVisibility);
+            return () => document.removeEventListener('visibilitychange', handleVisibility);
+        }
+        const sub = AppState.addEventListener('change', (nextState) => {
+            setIsAppActive(nextState === 'active');
+        });
+        return () => sub?.remove?.();
     }, []);
+
+    useEffect(() => {
+        if (!isAppActive) return;
+        fetchData();
+        const interval = setInterval(() => {
+            if (Platform.OS === 'web' && typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+            if (Platform.OS !== 'web' && AppState.currentState !== 'active') return;
+            fetchData();
+        }, 5000);
+        return () => clearInterval(interval);
+    }, [isAppActive]);
 
     useEffect(() => {
         fetchSystemNotifs();
@@ -267,7 +291,7 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
                 fetchData();
             }
         } catch (err) {
-            Alert.alert(t('common.error'), 'Could not update status.');
+            notify(t('common.error'), 'Could not update status.');
         }
     };
 

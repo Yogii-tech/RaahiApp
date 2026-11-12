@@ -208,7 +208,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
 
     const handleSendOtp = async (isAdmin = false) => {
         if (phoneNumber.trim().length !== 10) {
-            Alert.alert(t('common.error'), t('login.invalidPhone'));
+            notify(t('common.error'), t('login.invalidPhone'));
             return;
         }
 
@@ -234,12 +234,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 
                 setResendTimer(119);
                 navigateToStep(isAdmin ? 'admin_otp' : 'otp');
-                Alert.alert(
+                notify(
                     t('login.otpSent'),
                     `Firebase OTP request successful for +91 ${phoneNumber.trim()}.\nPlease enter the 6-digit code.`
                 );
             } else {
-                Alert.alert('Error', 'Firebase Web Auth is supported on Web browsers.');
+                notify('Error', 'Firebase Web Auth is supported on Web browsers.');
             }
         } catch (err: any) {
             console.error('[Firebase OTP Send Error]', err);
@@ -256,17 +256,17 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
             const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'goraahi.in';
             
             if (errCode === 'auth/unauthorized-domain' || errMsg.includes('auth/captcha-check-failed') || errMsg.includes('Hostname match not found')) {
-                Alert.alert(
+                notify(
                     'Domain Not Authorized in Firebase Console',
                     `Firebase error: Hostname match not found for '${currentHost}'.\n\nHow to Fix in 30 Seconds:\n1. Open Firebase Console (project-4e312d2c-0d4c-4929-860).\n2. Go to Authentication -> Settings -> Authorized domains.\n3. Click 'Add domain', type '${currentHost}', and click Save.\n4. Also add 'www.${currentHost.replace('www.', '')}'.`
                 );
             } else if (errCode === 'auth/captcha-check-failed' || errCode === 'auth/invalid-app-credential' || errCode === 'auth/quota-exceeded' || errCode === 'auth/too-many-requests') {
-                Alert.alert(
+                notify(
                     'Firebase SMS Request Error',
                     `Firebase error (${errCode}): ${errMsg}\n\nPlease check Firebase Console -> Authentication -> Sign-in method -> Phone to verify SMS settings and quotas.`
                 );
             } else {
-                Alert.alert('Firebase SMS Error', `${errMsg} (${errCode || 'Unknown'})`);
+                notify('Firebase SMS Error', `${errMsg} (${errCode || 'Unknown'})`);
             }
         } finally {
             setLoading(false);
@@ -274,9 +274,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
     };
 
     const handleAdminVerifyOtp = async () => {
-        if (!otp.trim()) { Alert.alert('Error', 'Enter OTP'); return; }
+        if (!otp.trim()) { notify('Error', 'Enter OTP'); return; }
         if (!confirmationResult) {
-            Alert.alert('Error', 'No active Firebase OTP session found. Request a new OTP.');
+            notify('Error', 'No active Firebase OTP session found. Request a new OTP.');
             return;
         }
         setLoading(true);
@@ -293,18 +293,18 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 }),
             });
             const data = await response.json();
-            if (!response.ok) { Alert.alert('Error', data.error || 'Invalid OTP'); return; }
+            if (!response.ok) { notify('Error', data.error || 'Invalid OTP'); return; }
             setAdminTempToken(data.token || null);
             setAdminTempRefreshToken(data.refresh_token || null);
             setAdminTempUser(data.user);
             navigateToStep('admin_secret');
         } catch (fbErr: any) {
-            Alert.alert('Error', fbErr?.message || 'Invalid Firebase OTP code');
+            notify('Error', fbErr?.message || 'Invalid Firebase OTP code');
         } finally { setLoading(false); }
     };
 
     const handleAdminPromote = async () => {
-        if (!adminSecretKey.trim()) { Alert.alert('Error', 'Enter secret key'); return; }
+        if (!adminSecretKey.trim()) { notify('Error', 'Enter secret key'); return; }
         setLoading(true);
         try {
             const promoteRes = await fetch(`${API_BASE}/api/auth/promote-admin`, {
@@ -314,24 +314,24 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
             });
             const promoteData = await promoteRes.json();
             if (!promoteRes.ok) {
-                Alert.alert('Access Denied', promoteData.error || 'Invalid secret key');
+                notify('Access Denied', promoteData.error || 'Invalid secret key');
                 return;
             }
             await setAuth(adminTempToken, adminTempRefreshToken, { ...adminTempUser, role: 'admin' });
             onAuthenticated();
         } catch {
-            Alert.alert('Error', 'Promotion failed. Check secret key.');
+            notify('Error', 'Promotion failed. Check secret key.');
         } finally { setLoading(false); }
     };
 
     const handleVerifyOtp = async () => {
         if (!otp.trim()) {
-            Alert.alert(t('common.error'), t('login.enterOtpError'));
+            notify(t('common.error'), t('login.enterOtpError'));
             return;
         }
 
         if (!confirmationResult) {
-            Alert.alert(t('common.error'), 'No active Firebase OTP session found. Please request a new OTP.');
+            notify(t('common.error'), 'No active Firebase OTP session found. Please request a new OTP.');
             return;
         }
 
@@ -353,7 +353,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
             const data = await response.json();
 
             if (!response.ok) {
-                Alert.alert(t('common.error'), data.error || 'Backend token verification failed');
+                notify(t('common.error'), data.error || 'Backend token verification failed');
                 return;
             }
 
@@ -373,7 +373,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 onAuthenticated();
             }
         } catch (err: any) {
-            Alert.alert(t('common.error'), err?.message || t('login.connectionError'));
+            notify(t('common.error'), err?.message || t('login.connectionError'));
         } finally {
             setLoading(false);
         }
@@ -381,7 +381,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
 
     const handleSaveName = () => {
         if (!name.trim()) {
-            Alert.alert(t('common.error'), t('login.enterNameError'));
+            notify(t('common.error'), t('login.enterNameError'));
             return;
         }
         navigateToStep('consent');

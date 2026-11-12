@@ -6,13 +6,13 @@ import {
     TouchableOpacity,
     StyleSheet,
     ActivityIndicator,
-    Alert,
     ScrollView,
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE } from '../apiConfig';
 import { useLanguage } from '../context/LanguageContext';
+import { notify } from '../utils/notify';
 
 interface Contact {
     phone: string;
@@ -62,13 +62,13 @@ const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
         const toSave = contacts.filter(c => c.phone.trim().length > 0);
 
         if (toSave.length === 0) {
-            Alert.alert(t('common.error'), t('trusted.atLeastOne'));
+            notify(t('common.error'), t('trusted.atLeastOne'));
             return;
         }
 
         const invalidContact = toSave.find(c => c.phone.length !== 10);
         if (invalidContact) {
-            Alert.alert(t('common.error'), t('trusted.tenDigits'));
+            notify(t('common.error'), t('trusted.tenDigits'));
             return;
         }
 
@@ -84,13 +84,13 @@ const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
             });
 
             if (response.ok) {
-                Alert.alert(t('requests.success'), t('trusted.successUpdate'));
+                notify(t('requests.success'), t('trusted.successUpdate'));
                 onBack();
             } else {
-                Alert.alert(t('common.error'), t('trusted.failUpdate'));
+                notify(t('common.error'), t('trusted.failUpdate'));
             }
         } catch (err) {
-            Alert.alert(t('common.error'), t('book.errorConnect'));
+            notify(t('common.error'), t('book.errorConnect'));
         } finally {
             setSaving(false);
         }

@@ -22,14 +22,15 @@ const babelLoaderConfiguration = {
     use: {
         loader: 'babel-loader',
         options: {
+            root: appDirectory,
             configFile: false,
             babelrc: false,
             presets: [
-                ['@react-native/babel-preset', { disableImportExportTransform: true }],
-                ['@babel/preset-env', { modules: false, loose: true }],
-                ['@babel/preset-react', { runtime: 'automatic' }]
+                [require.resolve('@react-native/babel-preset'), { disableImportExportTransform: true }],
+                [require.resolve('@babel/preset-env'), { modules: false, loose: true }],
+                [require.resolve('@babel/preset-react'), { runtime: 'automatic' }]
             ],
-            plugins: ['react-native-web'],
+            plugins: [require.resolve('babel-plugin-react-native-web')],
         },
     },
 };
@@ -40,15 +41,47 @@ const imageLoaderConfiguration = {
     type: 'asset/resource',
 };
 
-module.exports = {
+module.exports = (env = {}, argv = {}) => {
+    const isProd = argv.mode === 'production' || process.env.NODE_ENV === 'production';
+
+    return {
+    context: appDirectory,
     entry: [
         'regenerator-runtime/runtime',
         path.resolve(appDirectory, 'index.web.js')
     ],
     output: {
         path: path.resolve(appDirectory, 'dist'),
-        filename: 'bundle.js',
+        filename: isProd ? '[name].[contenthash:8].js' : 'bundle.js',
+        chunkFilename: isProd ? '[name].[contenthash:8].js' : '[name].chunk.js',
         publicPath: '/',
+        clean: true,
+    },
+    optimization: {
+        splitChunks: {
+            chunks: 'all',
+            cacheGroups: {
+                firebase: {
+                    test: /[\\/]node_modules[\\/](@?firebase)[\\/]/,
+                    name: 'vendor-firebase',
+                    chunks: 'all',
+                    priority: 20,
+                },
+                maplibre: {
+                    test: /[\\/]node_modules[\\/]maplibre-gl[\\/]/,
+                    name: 'vendor-maplibre',
+                    chunks: 'all',
+                    priority: 20,
+                },
+                vendors: {
+                    test: /[\\/]node_modules[\\/]/,
+                    name: 'vendors',
+                    chunks: 'all',
+                    priority: 10,
+                    reuseExistingChunk: true,
+                },
+            },
+        },
     },
     module: {
         rules: [
@@ -112,7 +145,7 @@ module.exports = {
         // Inject __DEV__ so React Native code works on web.
         // Metro bundler defines this automatically; webpack does not.
         new webpack.DefinePlugin({
-            __DEV__: JSON.stringify(process.env.NODE_ENV !== 'production'),
+            __DEV__: JSON.stringify(!isProd),
             'process.env.SENTRY_DSN': JSON.stringify(process.env.SENTRY_DSN || ''),
         }),
     ],
@@ -140,9 +173,10 @@ module.exports = {
         },
     },
     cache: false,
-    devtool: process.env.NODE_ENV === 'production' ? 'nosources-source-map' : 'source-map',
+    devtool: isProd ? 'nosources-source-map' : 'source-map',
     watchOptions: {
         ignored: ['**/node_modules', '**/android', '**/ios', '**/dist'],
     },
-    mode: process.env.NODE_ENV === 'production' ? 'production' : 'development',
+    mode: isProd ? 'production' : 'development',
+    };
 };

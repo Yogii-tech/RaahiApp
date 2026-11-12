@@ -1,7 +1,9 @@
 /**
- * Nominatim geocoding service
- * Routed through our backend to avoid CORS + to add User-Agent header
+ * Geocoding & routing service
+ * Place search is routed through our authenticated backend (/api/location/search)
+ * to avoid CORS + attach User-Agent header.
  */
+import { apiRequest } from '../../utils/api';
 
 export interface GeoResult {
   place_id: string;
@@ -12,21 +14,34 @@ export interface GeoResult {
   importance: number;
 }
 
-// Search by text query
+// Search by text query via authenticated backend proxy
 export async function searchPlaces(query: string): Promise<GeoResult[]> {
   if (!query.trim() || query.length < 3) return [];
 
-  const res = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`);
-  if (!res.ok) throw new Error('Geocoding failed');
-  return res.json();
+  try {
+    const res = await apiRequest(`/api/location/search?q=${encodeURIComponent(query.trim())}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch (error) {
+    console.error('Geocoding search error:', error);
+    return [];
+  }
 }
 
-// Reverse geocode: lat/lng → address string
+// Reverse geocode: lat/lng → address string (fails gracefully to coordinates)
 export async function reverseGeocode(lat: number, lng: number): Promise<string> {
-  const res = await fetch(`/api/reverse-geocode?lat=${lat}&lng=${lng}`);
-  if (!res.ok) return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-  const data = await res.json();
-  return data.display_name ?? `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  const fallback = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${encodeURIComponent(String(lat))}&lon=${encodeURIComponent(String(lng))}`,
+    );
+    if (!res.ok) return fallback;
+    const data = await res.json();
+    return data?.display_name ?? fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 // Fetch route geometry between two points via OSRM public API

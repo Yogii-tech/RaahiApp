@@ -7,14 +7,15 @@ import {
     ScrollView,
     ActivityIndicator,
     StyleSheet,
-    Alert,
     Modal,
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE } from '../apiConfig';
 import { useLanguage } from '../context/LanguageContext';
 import { apiRequest } from '../utils/api';
+import { notify } from '../utils/notify';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useIsFocused } from '@react-navigation/native';
 
@@ -48,7 +49,7 @@ interface Ride {
 
 const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) => {
     const { isDark, colors } = useTheme();
-    const { token, user, logout, setAuth } = useAuth();
+    const { token, refreshToken, user, logout, setAuth } = useAuth();
     const { t } = useLanguage();
     const isFocused = useIsFocused();
 
@@ -58,7 +59,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
 
     const [view, setView] = useState<string>('home');
     const [selectedRide, setSelectedRide] = useState<Ride | null>(null);
-    const [rideType, setRideType] = useState<0 | 1>(0);
     const [pickup, setPickup] = useState(() => loadFormDraft('home_pickup', ''));
     const [dropoff, setDropoff] = useState(() => loadFormDraft('home_dropoff', ''));
     const [date, setDate] = useState(() => {
@@ -143,7 +143,9 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                 const fresh = await response.json();
                 if (fresh.verification_status !== user?.verification_status ||
                     fresh.rejection_reason !== user?.rejection_reason) {
-                    await setAuth(token, null, {
+                    const latestToken = (await AsyncStorage.getItem('auth_token').catch(() => null)) || token;
+                    const latestRefresh = (await AsyncStorage.getItem('auth_refresh_token').catch(() => null)) || refreshToken;
+                    await setAuth(latestToken, latestRefresh, {
                         ...user,
                         verification_status: fresh.verification_status,
                         rejection_reason: fresh.rejection_reason,
@@ -256,7 +258,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                 body: JSON.stringify({
                     pickup: pickup.trim(),
                     dropoff: dropoff.trim(),
-                    rideType: rideType === 0 ? 'shared' : 'private',
+                    rideType: view === 'parcel' ? 'parcel' : 'seat',
                 }),
             });
 
@@ -274,12 +276,12 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
         // Guard: driver must be verified before posting
         if (isDriver && user?.verification_status !== 'verified') {
             if (user?.verification_status === 'rejected') {
-                Alert.alert(
+                notify(
                     '🚫 Documents Rejected',
                     `Your documents were rejected.\n\nReason: ${user?.rejection_reason || 'Please contact support.'}\n\nPlease resubmit your documents to continue.`
                 );
             } else {
-                Alert.alert(
+                notify(
                     '⏳ Verification Pending',
                     'Your documents are under admin review. You will be notified once your account is approved and you can start posting rides.'
                 );
@@ -289,11 +291,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
 
         if (!pickup.trim() || !dropoff.trim()) return;
         if (!departureTime.trim()) {
-            Alert.alert(t('common.error'), 'Please enter a departure time.');
+            notify(t('common.error'), 'Please enter a departure time.');
             return;
         }
         if (!timePeriod) {
-            Alert.alert(t('common.error'), 'Please select AM or PM for your departure time.');
+            notify(t('common.error'), 'Please select AM or PM for your departure time.');
             return;
         }
 
@@ -324,14 +326,14 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                 const currentTotalMinutes = today.getHours() * 60 + today.getMinutes();
 
                 if (selectedTotalMinutes < currentTotalMinutes) {
-                    Alert.alert(t('common.error'), 'Cannot post a ride for a past time today.');
+                    notify(t('common.error'), 'Cannot post a ride for a past time today.');
                     return;
                 }
             }
 
             const priceNum = parseInt(pricePerSeat.trim(), 10);
             if (isNaN(priceNum) || priceNum <= 0) {
-                Alert.alert(t('common.error'), 'Please enter a valid passenger cost per seat.');
+                notify(t('common.error'), 'Please enter a valid passenger cost per seat.');
                 return;
             }
 
@@ -368,14 +370,14 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                 fetchRecentRides(); // Refresh recent list
             } else {
                 const data = await response.json();
-                Alert.alert(
+                notify(
                     response.status === 429 ? 'Please Wait' : t('common.error'),
                     data.error || 'Failed to post ride'
                 );
             }
         } catch (err) {
             console.error('Post ride error:', err);
-            Alert.alert(t('common.error'), t('login.connectionError'));
+            notify(t('common.error'), t('login.connectionError'));
         } finally {
             setPostingRide(false);
         }
@@ -853,7 +855,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                         // Temporary Coming Soon alert without removing internal functionality
                         // navigateToView('parcel');
                         // if (setParcelMode) setParcelMode(true);
-                        Alert.alert('Coming Soon 🔒', 'Send a Parcel service will be available soon!');
+                        notify('Coming Soon 🔒', 'Send a Parcel service will be available soon!');
                     }}
                     activeOpacity={0.8}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>

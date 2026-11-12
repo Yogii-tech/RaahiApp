@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     View,
     Text,
@@ -6,7 +6,6 @@ import {
     TextInput,
     TouchableOpacity,
     ScrollView,
-    Dimensions,
     ActivityIndicator,
     RefreshControl,
 } from 'react-native';
@@ -14,8 +13,7 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { apiRequest } from '../utils/api';
-
-const { width } = Dimensions.get('window');
+import { notify } from '../utils/notify';
 
 const TrackPackageView: React.FC = () => {
     const { colors, isDark } = useTheme();
@@ -23,12 +21,9 @@ const TrackPackageView: React.FC = () => {
     const [shipments, setShipments] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [trackingQuery, setTrackingQuery] = useState('');
 
-    useEffect(() => {
-        fetchShipments();
-    }, []);
-
-    const fetchShipments = async () => {
+    const fetchShipments = useCallback(async () => {
         try {
             const response = await apiRequest('/api/rides/bookings', {}, logout);
             if (response.ok) {
@@ -43,14 +38,26 @@ const TrackPackageView: React.FC = () => {
             setLoading(false);
             setRefreshing(false);
         }
-    };
+    }, [logout]);
+
+    useEffect(() => {
+        fetchShipments();
+    }, [fetchShipments]);
 
     const onRefresh = () => {
         setRefreshing(true);
         fetchShipments();
     };
 
-    const currentShipment = shipments.find(s => s.status === 'accepted' || s.status === 'pending');
+    const normalizedQuery = trackingQuery.trim().toLowerCase();
+    const matchingShipments = normalizedQuery
+        ? shipments.filter(s => `ra-p-${String(s.id || '').slice(-6)}`.toLowerCase().includes(normalizedQuery))
+        : shipments;
+    const currentShipment = matchingShipments.find(s => s.status === 'accepted' || s.status === 'pending');
+
+    const handlePreviewAction = (label: string) => {
+        notify('Preview / Demo Mode', `"${label}" is a preview UI control and is not yet connected to live parcel actions.`);
+    };
 
     return (
         <ScrollView
@@ -69,18 +76,29 @@ const TrackPackageView: React.FC = () => {
                     <Icon name="search-outline" size={20} color={colors.subtextColor} style={styles.searchIcon} />
                     <TextInput
                         style={[styles.searchInput, { color: colors.textColor }]}
-                        placeholder="Enter your tracking number"
+                        placeholder="Enter your tracking number (e.g. RA-P-...)"
                         placeholderTextColor={colors.subtextColor}
+                        value={trackingQuery}
+                        onChangeText={setTrackingQuery}
                     />
+                </View>
+
+                <View style={[styles.previewBanner, { borderColor: 'rgba(252, 185, 44, 0.5)', backgroundColor: isDark ? 'rgba(252, 185, 44, 0.12)' : '#FFFBEB' }]}>
+                    <Text style={[styles.previewBannerTitle, { color: isDark ? '#FCD34D' : '#92400E' }]}>
+                        Preview / Demo Mode
+                    </Text>
+                    <Text style={[styles.previewBannerText, { color: isDark ? '#FDE68A' : '#78350F' }]}>
+                        Quick actions and multi-step delivery milestones are preview UI elements. Active parcel bookings are loaded from your account.
+                    </Text>
                 </View>
             </View>
 
             {/* Quick Actions */}
             <View style={styles.quickActionsContainer}>
                 <View style={[styles.quickActionsCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor, borderWidth: 1 }]}>
-                    <QuickActionItem icon="receipt-outline" label="Check Rate" color="#4CAF50" isDark={isDark} colors={colors} />
-                    <QuickActionItem icon="cube-outline" label="Pick Up" color="#FF9800" isDark={isDark} colors={colors} />
-                    <QuickActionItem icon="location-outline" label="Drop Off" color="#2196F3" isDark={isDark} colors={colors} />
+                    <QuickActionItem icon="receipt-outline" label="Check Rate" color="#4CAF50" isDark={isDark} colors={colors} onPress={() => handlePreviewAction('Check Rate')} />
+                    <QuickActionItem icon="cube-outline" label="Pick Up" color="#FF9800" isDark={isDark} colors={colors} onPress={() => handlePreviewAction('Pick Up')} />
+                    <QuickActionItem icon="location-outline" label="Drop Off" color="#2196F3" isDark={isDark} colors={colors} onPress={() => handlePreviewAction('Drop Off')} />
                 </View>
             </View>
 
@@ -92,8 +110,8 @@ const TrackPackageView: React.FC = () => {
                     <View style={styles.section}>
                         <View style={styles.sectionHeader}>
                             <Text style={[styles.sectionTitle, { color: colors.textColor }]}>Current Shipment</Text>
-                            <TouchableOpacity>
-                                <Text style={{ color: colors.primary, fontWeight: '500' }}>View All</Text>
+                            <TouchableOpacity onPress={() => handlePreviewAction('View All Shipments')}>
+                                <Text style={{ color: colors.primary, fontWeight: '500' }}>View All (Preview)</Text>
                             </TouchableOpacity>
                         </View>
 
@@ -155,8 +173,8 @@ const TrackPackageView: React.FC = () => {
     );
 };
 
-const QuickActionItem = ({ icon, label, color, isDark, colors }: { icon: string; label: string; color: string; isDark: boolean; colors: any }) => (
-    <TouchableOpacity style={styles.quickActionItem}>
+const QuickActionItem = ({ icon, label, color, colors, onPress }: { icon: string; label: string; color: string; isDark: boolean; colors: any; onPress?: () => void }) => (
+    <TouchableOpacity style={styles.quickActionItem} onPress={onPress}>
         <View style={[styles.quickActionIcon, { backgroundColor: color + '15' }]}>
             <Icon name={icon} size={24} color={color} />
         </View>
@@ -360,6 +378,24 @@ const styles = StyleSheet.create({
         borderRadius: 15,
         borderWidth: 1,
         marginBottom: 12,
+    },
+    previewBanner: {
+        borderWidth: 1,
+        borderRadius: 12,
+        paddingVertical: 10,
+        paddingHorizontal: 14,
+        marginTop: 14,
+    },
+    previewBannerTitle: {
+        fontSize: 11,
+        fontWeight: '700',
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+        marginBottom: 2,
+    },
+    previewBannerText: {
+        fontSize: 12,
+        lineHeight: 17,
     },
 });
 

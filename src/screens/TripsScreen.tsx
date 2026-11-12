@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, Alert, Platform } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, AppState, Platform } from 'react-native';
+import { useIsFocused } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE } from '../apiConfig';
@@ -8,6 +9,7 @@ import JeepLayout from '../components/JeepLayout';
 import SlideToComplete from '../components/SlideToComplete';
 
 import { apiRequest } from '../utils/api';
+import { notify } from '../utils/notify';
 import Icon from 'react-native-vector-icons/Ionicons';
 import TrackPackageView from '../components/TrackPackageView';
 import { startDriverTracking } from '../modern_map/services/socket';
@@ -85,10 +87,32 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
     const { colors, isDark } = useTheme();
     const { user, token, logout } = useAuth();
     const { t } = useLanguage();
+    const isFocused = useIsFocused();
     const [bookings, setBookings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [expandedRideId, setExpandedRideId] = useState<string | null>(null);
     const [viewMode, setViewMode] = useState<'list' | 'detailed'>('detailed');
+    const [isAppActive, setIsAppActive] = useState<boolean>(() => {
+        if (Platform.OS === 'web') {
+            return typeof document === 'undefined' || document.visibilityState === 'visible';
+        }
+        return AppState.currentState === 'active';
+    });
+
+    useEffect(() => {
+        if (Platform.OS === 'web') {
+            if (typeof document === 'undefined') return;
+            const handleVisibility = () => {
+                setIsAppActive(document.visibilityState === 'visible');
+            };
+            document.addEventListener('visibilitychange', handleVisibility);
+            return () => document.removeEventListener('visibilitychange', handleVisibility);
+        }
+        const sub = AppState.addEventListener('change', (nextState) => {
+            setIsAppActive(nextState === 'active');
+        });
+        return () => sub?.remove?.();
+    }, []);
 
     const isDriver = user?.role === 'driver';
 
@@ -143,10 +167,15 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
     }, [isDriver, isParcelHistory, isRideHistory, title, t, logout]);
 
     useEffect(() => {
+        if (isParcelMode || !isFocused || !isAppActive) return;
         fetchData();
-        const interval = setInterval(fetchData, 5000); // Polling for real-time updates
+        const interval = setInterval(() => {
+            if (Platform.OS === 'web' && typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+            if (Platform.OS !== 'web' && AppState.currentState !== 'active') return;
+            fetchData();
+        }, 5000); // Poll only when tab is focused and app is foregrounded
         return () => clearInterval(interval);
-    }, [fetchData]);
+    }, [fetchData, isFocused, isAppActive, isParcelMode]);
 
     // For driver, auto-expand if there's only one active ride and in detailed mode
     useEffect(() => {
@@ -174,20 +203,12 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
             }, logout);
             if (response.ok) {
                 const msg = t('trips.tripCompleted') || 'Trip marked successfully';
-                if (Platform.OS === 'web') {
-                    window.alert(msg);
-                } else {
-                    Alert.alert(t('common.success') || 'Success', msg);
-                }
+                notify(t('common.success') || 'Success', msg);
                 fetchData();
             } else {
                 const data = await response.json();
                 const errorMsg = data.error || 'Failed to complete trip';
-                if (Platform.OS === 'web') {
-                    window.alert(errorMsg);
-                } else {
-                    Alert.alert(t('common.error') || 'Error', errorMsg);
-                }
+                notify(t('common.error') || 'Error', errorMsg);
             }
         } catch (err) {
             console.error('Error completing trip:', err);
@@ -201,40 +222,15 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
             }, logout);
             if (response.ok) {
                 const msg = t('trips.tripStarted') || 'Trip started successfully';
-                if (Platform.OS === 'web') {
-                    window.alert(msg);
-                } else {
-                    Alert.alert(t('common.success') || 'Success', msg);
-                }
+                notify(t('common.success') || 'Success', msg);
                 fetchData();
             } else {
                 const data = await response.json();
                 const errorMsg = data.error || 'Failed to start trip';
-                if (Platform.OS === 'web') {
-                    window.alert(errorMsg);
-                } else {
-                    Alert.alert(t('common.error') || 'Error', errorMsg);
-                }
+                notify(t('common.error') || 'Error', errorMsg);
             }
         } catch (err) {
             console.error('Error starting trip:', err);
-        }
-    };
-
-    const handleCompleteBooking = async (bookingId: string) => {
-        try {
-            const response = await apiRequest(`/api/rides/bookings/${bookingId}/complete`, {
-                method: 'PUT',
-            }, logout);
-            if (response.ok) {
-                Alert.alert(t('common.success') || 'Success', 'Booking marked as completed');
-                fetchData();
-            } else {
-                const data = await response.json();
-                Alert.alert(t('common.error') || 'Error', data.error || 'Failed to complete booking');
-            }
-        } catch (err) {
-            console.error('Error completing booking:', err);
         }
     };
 
@@ -249,7 +245,7 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
                 fetchData(); // Refresh to show new state
             } else {
                 const data = await response.json();
-                Alert.alert(t('common.error'), data.error || 'Failed to toggle seat');
+                notify(t('common.error'), data.error || 'Failed to toggle seat');
             }
         } catch (err) {
             console.error('Toggle block error:', err);
@@ -577,12 +573,9 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
                                                 </Text>
                                             </View>
                                             {booking.status === 'accepted' ? (
-                                                <TouchableOpacity
-                                                    onPress={() => handleCompleteBooking(booking.id)}
-                                                    style={{ backgroundColor: colors.primary, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}
-                                                >
-                                                    <Text style={{ color: '#FFF', fontSize: 10, fontWeight: 'bold' }}>MARK COMPLETED</Text>
-                                                </TouchableOpacity>
+                                                <View style={{ backgroundColor: 'rgba(91, 79, 255, 0.12)', borderWidth: 1, borderColor: colors.primary, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6 }}>
+                                                    <Text style={{ color: colors.primary, fontSize: 10, fontWeight: 'bold' }}>CONFIRMED</Text>
+                                                </View>
                                             ) : booking.status === 'completed' ? (
                                                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                                     <Icon name="checkmark-circle" size={16} color="#4CAF50" />
@@ -592,6 +585,9 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
                                         </View>
                                     );
                                 })}
+                                <Text style={{ color: colors.subtextColor, fontSize: 11, fontStyle: 'italic', marginTop: 2 }}>
+                                    Slide "Finish the ride" below when the trip ends to complete all active bookings.
+                                </Text>
                             </View>
                         )}
 
