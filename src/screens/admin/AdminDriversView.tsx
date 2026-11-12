@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
     View, Text, StyleSheet, FlatList, ActivityIndicator,
-    ScrollView, TouchableOpacity, Modal, Image, TextInput, Alert, Platform, Linking
+    ScrollView, TouchableOpacity, Modal, Image, TextInput, Alert, Platform, Linking, useWindowDimensions
 } from 'react-native';
 import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
@@ -49,6 +49,8 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
     const [activeFilter, setActiveFilter] = useState<'all' | 'pending' | 'verified' | 'rejected'>(initialFilter);
 
     const { fetchWithAuth } = useAuth();
+    const { width } = useWindowDimensions();
+    const isMobile = width < 768;
 
     // Driver reviews state
     const [driverReviews, setDriverReviews] = useState<{ reviews: any[]; averageRating: number; totalReviews: number } | null>(null);
@@ -267,11 +269,11 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
     if (loading) return <ActivityIndicator color="#3B7DDD" size="large" style={{ marginTop: 60 }} />;
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, isMobile && { padding: 16 }]}>
             {/* Header Section */}
-            <View style={styles.headerArea}>
-                <View>
-                    <Text style={styles.pageTitle}>Driver Onboarding & Verification</Text>
+            <View style={[styles.headerArea, isMobile && { flexDirection: 'column', alignItems: 'flex-start', gap: 12 }]}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={[styles.pageTitle, isMobile && { fontSize: 22 }]}>Driver Onboarding & Verification</Text>
                     <Text style={styles.pageSubtitle}>
                         Drivers must pass 100% document review before receiving ride-posting privileges.
                     </Text>
@@ -285,7 +287,7 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
             </View>
 
             {/* Filter Tabs */}
-            <View style={styles.filterRow}>
+            <View style={[styles.filterRow, { flexWrap: 'wrap' }]}>
                 {[
                     { id: 'all', label: `All (${drivers.length})` },
                     { id: 'pending', label: `Pending Review (${pendingCount})`, badge: pendingCount },
@@ -317,8 +319,97 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                     <Text style={styles.tableCardCount}>{filteredDrivers.length} Records</Text>
                 </View>
 
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ minWidth: '100%' }}>
-                    <View style={{ minWidth: 1250, flex: 1 }}>
+                {isMobile ? (
+                    <FlatList
+                        data={filteredDrivers}
+                        keyExtractor={item => item.id}
+                        contentContainerStyle={{ paddingBottom: 20 }}
+                        renderItem={({ item, index }) => {
+                            const status = item.verificationStatus || 'pending';
+                            const hasDL = !!item.dlUrl;
+                            const hasRC = !!item.rcUrl;
+                            const hasPollution = !!item.pollutionUrl;
+                            const hasPhoto = !!item.vehicleImageUrl;
+                            const hasOwnership = !!item.ownershipUrl;
+
+                            return (
+                                <View style={[styles.mobileDriverCard, index % 2 === 1 && styles.tableRowAlt]}>
+                                    <View style={styles.mobileCardTop}>
+                                        <View style={{ flex: 1, minWidth: 0 }}>
+                                            <Text style={styles.driverName} numberOfLines={1} ellipsizeMode="tail">{item.name || 'Unknown Driver'}</Text>
+                                            <Text style={styles.driverPhone} numberOfLines={1}>{item.phone || 'No phone'}</Text>
+                                        </View>
+                                        <View style={[
+                                            styles.statusBadge,
+                                            status === 'verified' && styles.statusBadgeVerified,
+                                            status === 'rejected' && styles.statusBadgeRejected,
+                                            status === 'pending' && styles.statusBadgePending,
+                                        ]}>
+                                            <Text style={[
+                                                styles.statusBadgeText,
+                                                status === 'verified' && { color: '#22C55E' },
+                                                status === 'rejected' && { color: '#EF4444' },
+                                                status === 'pending' && { color: '#F59E0B' },
+                                            ]}>
+                                                {status.toUpperCase()}
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
+                                        <Text style={styles.locationText}>📍 {item.location || 'Uttarakhand'}</Text>
+                                        <Text style={styles.vehicleNumber}>
+                                            {item.vehicleName || item.vehicleType || 'Vehicle'} • {item.vehicleNumber || '—'}
+                                        </Text>
+                                    </View>
+
+                                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                                        <DocBadge label="DL" isUploaded={hasDL} />
+                                        <DocBadge label="RC" isUploaded={hasRC} />
+                                        <DocBadge label="PUC" isUploaded={hasPollution} />
+                                        <DocBadge label="Photo" isUploaded={hasPhoto} />
+                                        {hasOwnership && <DocBadge label="Ownership" isUploaded={true} />}
+                                    </View>
+
+                                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
+                                        <TouchableOpacity
+                                            style={styles.inspectBtn}
+                                            onPress={() => handleInspect(item)}
+                                            activeOpacity={0.8}
+                                        >
+                                            <Text style={{ fontSize: 12, marginRight: 3 }}>👁</Text>
+                                            <Text style={styles.inspectBtnText}>Inspect</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={styles.rekycBtn}
+                                            onPress={() => handleOpenReKYC(item)}
+                                            activeOpacity={0.8}
+                                        >
+                                            <Text style={{ fontSize: 12, marginRight: 3 }}>🔄</Text>
+                                            <Text style={styles.rekycBtnText}>Re-KYC</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={[styles.deleteBtn, deletingDriverId === item.id && { opacity: 0.6 }]}
+                                            onPress={() => handleDeleteDriver(item)}
+                                            activeOpacity={0.8}
+                                            disabled={deletingDriverId === item.id}
+                                        >
+                                            <Text style={{ fontSize: 12, marginRight: 3 }}>🗑</Text>
+                                            <Text style={styles.deleteBtnText}>{deletingDriverId === item.id ? '...' : 'Delete'}</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            );
+                        }}
+                        ListEmptyComponent={
+                            <View style={styles.emptyBox}>
+                                <Text style={styles.emptyText}>No driver onboardings found in this view.</Text>
+                            </View>
+                        }
+                    />
+                ) : (
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ minWidth: '100%' }}>
+                        <View style={{ minWidth: 1250, flex: 1 }}>
                         {/* Table Header */}
                         <View style={styles.tableHeader}>
                             <Text style={[styles.headerCell, { flex: 2 }]}>DRIVER NAME & PHONE</Text>
@@ -433,6 +524,7 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                         />
                     </View>
                 </ScrollView>
+                )}
             </View>
 
             {/* Document Inspection Modal */}
@@ -443,11 +535,11 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                     animationType="fade"
                     onRequestClose={() => setInspectModalVisible(false)}
                 >
-                    <View style={styles.modalBackdrop}>
+                    <View style={[styles.modalBackdrop, isMobile && { padding: 12 }]}>
                         <View style={styles.inspectModalCard}>
                             {/* Modal Header */}
-                            <View style={styles.modalHeader}>
-                                <View>
+                            <View style={[styles.modalHeader, isMobile && { padding: 14 }]}>
+                                <View style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
                                     <Text style={styles.modalTitle}>Inspect Driver Documents</Text>
                                     <Text style={styles.modalSub}>{selectedDriver.name} ({selectedDriver.phone})</Text>
                                 </View>
@@ -456,7 +548,7 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                                 </TouchableOpacity>
                             </View>
 
-                            <ScrollView style={{ flex: 1, padding: 20 }} showsVerticalScrollIndicator={false}>
+                            <ScrollView style={{ flex: 1, padding: isMobile ? 14 : 20 }} showsVerticalScrollIndicator={false}>
                                 {/* Driver & Vehicle Details Header Card */}
                                 <View style={styles.summaryCard}>
                                     <View style={styles.summaryCol}>
@@ -569,9 +661,9 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                             </ScrollView>
 
                             {/* Modal Action Buttons */}
-                            <View style={styles.modalFooter}>
+                            <View style={[styles.modalFooter, isMobile && { flexWrap: 'wrap', padding: 14, gap: 8 }]}>
                                 <TouchableOpacity
-                                    style={[styles.actionBtn, styles.deleteDriverBtn, (submittingAction || deletingDriverId === selectedDriver.id) && { opacity: 0.6 }]}
+                                    style={[styles.actionBtn, styles.deleteDriverBtn, isMobile && { minWidth: '46%', paddingVertical: 10 }, (submittingAction || deletingDriverId === selectedDriver.id) && { opacity: 0.6 }]}
                                     onPress={() => handleDeleteDriver(selectedDriver)}
                                     disabled={submittingAction || deletingDriverId === selectedDriver.id}
                                 >
@@ -579,7 +671,7 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                                 </TouchableOpacity>
 
                                 <TouchableOpacity
-                                    style={[styles.actionBtn, styles.rekycModalBtn, submittingAction && { opacity: 0.6 }]}
+                                    style={[styles.actionBtn, styles.rekycModalBtn, isMobile && { minWidth: '46%', paddingVertical: 10 }, submittingAction && { opacity: 0.6 }]}
                                     onPress={() => handleOpenReKYC(selectedDriver)}
                                     disabled={submittingAction}
                                 >
@@ -587,7 +679,7 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                                 </TouchableOpacity>
 
                                 <TouchableOpacity
-                                    style={[styles.actionBtn, styles.rejectBtn, submittingAction && { opacity: 0.6 }]}
+                                    style={[styles.actionBtn, styles.rejectBtn, isMobile && { minWidth: '46%', paddingVertical: 10 }, submittingAction && { opacity: 0.6 }]}
                                     onPress={() => handleVerifyAction('rejected')}
                                     disabled={submittingAction}
                                 >
@@ -595,7 +687,7 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                                 </TouchableOpacity>
 
                                 <TouchableOpacity
-                                    style={[styles.actionBtn, styles.approveBtn, submittingAction && { opacity: 0.6 }]}
+                                    style={[styles.actionBtn, styles.approveBtn, isMobile && { minWidth: '46%', paddingVertical: 10 }, submittingAction && { opacity: 0.6 }]}
                                     onPress={() => handleVerifyAction('verified')}
                                     disabled={submittingAction}
                                 >
@@ -620,10 +712,10 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                     animationType="fade"
                     onRequestClose={() => setRekycModalVisible(false)}
                 >
-                    <View style={styles.modalBackdrop}>
+                    <View style={[styles.modalBackdrop, isMobile && { padding: 12 }]}>
                         <View style={styles.rekycModalCard}>
-                            <View style={styles.modalHeader}>
-                                <View>
+                            <View style={[styles.modalHeader, isMobile && { padding: 14 }]}>
+                                <View style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
                                     <Text style={styles.modalTitle}>Request Re-KYC</Text>
                                     <Text style={styles.modalSub}>
                                         Driver: {rekycDriver.name} ({rekycDriver.phone})
@@ -751,7 +843,7 @@ const DocBadge = ({ label, isUploaded }: { label: string; isUploaded: boolean })
 
 const DocInspectCard = ({ title, url, onPreview }: { title: string; url: string; onPreview: () => void }) => (
     <View style={styles.docInspectCard}>
-        <View style={{ flex: 1 }}>
+        <View style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
             <Text style={styles.docInspectTitle}>{title}</Text>
             <Text style={styles.docInspectStatus}>
                 {url ? '✓ Document uploaded' : '⚠ Missing document'}
@@ -920,5 +1012,7 @@ const styles = StyleSheet.create({
     previewImgBox: { flex: 1, padding: 10, justifyContent: 'center', alignItems: 'stretch' },
     fullImage: { flex: 1, width: '100%', height: '100%' },
     previewMsg: { color: '#CBD5E1', fontSize: 14, textAlign: 'center', lineHeight: 22 },
-    openExternalBtn: { backgroundColor: '#3B7DDD', margin: 12, paddingVertical: 12, borderRadius: 8, alignItems: 'center' }
+    openExternalBtn: { backgroundColor: '#3B7DDD', margin: 12, paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
+    mobileDriverCard: { padding: 14, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)', gap: 8 },
+    mobileCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 },
 });

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { downloadCSV } from '../../utils/exportUtils';
 import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
@@ -32,6 +32,8 @@ export default function AdminRoutesDetailView({ isDark, searchQuery = '' }: { is
      const [routes, setRoutes] = useState<RouteRow[]>([]);
      const [loading, setLoading] = useState(true);
      const { fetchWithAuth } = useAuth();
+     const { width } = useWindowDimensions();
+     const isMobile = width < 768;
 
      const T = {
           bg: isDark ? '#111827' : '#F7F9FC',
@@ -75,10 +77,10 @@ export default function AdminRoutesDetailView({ isDark, searchQuery = '' }: { is
      if (loading) return <ActivityIndicator color="#3B7DDD" size="large" style={{ marginTop: 60 }} />;
 
      return (
-          <ScrollView style={[styles.container, { backgroundColor: T.bg }]} showsVerticalScrollIndicator={false}>
-               <View style={styles.header}>
+          <ScrollView style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: T.bg }]} showsVerticalScrollIndicator={false}>
+               <View style={[styles.header, isMobile && { flexDirection: 'column', alignItems: 'flex-start', gap: 12 }]}>
                     <Text style={[styles.headerTitle, { color: T.text }]}>Route Analytics</Text>
-                    <View style={styles.headerButtons}>
+                    <View style={[styles.headerButtons, { flexWrap: 'wrap', gap: 10 }]}>
                          <TouchableOpacity onPress={fetchData} style={[styles.ghostBtn, { borderColor: T.border }]}>
                               <Text style={[styles.ghostBtnText, { color: T.text }]}>↻ Refresh</Text>
                          </TouchableOpacity>
@@ -104,30 +106,56 @@ export default function AdminRoutesDetailView({ isDark, searchQuery = '' }: { is
                </ScrollView>
 
                {/* Routes Table */}
-               <View style={[styles.tablePanel, { backgroundColor: T.card, borderColor: T.border }]}>
+               <View style={[styles.tablePanel, isMobile && { padding: 16 }, { backgroundColor: T.card, borderColor: T.border }]}>
                     <Text style={[styles.tableTitle, { color: T.text }]}>
                          Route Breakdown — {filteredRoutes.length} corridor{filteredRoutes.length !== 1 ? 's' : ''}
                     </Text>
-                    <View style={styles.tableHeader}>
-                         {['Route', 'Bookings', 'Cancels', 'Top Driver', 'Avg Price', 'Status'].map(h => (
-                              <Text key={h} style={[styles.tableHeaderCell, { color: T.subtext }]}>{h}</Text>
-                         ))}
-                    </View>
+                    {!isMobile && (
+                         <View style={styles.tableHeader}>
+                              {['Route', 'Bookings', 'Cancels', 'Top Driver', 'Avg Price', 'Status'].map((h, idx) => (
+                                   <Text key={h} style={[styles.tableHeaderCell, idx === 0 && { flex: 2 }, { color: T.subtext }]}>{h}</Text>
+                              ))}
+                         </View>
+                    )}
                     {filteredRoutes.length === 0 ? (
                          <Text style={{ color: T.subtext, textAlign: 'center', padding: 40 }}>
                               No route data yet. Routes are generated from posted rides.
                          </Text>
+                    ) : isMobile ? (
+                         filteredRoutes.map(r => {
+                              const statusColor = STATUS_COLORS[r.status] ?? '#6C757D';
+                              return (
+                                   <View key={r.id} style={[styles.mobileCard, { borderBottomColor: T.border }]}>
+                                        <View style={styles.mobileCardTop}>
+                                             <Text style={{ color: T.text, fontWeight: 'bold', fontSize: 14, flex: 1, minWidth: 0 }} numberOfLines={2}>
+                                                  {r.route}
+                                             </Text>
+                                             <View style={[styles.statusBadge, { backgroundColor: statusColor + '20' }]}>
+                                                  <Text style={{ color: statusColor, fontSize: 11, fontWeight: 'bold' }}>{r.status}</Text>
+                                             </View>
+                                        </View>
+                                        <Text style={{ color: T.subtext, fontSize: 12 }} numberOfLines={1}>
+                                             Top Driver: <Text style={{ color: T.text, fontWeight: '500' }}>{r.topDriver || '—'}</Text>
+                                        </Text>
+                                        <View style={styles.mobileCardMeta}>
+                                             <Text style={{ color: '#28A745', fontWeight: 'bold', fontSize: 12 }}>Bookings: {r.bookings}</Text>
+                                             <Text style={{ color: '#DC3545', fontWeight: 'bold', fontSize: 12 }}>Cancels: {r.cancellations}</Text>
+                                             <Text style={{ color: T.text, fontWeight: '600', fontSize: 12 }}>Avg: ₹{Math.round(r.avgPrice)}</Text>
+                                        </View>
+                                   </View>
+                              );
+                         })
                     ) : (
                          filteredRoutes.map(r => {
                               const statusColor = STATUS_COLORS[r.status] ?? '#6C757D';
                               return (
                                    <View key={r.id} style={[styles.tableRow, { borderBottomColor: T.border }]}>
-                                        <Text style={[styles.cell, { color: T.text, fontWeight: 'bold', flex: 2 }]} numberOfLines={2}>{r.route}</Text>
-                                        <Text style={[styles.cell, { color: '#28A745', fontWeight: 'bold' }]}>{r.bookings}</Text>
-                                        <Text style={[styles.cell, { color: '#DC3545', fontWeight: 'bold' }]}>{r.cancellations}</Text>
-                                        <Text style={[styles.cell, { color: T.text }]}>{r.topDriver || '—'}</Text>
-                                        <Text style={[styles.cell, { color: T.text }]}>₹{Math.round(r.avgPrice)}</Text>
-                                        <View style={{ flex: 1 }}>
+                                        <Text style={[styles.cell, { color: T.text, fontWeight: 'bold', flex: 2, minWidth: 0, paddingRight: 8 }]} numberOfLines={2}>{r.route}</Text>
+                                        <Text style={[styles.cell, { color: '#28A745', fontWeight: 'bold', minWidth: 0 }]}>{r.bookings}</Text>
+                                        <Text style={[styles.cell, { color: '#DC3545', fontWeight: 'bold', minWidth: 0 }]}>{r.cancellations}</Text>
+                                        <Text style={[styles.cell, { color: T.text, minWidth: 0, paddingRight: 8 }]} numberOfLines={1} ellipsizeMode="tail">{r.topDriver || '—'}</Text>
+                                        <Text style={[styles.cell, { color: T.text, minWidth: 0 }]}>₹{Math.round(r.avgPrice)}</Text>
+                                        <View style={{ flex: 1, minWidth: 0 }}>
                                              <View style={[styles.statusBadge, { backgroundColor: statusColor + '20' }]}>
                                                   <Text style={{ color: statusColor, fontSize: 11, fontWeight: 'bold' }}>{r.status}</Text>
                                              </View>
@@ -160,4 +188,7 @@ const styles = StyleSheet.create({
      tableRow: { flexDirection: 'row', paddingVertical: 14, borderBottomWidth: 1, alignItems: 'center' },
      cell: { flex: 1, fontSize: 13 },
      statusBadge: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+     mobileCard: { paddingVertical: 14, borderBottomWidth: 1, gap: 6 },
+     mobileCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 },
+     mobileCardMeta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' },
 });

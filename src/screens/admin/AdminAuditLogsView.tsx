@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ScrollView, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { downloadCSV } from '../../utils/exportUtils';
 
 interface AuditLogEntry {
@@ -46,6 +46,8 @@ const CATEGORY_ICONS: Record<string, string> = {
 export default function AdminAuditLogsView({ isDark, searchQuery = '' }: { isDark: boolean; searchQuery?: string }) {
     const [activeCategory, setActiveCategory] = useState<'all' | 'driver' | 'ride' | 'finance' | 'system' | 'user'>('all');
     const [activeSeverity, setActiveSeverity] = useState<'all' | 'info' | 'warning' | 'critical'>('all');
+    const { width } = useWindowDimensions();
+    const isMobile = width < 768;
 
     const T = {
         bg: isDark ? '#111827' : '#F7F9FC',
@@ -81,9 +83,9 @@ export default function AdminAuditLogsView({ isDark, searchQuery = '' }: { isDar
     }));
 
     return (
-        <ScrollView style={[styles.container, { backgroundColor: T.bg }]} contentContainerStyle={{ paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
-            <View style={styles.headerRow}>
-                <View>
+        <ScrollView style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: T.bg }]} contentContainerStyle={{ paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
+            <View style={[styles.headerRow, isMobile && { flexDirection: 'column', alignItems: 'flex-start', gap: 12 }]}>
+                <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={[styles.sectionTitle, { color: T.text }]}>Audit Logs</Text>
                     <Text style={[styles.sectionSubtitle, { color: T.subtext }]}>
                         Immutable record of all admin actions, system events, and security-relevant operations.
@@ -107,14 +109,14 @@ export default function AdminAuditLogsView({ isDark, searchQuery = '' }: { isDar
             </View>
 
             {/* KPI Summary Row */}
-            <View style={styles.kpiRow}>
+            <View style={[styles.kpiRow, isMobile && { gap: 12 }]}>
                 {[
                     { label: 'Total Events', count: MOCK_LOGS.length, color: T.text },
                     { label: 'Critical Flags', count: MOCK_LOGS.filter(l => l.severity === 'critical').length, color: '#DC3545' },
                     { label: 'Warnings', count: MOCK_LOGS.filter(l => l.severity === 'warning').length, color: '#FCB92C' },
                     { label: 'System Events', count: MOCK_LOGS.filter(l => l.category === 'system').length, color: '#9CA3AF' },
                 ].map(card => (
-                    <View key={card.label} style={[styles.kpiCard, { backgroundColor: T.card, borderColor: T.border }]}>
+                    <View key={card.label} style={[styles.kpiCard, isMobile && { minWidth: 130, padding: 14 }, { backgroundColor: T.card, borderColor: T.border }]}>
                         <Text style={[styles.kpiCount, { color: card.color }]}>{card.count}</Text>
                         <Text style={[styles.kpiLabel, { color: T.subtext }]}>{card.label}</Text>
                     </View>
@@ -122,10 +124,10 @@ export default function AdminAuditLogsView({ isDark, searchQuery = '' }: { isDar
             </View>
 
             {/* Filters Row */}
-            <View style={[styles.filtersCard, { backgroundColor: T.card, borderColor: T.border }]}>
-                <View style={styles.filterGroup}>
-                    <Text style={[styles.filterGroupLabel, { color: T.subtext }]}>CATEGORY</Text>
-                    <View style={styles.filterChips}>
+            <View style={[styles.filtersCard, isMobile && { padding: 14 }, { backgroundColor: T.card, borderColor: T.border }]}>
+                <View style={[styles.filterGroup, isMobile && { flexDirection: 'column', alignItems: 'flex-start', gap: 8 }]}>
+                    <Text style={[styles.filterGroupLabel, isMobile && { width: 'auto' }, { color: T.subtext }]}>CATEGORY</Text>
+                    <View style={[styles.filterChips, isMobile && { flex: undefined, width: '100%' }]}>
                         {(['all', 'driver', 'ride', 'finance', 'system', 'user'] as const).map(cat => (
                             <TouchableOpacity
                                 key={cat}
@@ -142,9 +144,9 @@ export default function AdminAuditLogsView({ isDark, searchQuery = '' }: { isDar
 
                 <View style={[styles.filterDivider, { backgroundColor: T.border }]} />
 
-                <View style={styles.filterGroup}>
-                    <Text style={[styles.filterGroupLabel, { color: T.subtext }]}>SEVERITY</Text>
-                    <View style={styles.filterChips}>
+                <View style={[styles.filterGroup, isMobile && { flexDirection: 'column', alignItems: 'flex-start', gap: 8 }]}>
+                    <Text style={[styles.filterGroupLabel, isMobile && { width: 'auto' }, { color: T.subtext }]}>SEVERITY</Text>
+                    <View style={[styles.filterChips, isMobile && { flex: undefined, width: '100%' }]}>
                         {(['all', 'info', 'warning', 'critical'] as const).map(sev => (
                             <TouchableOpacity
                                 key={sev}
@@ -173,6 +175,36 @@ export default function AdminAuditLogsView({ isDark, searchQuery = '' }: { isDar
                     keyExtractor={item => item.id}
                     renderItem={({ item, index }) => {
                         const sev = SEVERITY_CONFIG[item.severity];
+                        if (isMobile) {
+                            return (
+                                <View style={[styles.mobileLogCard, { borderBottomColor: T.border, backgroundColor: index % 2 === 1 ? (isDark ? 'rgba(255,255,255,0.01)' : '#F8FAFC') : 'transparent' }]}>
+                                    <View style={styles.mobileLogTop}>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                            <View style={[styles.severityBadge, { backgroundColor: sev.bg }]}>
+                                                <Text style={[styles.severityText, { color: sev.color }]}>{sev.label}</Text>
+                                            </View>
+                                            <Text style={{ fontSize: 16 }}>{CATEGORY_ICONS[item.category]}</Text>
+                                        </View>
+                                        <Text style={[styles.logTimestamp, { color: T.subtext, marginTop: 0 }]}>{item.timestamp}</Text>
+                                    </View>
+                                    <Text style={[styles.logAction, { color: T.text }]}>{item.action}</Text>
+                                    <Text style={[styles.logTarget, { color: T.subtext }]} numberOfLines={2}>→ {item.target}</Text>
+                                    <View style={styles.mobileLogMeta}>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1, minWidth: 0 }}>
+                                            <Text style={[styles.logActor, { color: T.text }]} numberOfLines={1}>{item.actor}</Text>
+                                            <View style={[styles.roleChip, { backgroundColor: item.role === 'superadmin' ? 'rgba(220,53,69,0.1)' : 'rgba(59,125,221,0.1)' }]}>
+                                                <Text style={[styles.roleChipText, { color: item.role === 'superadmin' ? '#DC3545' : T.accent }]}>
+                                                    {item.role}
+                                                </Text>
+                                            </View>
+                                        </View>
+                                        <Text style={[styles.logIp, { color: T.codeBg === '#0D1117' ? '#6B7280' : '#94A3B8', backgroundColor: T.codeBg }]}>
+                                            {item.ip}
+                                        </Text>
+                                    </View>
+                                </View>
+                            );
+                        }
                         return (
                             <View style={[styles.logRow, { borderBottomColor: T.border, backgroundColor: index % 2 === 1 ? (isDark ? 'rgba(255,255,255,0.01)' : '#F8FAFC') : 'transparent' }]}>
                                 {/* Left: Severity + Category */}
@@ -184,9 +216,9 @@ export default function AdminAuditLogsView({ isDark, searchQuery = '' }: { isDar
                                 </View>
 
                                 {/* Middle: Main content */}
-                                <View style={styles.logBody}>
+                                <View style={[styles.logBody, { minWidth: 0 }]}>
                                     <Text style={[styles.logAction, { color: T.text }]}>{item.action}</Text>
-                                    <Text style={[styles.logTarget, { color: T.subtext }]} numberOfLines={1}>→ {item.target}</Text>
+                                    <Text style={[styles.logTarget, { color: T.subtext }]} numberOfLines={1} ellipsizeMode="tail">→ {item.target}</Text>
                                     <Text style={[styles.logTimestamp, { color: T.subtext }]}>{item.timestamp}</Text>
                                 </View>
 
@@ -250,4 +282,7 @@ const styles = StyleSheet.create({
     roleChip: { paddingVertical: 2, paddingHorizontal: 8, borderRadius: 4 },
     roleChipText: { fontSize: 10, fontWeight: 'bold' },
     logIp: { fontSize: 11, fontFamily: 'monospace', paddingVertical: 2, paddingHorizontal: 6, borderRadius: 4 },
+    mobileLogCard: { padding: 14, borderBottomWidth: 1, gap: 6 },
+    mobileLogTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+    mobileLogMeta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' },
 });

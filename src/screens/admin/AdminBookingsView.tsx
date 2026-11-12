@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
     View, Text, StyleSheet, FlatList, ActivityIndicator,
-    TouchableOpacity, ScrollView, TextInput, Modal, Image
+    TouchableOpacity, ScrollView, TextInput, Modal, Image, useWindowDimensions
 } from 'react-native';
 import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
@@ -40,6 +40,8 @@ export default function AdminBookingsView({ token, searchQuery = '' }: { token: 
     const [fetchingDetails, setFetchingDetails] = useState(false);
 
     const { fetchWithAuth } = useAuth();
+    const { width } = useWindowDimensions();
+    const isMobile = width < 768;
 
     useEffect(() => {
         loadBookings();
@@ -140,9 +142,9 @@ export default function AdminBookingsView({ token, searchQuery = '' }: { token: 
     if (loading) return <ActivityIndicator color="#1FAF63" size="large" style={{ marginTop: 60 }} />;
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, isMobile && { padding: 16 }]}>
             {/* Header & Export Row */}
-            <View style={styles.headerRow}>
+            <View style={[styles.headerRow, { flexWrap: 'wrap', gap: 10 }]}>
                 <Text style={styles.sectionLabel}>BOOKING MANAGEMENT HUB</Text>
                 <TouchableOpacity
                     style={styles.exportBtn}
@@ -153,11 +155,11 @@ export default function AdminBookingsView({ token, searchQuery = '' }: { token: 
             </View>
 
             {/* BID Search Box Bar */}
-            <View style={styles.searchBarCard}>
+            <View style={[styles.searchBarCard, isMobile && { padding: 14 }]}>
                 <Text style={styles.searchLabel}>🔍 LOOKUP BOOKING BY BID:</Text>
-                <View style={styles.searchInputRow}>
+                <View style={[styles.searchInputRow, isMobile && { flexDirection: 'column', gap: 10 }]}>
                     <TextInput
-                        style={styles.bidInput}
+                        style={[styles.bidInput, { minWidth: 0 }]}
                         placeholder="Enter Booking ID (e.g. Go-0047 or 0047)..."
                         placeholderTextColor="#6B7280"
                         value={bidSearchInput}
@@ -165,7 +167,7 @@ export default function AdminBookingsView({ token, searchQuery = '' }: { token: 
                         onSubmitEditing={() => fetchBookingDetails(bidSearchInput)}
                     />
                     <TouchableOpacity
-                        style={styles.searchBtn}
+                        style={[styles.searchBtn, isMobile && { paddingVertical: 12, alignItems: 'center' }]}
                         onPress={() => fetchBookingDetails(bidSearchInput)}
                         disabled={fetchingDetails}
                     >
@@ -180,19 +182,63 @@ export default function AdminBookingsView({ token, searchQuery = '' }: { token: 
 
             {/* Table Card */}
             <View style={styles.tableCard}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ minWidth: '100%' }}>
-                    <View style={{ minWidth: 900, flex: 1 }}>
-                        {renderHeader()}
-                        <FlatList
-                            data={filteredBookings}
-                            keyExtractor={item => item.id}
-                            renderItem={renderRow}
-                            ListEmptyComponent={
-                                <Text style={{ color: '#6B7280', textAlign: 'center', padding: 40 }}>No confirmed or pending bookings found.</Text>
-                            }
-                        />
-                    </View>
-                </ScrollView>
+                {isMobile ? (
+                    <FlatList
+                        data={filteredBookings}
+                        keyExtractor={item => item.id}
+                        contentContainerStyle={{ paddingBottom: 20 }}
+                        renderItem={({ item }) => {
+                            const statusUpper = (item.status || 'PENDING').toUpperCase();
+                            const statusColor = STATUS_COLORS[statusUpper] ?? '#6B7280';
+                            const displayBID = item.bookingId ? item.bookingId : `ID: ${item.id.slice(-6).toUpperCase()}`;
+
+                            return (
+                                <TouchableOpacity style={styles.mobileBookingCard} onPress={() => handleRowClick(item)} activeOpacity={0.7}>
+                                    <View style={styles.mobileCardTop}>
+                                        <Text style={[styles.idCell, { flex: 1, minWidth: 0 }]} numberOfLines={1}>{displayBID}</Text>
+                                        <View style={[styles.statusPill, { backgroundColor: statusColor + '22', borderColor: statusColor }]}>
+                                            <Text style={[styles.statusText, { color: statusColor }]}>{statusUpper}</Text>
+                                        </View>
+                                    </View>
+                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                                        <Text style={[styles.cell, styles.nameCell, { flex: 1, minWidth: 0 }]} numberOfLines={1} ellipsizeMode="tail">
+                                            {item.passengerName || '—'}
+                                        </Text>
+                                        {item.passengerPhone ? <Text style={styles.subtextCell}>{item.passengerPhone}</Text> : null}
+                                    </View>
+                                    <Text style={{ fontSize: 13, color: '#9CA3AF' }} numberOfLines={1} ellipsizeMode="tail">
+                                        {item.ride || '—'}
+                                    </Text>
+                                    <View style={styles.mobileCardBottom}>
+                                        <Text style={{ fontSize: 12, color: item.driverName ? '#E5E7EB' : '#6B7280', flex: 1, minWidth: 0 }} numberOfLines={1}>
+                                            Driver: {item.driverName || 'Unassigned'}
+                                        </Text>
+                                        <View style={styles.viewBtn}>
+                                            <Text style={styles.viewBtnText}>Details 👁</Text>
+                                        </View>
+                                    </View>
+                                </TouchableOpacity>
+                            );
+                        }}
+                        ListEmptyComponent={
+                            <Text style={{ color: '#6B7280', textAlign: 'center', padding: 40 }}>No confirmed or pending bookings found.</Text>
+                        }
+                    />
+                ) : (
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ minWidth: '100%' }}>
+                        <View style={{ minWidth: 900, flex: 1 }}>
+                            {renderHeader()}
+                            <FlatList
+                                data={filteredBookings}
+                                keyExtractor={item => item.id}
+                                renderItem={renderRow}
+                                ListEmptyComponent={
+                                    <Text style={{ color: '#6B7280', textAlign: 'center', padding: 40 }}>No confirmed or pending bookings found.</Text>
+                                }
+                            />
+                        </View>
+                    </ScrollView>
+                )}
             </View>
 
             {/* Comprehensive Booking Details Modal */}
@@ -203,12 +249,12 @@ export default function AdminBookingsView({ token, searchQuery = '' }: { token: 
                     animationType="fade"
                     onRequestClose={() => setDetailModalVisible(false)}
                 >
-                    <View style={styles.modalBackdrop}>
+                    <View style={[styles.modalBackdrop, isMobile && { padding: 12 }]}>
                         <View style={styles.detailCard}>
                             {/* Modal Header */}
-                            <View style={styles.modalHeader}>
-                                <View>
-                                    <Text style={styles.bidHeaderTitle}>
+                            <View style={[styles.modalHeader, isMobile && { padding: 14 }]}>
+                                <View style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
+                                    <Text style={[styles.bidHeaderTitle, isMobile && { fontSize: 15 }]}>
                                         BOOKING DETAILS: {selectedBookingDetails.bookingId || `ID: ${selectedBookingDetails.id}`}
                                     </Text>
                                     <Text style={styles.modalSubTitle}>
@@ -220,7 +266,7 @@ export default function AdminBookingsView({ token, searchQuery = '' }: { token: 
                                 </TouchableOpacity>
                             </View>
 
-                            <ScrollView style={{ padding: 20 }} showsVerticalScrollIndicator={false}>
+                            <ScrollView style={{ padding: isMobile ? 14 : 20 }} showsVerticalScrollIndicator={false}>
                                 {/* Status Banner */}
                                 <View style={[
                                     styles.statusBanner,
@@ -236,7 +282,7 @@ export default function AdminBookingsView({ token, searchQuery = '' }: { token: 
                                 </View>
 
                                 {/* Grid Details Section */}
-                                <View style={styles.gridRow}>
+                                <View style={[styles.gridRow, isMobile && { flexDirection: 'column', gap: 12 }]}>
                                     {/* Passenger Info */}
                                     <View style={styles.detailBlock}>
                                         <Text style={styles.blockTitle}>👤 PASSENGER DETAILS</Text>
@@ -255,7 +301,7 @@ export default function AdminBookingsView({ token, searchQuery = '' }: { token: 
                                     </View>
                                 </View>
 
-                                <View style={styles.gridRow}>
+                                <View style={[styles.gridRow, isMobile && { flexDirection: 'column', gap: 12 }]}>
                                     {/* Route & Schedule */}
                                     <View style={styles.detailBlock}>
                                         <Text style={styles.blockTitle}>🗺️ ROUTE & SCHEDULE</Text>
@@ -394,4 +440,7 @@ const styles = StyleSheet.create({
     modalFooter: { padding: 16, borderTopWidth: 1, borderTopColor: '#374151', backgroundColor: '#111827', alignItems: 'flex-end' },
     closeFooterBtn: { backgroundColor: '#374151', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
     closeFooterBtnText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 13 },
+    mobileBookingCard: { padding: 14, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)', gap: 8 },
+    mobileCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
+    mobileCardBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 2 },
 });

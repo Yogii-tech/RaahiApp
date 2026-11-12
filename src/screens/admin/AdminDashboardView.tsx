@@ -143,8 +143,8 @@ export default function AdminDashboardView({ token, onNavigateToRides, onNavigat
     const exportData = statCards.map(c => ({ label: c.label, value: c.value, sub: c.sub }));
 
     return (
-        <ScrollView style={[styles.container, { backgroundColor: T.bg }]} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-            <View style={styles.header}>
+        <ScrollView style={[styles.container, isMobile && styles.containerMobile, { backgroundColor: T.bg }]} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+            <View style={[styles.header, isMobile && styles.headerMobile]}>
                 <Text style={[styles.headerTitle, { color: T.text }]}>Analytics Dashboard</Text>
                 <View style={styles.headerButtons}>
                     <TouchableOpacity
@@ -169,14 +169,14 @@ export default function AdminDashboardView({ token, onNavigateToRides, onNavigat
                 </View>
             </View>
 
-            <View style={styles.mainGrid}>
+            <View style={[styles.mainGrid, isMobile && styles.mainGridMobile]}>
                 {/* KPI Cards */}
                 <View style={[styles.statsColumn, isMobile && { width: '100%' }]}>
-                    <View style={styles.statsWrap}>
+                    <View style={[styles.statsWrap, isMobile && styles.statsWrapMobile]}>
                         {statCards.map((card, i) => (
                             <TouchableOpacity
                                 key={i}
-                                style={[styles.miniCard, { backgroundColor: T.card }]}
+                                style={[styles.miniCard, isMobile && styles.miniCardMobile, { backgroundColor: T.card }]}
                                 onPress={card.onPress}
                             >
                                 <View style={styles.miniCardHeader}>
@@ -214,9 +214,9 @@ export default function AdminDashboardView({ token, onNavigateToRides, onNavigat
             </View>
 
             {/* Row 2: Booking breakdown + Calendar */}
-            <View style={styles.bottomGrid}>
+            <View style={[styles.bottomGrid, isMobile && styles.bottomGridMobile]}>
                 {/* Booking Status Breakdown */}
-                <View style={[styles.detailCard, { flex: 1.5, backgroundColor: T.card }]}>
+                <View style={[styles.detailCard, !isMobile && { flex: 1.5 }, isMobile && styles.detailCardMobile, { backgroundColor: T.card }]}>
                     <Text style={[styles.detailTitle, { color: T.text }]}>Booking Breakdown</Text>
                     {[
                         { label: 'Pending', count: stats?.bookings.pending ?? 0, color: '#FCB92C' },
@@ -251,7 +251,7 @@ export default function AdminDashboardView({ token, onNavigateToRides, onNavigat
                 </View>
 
                 {/* Calendar */}
-                <View style={[styles.detailCard, { flex: 1.2, backgroundColor: T.card }]}>
+                <View style={[styles.detailCard, !isMobile && { flex: 1.2 }, isMobile && styles.detailCardMobile, { backgroundColor: T.card }]}>
                     <Text style={[styles.detailTitle, { color: T.text }]}>Calendar</Text>
                     <View style={styles.calendarMock}>
                         <View style={styles.calendarHeaderRow}>
@@ -281,20 +281,31 @@ export default function AdminDashboardView({ token, onNavigateToRides, onNavigat
 
 const styles = StyleSheet.create({
     container: { flex: 1, padding: 24, backgroundColor: '#F7F9FC' },
+    containerMobile: { padding: 16 },
     scrollContent: { paddingBottom: 100 },
     header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
+    headerMobile: { flexDirection: 'column', alignItems: 'flex-start', gap: 12, marginBottom: 16 },
     headerTitle: { fontSize: 20, fontWeight: '600', color: '#495057' },
-    headerButtons: { flexDirection: 'row', gap: 10 },
+    headerButtons: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
     ghostBtn: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 4, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#DEE2E6' },
     ghostBtnText: { color: '#495057', fontSize: 13, fontWeight: '500' },
     primaryBtn: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 4, backgroundColor: '#3B7DDD' },
     primaryBtnText: { color: '#FFFFFF', fontSize: 13, fontWeight: '500' },
     mainGrid: { flexDirection: 'row', gap: 24, marginBottom: 24 },
+    mainGridMobile: { flexDirection: 'column', gap: 16, marginBottom: 16 },
     statsColumn: { width: '40%' },
     statsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 20 },
+    statsWrapMobile: { gap: 12 },
     miniCard: {
         width: '45%', minWidth: 160, backgroundColor: '#FFFFFF', borderRadius: 8, padding: 20,
         shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 2,
+    },
+    miniCardMobile: {
+        width: undefined,
+        flexBasis: '47%',
+        flexGrow: 1,
+        minWidth: 135,
+        padding: 14,
     },
     miniCardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
     miniCardLabel: { fontSize: 14, color: '#6C757D', fontWeight: '500' },
@@ -307,7 +318,9 @@ const styles = StyleSheet.create({
     largeCardTitle: { fontSize: 15, fontWeight: '600', color: '#495057' },
     chartContent: { flex: 1, justifyContent: 'flex-end', height: 200 },
     bottomGrid: { flexDirection: 'row', gap: 24 },
+    bottomGridMobile: { flexDirection: 'column', gap: 16 },
     detailCard: { backgroundColor: '#FFFFFF', borderRadius: 8, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 2 },
+    detailCardMobile: { width: '100%', padding: 16 },
     detailTitle: { fontSize: 14, fontWeight: '600', color: '#495057', marginBottom: 16 },
     calendarMock: { padding: 10 },
     calendarHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },

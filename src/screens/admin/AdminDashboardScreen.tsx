@@ -334,14 +334,22 @@ export default function AdminDashboardScreen() {
             {/* Main Content */}
             <View style={[styles.content, { backgroundColor: T.contentBg }]}>
                 {/* Top header bar */}
-                <View style={[styles.topBar, { borderBottomColor: T.border, backgroundColor: isDark ? T.sidebar : '#FFFFFF' }]}>
+                <View style={[
+                    styles.topBar,
+                    isMobile && styles.topBarMobile,
+                    { borderBottomColor: T.border, backgroundColor: isDark ? T.sidebar : '#FFFFFF' },
+                ]}>
                     <View style={styles.topBarLeft}>
                         {isMobile && (
-                            <TouchableOpacity onPress={() => setIsSidebarOpen(true)} style={styles.hamburger}>
-                                <Text style={{ fontSize: 24, color: T.text }}>☰</Text>
+                            <TouchableOpacity onPress={() => setIsSidebarOpen(true)} style={[styles.hamburger, styles.hamburgerMobile]}>
+                                <Text style={{ fontSize: 22, color: T.text }}>☰</Text>
                             </TouchableOpacity>
                         )}
-                        <View style={[styles.searchBar, { backgroundColor: isDark ? '#111827' : '#F7F9FC' }]}>
+                        <View style={[
+                            styles.searchBar,
+                            isMobile && styles.searchBarMobile,
+                            { backgroundColor: isDark ? '#111827' : '#F7F9FC' },
+                        ]}>
                             <Text style={styles.searchIcon}>🔍</Text>
                             <TextInput
                                 style={[styles.searchInput, { color: T.text }]}
@@ -352,13 +360,13 @@ export default function AdminDashboardScreen() {
                             />
                         </View>
                         {!isMobile && (
-                            <Text style={[styles.breadcrumb, { color: T.subtext }]}>
+                            <Text style={[styles.breadcrumb, { color: T.subtext }]} numberOfLines={1}>
                                 Admin / {PAGE_TITLES[activeView]}
                             </Text>
                         )}
                     </View>
 
-                    <View style={styles.topBarRight}>
+                    <View style={[styles.topBarRight, isMobile && styles.topBarRightMobile]}>
                         <TouchableOpacity onPress={() => setActiveView('NOTIFICATIONS')} style={styles.notificationWrapper}>
                             <Text style={styles.headerIcon}>🔔</Text>
                             {unreadCount > 0 && (
@@ -367,7 +375,7 @@ export default function AdminDashboardScreen() {
                                 </View>
                             )}
                         </TouchableOpacity>
-                        <TouchableOpacity onPress={() => handleAction('Profile Settings')} style={styles.profileBtn}>
+                        <TouchableOpacity onPress={() => handleAction('Profile Settings')} style={[styles.profileBtn, isMobile && { marginLeft: 0 }]}>
                             <View style={[styles.profileThumb, { backgroundColor: '#3B7DDD22', borderColor: '#3B7DDD' }]}>
                                 <Text style={{ color: '#3B7DDD', fontWeight: 'bold', fontSize: 12 }}>AD</Text>
                             </View>
@@ -415,10 +423,15 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         flex: 1,
+        minWidth: 0,
     },
     hamburger: {
         marginRight: 16,
         padding: 4,
+        flexShrink: 0,
+    },
+    hamburgerMobile: {
+        marginRight: 10,
     },
     profileArea: {
         padding: 24,
@@ -456,7 +469,8 @@ const styles = StyleSheet.create({
         backgroundColor: '#FFFFFF',
         opacity: 0.5,
     },
-    topBarRight: { flexDirection: 'row', alignItems: 'center', gap: 20 },
+    topBarRight: { flexDirection: 'row', alignItems: 'center', gap: 20, flexShrink: 0 },
+    topBarRightMobile: { gap: 12 },
     headerIcon: { fontSize: 20, color: '#6C757D' },
     profileThumb: {
         width: 32,
@@ -468,7 +482,7 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: '#DEE2E6'
     },
-    profileBtn: { marginLeft: 8 },
+    profileBtn: { marginLeft: 8, flexShrink: 0 },
     searchBar: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -476,21 +490,30 @@ const styles = StyleSheet.create({
         paddingVertical: 8,
         borderRadius: 8,
         marginLeft: 0,
+        minWidth: 0,
     },
-    searchIcon: { fontSize: 14, color: '#6C757D', marginRight: 8 },
-    searchInput: { flex: 1, fontSize: 14, padding: 0, outlineStyle: 'none' } as any,
-    breadcrumb: { marginLeft: 20, fontSize: 13, opacity: 0.7 },
+    searchBarMobile: {
+        flex: 1,
+        minWidth: 0,
+    },
+    searchIcon: { fontSize: 14, color: '#6C757D', marginRight: 8, flexShrink: 0 },
+    searchInput: { flex: 1, minWidth: 0, fontSize: 14, padding: 0, outlineStyle: 'none' } as any,
+    breadcrumb: { marginLeft: 20, fontSize: 13, opacity: 0.7, flexShrink: 1 },
     navItem: {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
         paddingVertical: 9, paddingHorizontal: 24,
     },
     navIcon: { fontSize: 15, width: 22 },
     navLabel: { fontSize: 13, fontWeight: '500' },
-    content: { flex: 1, flexDirection: 'column' },
+    content: { flex: 1, flexDirection: 'column', minWidth: 0 },
     topBar: {
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-        paddingHorizontal: 24, height: 64,
+        paddingHorizontal: 24, height: 64, gap: 16,
         borderBottomWidth: 1,
+    },
+    topBarMobile: {
+        paddingHorizontal: 12,
+        gap: 10,
     },
     pageBody: { flex: 1 },
     notificationWrapper: { position: 'relative' },
@@ -538,7 +561,7 @@ function AdminNotificationsView({ notifications, onMarkRead, onNavigate, isDark 
                         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'
                     }}
                 >
-                    <View style={{ flex: 1 }}>
+                    <View style={{ flex: 1, minWidth: 0, paddingRight: 12 }}>
                         <Text style={{ fontWeight: 'bold', fontSize: 16, color: T.text }}>{n.title}</Text>
                         <Text style={{ color: T.sub, marginTop: 4 }}>{n.message}</Text>
                         <Text style={{ fontSize: 12, color: T.sub, marginTop: 8 }}>{n.time}</Text>

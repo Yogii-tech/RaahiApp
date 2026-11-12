@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, Alert, ScrollView, useWindowDimensions } from 'react-native';
 import { API_BASE } from '../../apiConfig';
 
 const REPORTS = [
@@ -9,6 +9,9 @@ const REPORTS = [
 ];
 
 export default function AdminReportsView({ token }: { token: string }) {
+    const { width } = useWindowDimensions();
+    const isMobile = width < 768;
+
     const handleDownload = (type: string, label: string) => {
         if (Platform.OS === 'web') {
             const url = `${API_BASE}/api/admin/reports/${type}`;
@@ -33,12 +36,12 @@ export default function AdminReportsView({ token }: { token: string }) {
     };
 
     return (
-        <View style={styles.container}>
+        <ScrollView style={[styles.container, isMobile && { padding: 16 }]} contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
             <Text style={styles.sectionLabel}>MANAGEMENT HUB</Text>
-            <Text style={styles.pageTitle}>Reports</Text>
+            <Text style={[styles.pageTitle, isMobile && { fontSize: 24, marginBottom: 20 }]}>Reports</Text>
             <View style={styles.cardsRow}>
                 {REPORTS.map(report => (
-                    <View key={report.type} style={styles.card}>
+                    <View key={report.type} style={[styles.card, isMobile && { minWidth: '100%', padding: 20 }]}>
                         <Text style={styles.cardIcon}>{report.icon}</Text>
                         <Text style={styles.cardLabel}>{report.label}</Text>
                         <TouchableOpacity
@@ -50,7 +53,7 @@ export default function AdminReportsView({ token }: { token: string }) {
                     </View>
                 ))}
             </View>
-        </View>
+        </ScrollView>
     );
 }
 

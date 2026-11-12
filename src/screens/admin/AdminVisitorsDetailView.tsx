@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { downloadCSV } from '../../utils/exportUtils';
 import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
@@ -31,6 +31,8 @@ export default function AdminVisitorsDetailView({ isDark, searchQuery = '' }: { 
      const [users, setUsers] = useState<UserRow[]>([]);
      const [loading, setLoading] = useState(true);
      const { fetchWithAuth } = useAuth();
+     const { width } = useWindowDimensions();
+     const isMobile = width < 768;
 
      const T = {
           bg: isDark ? '#111827' : '#F7F9FC',
@@ -86,10 +88,10 @@ export default function AdminVisitorsDetailView({ isDark, searchQuery = '' }: { 
      };
 
      return (
-          <ScrollView style={[styles.container, { backgroundColor: T.bg }]} showsVerticalScrollIndicator={false}>
-               <View style={styles.header}>
+          <ScrollView style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: T.bg }]} showsVerticalScrollIndicator={false}>
+               <View style={[styles.header, isMobile && { flexDirection: 'column', alignItems: 'flex-start', gap: 12 }]}>
                     <Text style={[styles.headerTitle, { color: T.text }]}>Visitors / Users Overview</Text>
-                    <View style={styles.headerButtons}>
+                    <View style={[styles.headerButtons, { flexWrap: 'wrap', gap: 8 }]}>
                          <TouchableOpacity onPress={fetchData} style={[styles.ghostBtn, { borderColor: T.border }]}>
                               <Text style={[styles.ghostBtnText, { color: T.text }]}>↻ Refresh</Text>
                          </TouchableOpacity>
@@ -103,13 +105,13 @@ export default function AdminVisitorsDetailView({ isDark, searchQuery = '' }: { 
                </View>
 
                {/* KPI cards */}
-               <View style={styles.cardsRow}>
+               <View style={[styles.cardsRow, isMobile && { gap: 12 }]}>
                     {[
                          { label: 'Total Users', count: userStats?.total ?? 0, icon: '👥', color: '#3B7DDD' },
                          { label: 'Drivers', count: userStats?.drivers ?? 0, icon: '🚗', color: '#28A745' },
                          { label: 'Passengers', count: userStats?.passengers ?? 0, icon: '🧳', color: '#FCB92C' },
                     ].map(card => (
-                         <View key={card.label} style={[styles.statCard, { backgroundColor: T.card, borderColor: T.border }]}>
+                         <View key={card.label} style={[styles.statCard, isMobile && { minWidth: 140, padding: 16 }, { backgroundColor: T.card, borderColor: T.border }]}>
                               <Text style={{ fontSize: 28, marginBottom: 12 }}>{card.icon}</Text>
                               <Text style={{ color: card.color, fontSize: 28, fontWeight: 'bold', marginBottom: 4 }}>
                                    {card.count.toLocaleString()}
@@ -120,14 +122,16 @@ export default function AdminVisitorsDetailView({ isDark, searchQuery = '' }: { 
                </View>
 
                {/* User Table */}
-               <View style={[styles.tablePanel, { backgroundColor: T.card, borderColor: T.border }]}>
+               <View style={[styles.tablePanel, isMobile && { padding: 16 }, { backgroundColor: T.card, borderColor: T.border }]}>
                     <Text style={[styles.tableTitle, { color: T.text }]}>User Registry</Text>
 
-                    <View style={[styles.tableHeader, { borderBottomColor: T.border }]}>
-                         {['Name', 'Phone', 'Role', 'Total Rides'].map(h => (
-                              <Text key={h} style={[styles.tableHeaderCell, { color: T.subtext }]}>{h}</Text>
-                         ))}
-                    </View>
+                    {!isMobile && (
+                         <View style={[styles.tableHeader, { borderBottomColor: T.border }]}>
+                              {['Name', 'Phone', 'Role', 'Total Rides'].map(h => (
+                                   <Text key={h} style={[styles.tableHeaderCell, { color: T.subtext }]}>{h}</Text>
+                              ))}
+                         </View>
+                    )}
 
                     {filteredUsers.length === 0 ? (
                          <Text style={{ color: T.subtext, textAlign: 'center', padding: 40 }}>No users found.</Text>
@@ -138,25 +142,59 @@ export default function AdminVisitorsDetailView({ isDark, searchQuery = '' }: { 
                               const displayRole = u.role ? u.role : 'Pending Setup';
                               const roleColor = u.role ? (ROLE_COLORS[u.role] ?? '#6C757D') : '#E53E3E';
 
+                              if (isMobile) {
+                                   return (
+                                        <View key={u.id || i} style={[styles.mobileUserCard, { borderBottomColor: T.border }]}>
+                                             <View style={styles.mobileUserTop}>
+                                                  <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0, gap: 10 }}>
+                                                       <View style={[styles.avatar, { backgroundColor: roleColor + '22', flexShrink: 0 }]}>
+                                                            <Text style={{ color: roleColor, fontWeight: 'bold' }}>{(u.name || 'U')[0].toUpperCase()}</Text>
+                                                       </View>
+                                                       <Text
+                                                            style={{ color: isIncomplete ? '#E53E3E' : T.text, fontWeight: '600', fontSize: 14, flex: 1, minWidth: 0, fontStyle: isIncomplete ? 'italic' : 'normal' }}
+                                                            numberOfLines={1}
+                                                            ellipsizeMode="tail"
+                                                       >
+                                                            {displayName}
+                                                       </Text>
+                                                  </View>
+                                                  <View style={[styles.roleBadge, { backgroundColor: roleColor + '22', flexShrink: 0 }]}>
+                                                       <Text style={{ color: roleColor, fontSize: 11, fontWeight: 'bold', textTransform: 'capitalize' }}>
+                                                            {displayRole}
+                                                       </Text>
+                                                  </View>
+                                             </View>
+                                             <View style={styles.mobileUserMeta}>
+                                                  <Text style={{ color: T.subtext, fontSize: 13 }} numberOfLines={1}>📞 {u.phone || '—'}</Text>
+                                                  <Text style={{ color: T.text, fontSize: 13, fontWeight: '600' }}>Rides: {u.totalRides}</Text>
+                                             </View>
+                                        </View>
+                                   );
+                              }
+
                               return (
-                                   <View key={i} style={[styles.tableRow, { borderBottomColor: T.border }]}>
-                                        <View style={[styles.cell, { flexDirection: 'row', alignItems: 'center' }]}>
-                                             <View style={[styles.avatar, { backgroundColor: roleColor + '22' }]}>
+                                   <View key={u.id || i} style={[styles.tableRow, { borderBottomColor: T.border }]}>
+                                        <View style={[styles.cell, { flexDirection: 'row', alignItems: 'center', minWidth: 0, paddingRight: 8 }]}>
+                                             <View style={[styles.avatar, { backgroundColor: roleColor + '22', flexShrink: 0 }]}>
                                                   <Text style={{ color: roleColor, fontWeight: 'bold' }}>{(u.name || 'U')[0].toUpperCase()}</Text>
                                              </View>
-                                             <Text style={{ color: isIncomplete ? '#E53E3E' : T.text, fontWeight: '500', marginLeft: 10, fontStyle: isIncomplete ? 'italic' : 'normal' }}>
+                                             <Text
+                                                  style={{ color: isIncomplete ? '#E53E3E' : T.text, fontWeight: '500', marginLeft: 10, flex: 1, minWidth: 0, fontStyle: isIncomplete ? 'italic' : 'normal' }}
+                                                  numberOfLines={1}
+                                                  ellipsizeMode="tail"
+                                             >
                                                   {displayName}
                                              </Text>
                                         </View>
-                                        <Text style={[styles.cell, { color: T.subtext }]}>{u.phone}</Text>
-                                        <View style={styles.cell}>
+                                        <Text style={[styles.cell, { color: T.subtext, minWidth: 0, paddingRight: 8 }]} numberOfLines={1} ellipsizeMode="tail">{u.phone}</Text>
+                                        <View style={[styles.cell, { minWidth: 0 }]}>
                                              <View style={[styles.roleBadge, { backgroundColor: roleColor + '22' }]}>
                                                   <Text style={{ color: roleColor, fontSize: 11, fontWeight: 'bold', textTransform: 'capitalize' }}>
                                                        {displayRole}
                                                   </Text>
                                              </View>
                                         </View>
-                                        <Text style={[styles.cell, { color: T.text, fontWeight: 'bold' }]}>{u.totalRides}</Text>
+                                        <Text style={[styles.cell, { color: T.text, fontWeight: 'bold', minWidth: 0 }]}>{u.totalRides}</Text>
                                    </View>
                               );
                          })
@@ -188,4 +226,7 @@ const styles = StyleSheet.create({
      cell: { flex: 1 },
      avatar: { width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
      roleBadge: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+     mobileUserCard: { paddingVertical: 14, borderBottomWidth: 1, gap: 8 },
+     mobileUserTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
+     mobileUserMeta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingLeft: 42 },
 });

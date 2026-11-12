@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, TextInput, useWindowDimensions } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { notify } from '../../utils/notify';
 
@@ -50,6 +50,8 @@ export default function AdminSettingsView({ isDark, activeTab: initialTab = 'adm
     const { logout } = useAuth();
     const [activeTab, setActiveTab] = useState<'admins' | 'permissions' | 'settings'>(initialTab);
     const [permissions, setPermissions] = useState<PermissionRow[]>(INITIAL_PERMISSIONS);
+    const { width } = useWindowDimensions();
+    const isMobile = width < 768;
 
     const T = {
         bg: isDark ? '#111827' : '#F7F9FC',
@@ -76,9 +78,9 @@ export default function AdminSettingsView({ isDark, activeTab: initialTab = 'adm
 
     const renderAdminsTab = () => (
         <View>
-            <View style={[styles.tabCard, { backgroundColor: T.card, borderColor: T.border }]}>
-                <View style={styles.tabCardHeader}>
-                    <View>
+            <View style={[styles.tabCard, isMobile && { padding: 16 }, { backgroundColor: T.card, borderColor: T.border }]}>
+                <View style={[styles.tabCardHeader, isMobile && { flexDirection: 'column', alignItems: 'flex-start', gap: 12 }]}>
+                    <View style={{ flex: 1, minWidth: 0, paddingRight: isMobile ? 0 : 12 }}>
                         <Text style={[styles.tabCardTitle, { color: T.text }]}>Admin User Accounts</Text>
                         <Text style={[styles.tabCardSubtitle, { color: T.subtext }]}>Manage who can access this portal (demo directory).</Text>
                     </View>
@@ -88,37 +90,41 @@ export default function AdminSettingsView({ isDark, activeTab: initialTab = 'adm
                 </View>
 
                 {MOCK_ADMINS.map((admin, index) => (
-                    <View key={admin.id} style={[styles.adminRow, { borderTopColor: T.border, borderTopWidth: index > 0 ? 1 : 0 }]}>
-                        <View style={[styles.adminAvatar, { backgroundColor: ROLE_COLORS[admin.role] + '22' }]}>
-                            <Text style={[styles.adminAvatarText, { color: ROLE_COLORS[admin.role] }]}>
-                                {admin.name.split(' ').map(n => n[0]).join('')}
-                            </Text>
-                        </View>
-                        <View style={{ flex: 1, marginLeft: 14 }}>
-                            <Text style={[styles.adminName, { color: T.text }]}>{admin.name}</Text>
-                            <Text style={[styles.adminEmail, { color: T.subtext }]}>{admin.email}</Text>
-                            <Text style={[styles.adminLastLogin, { color: T.subtext }]}>Last login: {admin.lastLogin}</Text>
-                        </View>
-                        <View style={{ alignItems: 'flex-end', gap: 8 }}>
-                            <View style={[styles.roleBadge, { backgroundColor: ROLE_COLORS[admin.role] + '22' }]}>
-                                <Text style={[styles.roleBadgeText, { color: ROLE_COLORS[admin.role] }]}>
-                                    {admin.role.toUpperCase()}
+                    <View key={admin.id} style={[styles.adminRow, isMobile && { flexDirection: 'column', alignItems: 'stretch', gap: 10 }, { borderTopColor: T.border, borderTopWidth: index > 0 ? 1 : 0 }]}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0 }}>
+                            <View style={[styles.adminAvatar, { backgroundColor: ROLE_COLORS[admin.role] + '22', flexShrink: 0 }]}>
+                                <Text style={[styles.adminAvatarText, { color: ROLE_COLORS[admin.role] }]}>
+                                    {admin.name.split(' ').map(n => n[0]).join('')}
                                 </Text>
                             </View>
-                            <View style={[styles.statusBadge, { backgroundColor: admin.status === 'active' ? 'rgba(40,167,69,0.1)' : 'rgba(108,117,125,0.1)' }]}>
-                                <Text style={[styles.statusBadgeText, { color: admin.status === 'active' ? '#28A745' : '#6C757D' }]}>
-                                    {admin.status === 'active' ? '● Active' : '○ Inactive'}
-                                </Text>
+                            <View style={{ flex: 1, marginLeft: 14, minWidth: 0 }}>
+                                <Text style={[styles.adminName, { color: T.text }]} numberOfLines={1}>{admin.name}</Text>
+                                <Text style={[styles.adminEmail, { color: T.subtext }]} numberOfLines={1} ellipsizeMode="tail">{admin.email}</Text>
+                                <Text style={[styles.adminLastLogin, { color: T.subtext }]} numberOfLines={1}>Last login: {admin.lastLogin}</Text>
                             </View>
                         </View>
-                        {admin.role !== 'superadmin' && (
-                            <TouchableOpacity
-                                style={[styles.actionBtn, { borderColor: T.border }]}
-                                onPress={() => showPreviewNotice(`Manage ${admin.name}`)}
-                            >
-                                <Text style={[styles.actionBtnText, { color: T.subtext }]}>Manage</Text>
-                            </TouchableOpacity>
-                        )}
+                        <View style={[styles.adminMetaActions, isMobile && { justifyContent: 'space-between', paddingLeft: 56 }]}>
+                            <View style={{ flexDirection: isMobile ? 'row' : 'column', alignItems: isMobile ? 'center' : 'flex-end', gap: 8 }}>
+                                <View style={[styles.roleBadge, { backgroundColor: ROLE_COLORS[admin.role] + '22' }]}>
+                                    <Text style={[styles.roleBadgeText, { color: ROLE_COLORS[admin.role] }]}>
+                                        {admin.role.toUpperCase()}
+                                    </Text>
+                                </View>
+                                <View style={[styles.statusBadge, { backgroundColor: admin.status === 'active' ? 'rgba(40,167,69,0.1)' : 'rgba(108,117,125,0.1)' }]}>
+                                    <Text style={[styles.statusBadgeText, { color: admin.status === 'active' ? '#28A745' : '#6C757D' }]}>
+                                        {admin.status === 'active' ? '● Active' : '○ Inactive'}
+                                    </Text>
+                                </View>
+                            </View>
+                            {admin.role !== 'superadmin' && (
+                                <TouchableOpacity
+                                    style={[styles.actionBtn, isMobile && { marginLeft: 0 }, { borderColor: T.border }]}
+                                    onPress={() => showPreviewNotice(`Manage ${admin.name}`)}
+                                >
+                                    <Text style={[styles.actionBtnText, { color: T.subtext }]}>Manage</Text>
+                                </TouchableOpacity>
+                            )}
+                        </View>
                     </View>
                 ))}
             </View>
@@ -126,9 +132,9 @@ export default function AdminSettingsView({ isDark, activeTab: initialTab = 'adm
     );
 
     const renderPermissionsTab = () => (
-        <View style={[styles.tabCard, { backgroundColor: T.card, borderColor: T.border }]}>
-            <View style={styles.tabCardHeader}>
-                <View>
+        <View style={[styles.tabCard, isMobile && { padding: 16 }, { backgroundColor: T.card, borderColor: T.border }]}>
+            <View style={[styles.tabCardHeader, isMobile && { flexDirection: 'column', alignItems: 'flex-start', gap: 12 }]}>
+                <View style={{ flex: 1, minWidth: 0, paddingRight: isMobile ? 0 : 12 }}>
                     <Text style={[styles.tabCardTitle, { color: T.text }]}>Module Access Permissions (Admin Role)</Text>
                     <Text style={[styles.tabCardSubtitle, { color: T.subtext }]}>
                         Fine-tune what the standard "Admin" role can view, edit, or delete (preview toggles only).
@@ -141,17 +147,17 @@ export default function AdminSettingsView({ isDark, activeTab: initialTab = 'adm
 
             {/* Header Row */}
             <View style={[styles.permHeaderRow, { borderBottomColor: T.border }]}>
-                <Text style={[styles.permHeaderCell, { flex: 3, color: T.subtext }]}>MODULE</Text>
-                <Text style={[styles.permHeaderCell, { color: T.subtext }]}>VIEW</Text>
-                <Text style={[styles.permHeaderCell, { color: T.subtext }]}>EDIT</Text>
-                <Text style={[styles.permHeaderCell, { color: T.subtext }]}>DELETE</Text>
+                <Text style={[styles.permHeaderCell, { flex: 3, textAlign: 'left', color: T.subtext }]}>MODULE</Text>
+                <Text style={[styles.permHeaderCell, isMobile && { width: 48 }, { color: T.subtext }]}>VIEW</Text>
+                <Text style={[styles.permHeaderCell, isMobile && { width: 48 }, { color: T.subtext }]}>EDIT</Text>
+                <Text style={[styles.permHeaderCell, isMobile && { width: 48 }, { color: T.subtext }]}>DELETE</Text>
             </View>
 
             {permissions.map((perm, i) => (
                 <View key={perm.module} style={[styles.permRow, { borderBottomColor: T.border, backgroundColor: i % 2 === 1 ? (isDark ? 'rgba(255,255,255,0.01)' : '#F8FAFC') : 'transparent' }]}>
-                    <Text style={[styles.permModule, { flex: 3, color: T.text }]}>{perm.module}</Text>
+                    <Text style={[styles.permModule, { flex: 3, minWidth: 0, paddingRight: 8, color: T.text }]}>{perm.module}</Text>
                     {(['view', 'edit', 'delete'] as const).map(field => (
-                        <View key={field} style={styles.permToggle}>
+                        <View key={field} style={[styles.permToggle, isMobile && { width: 48 }]}>
                             <Switch
                                 value={perm[field]}
                                 onValueChange={() => togglePermission(i, field)}
@@ -168,7 +174,7 @@ export default function AdminSettingsView({ isDark, activeTab: initialTab = 'adm
     const renderSettingsTab = () => (
         <View style={{ gap: 24 }}>
             {/* Platform Config */}
-            <View style={[styles.tabCard, { backgroundColor: T.card, borderColor: T.border }]}>
+            <View style={[styles.tabCard, isMobile && { padding: 16 }, { backgroundColor: T.card, borderColor: T.border }]}>
                 <Text style={[styles.tabCardTitle, { color: T.text, marginBottom: 4 }]}>Platform Configuration</Text>
                 <Text style={[styles.tabCardSubtitle, { color: T.subtext, marginBottom: 20 }]}>Core system settings for the GoRaahi platform.</Text>
 
@@ -179,11 +185,11 @@ export default function AdminSettingsView({ isDark, activeTab: initialTab = 'adm
                     { label: 'Booking Window (days)', value: '30', editable: true },
                     { label: 'Default Driver Verification Mode', value: 'Manual Review', editable: false },
                 ].map(setting => (
-                    <View key={setting.label} style={[styles.settingRow, { borderBottomColor: T.border }]}>
+                    <View key={setting.label} style={[styles.settingRow, isMobile && { flexDirection: 'column', alignItems: 'stretch', gap: 8 }, { borderBottomColor: T.border }]}>
                         <Text style={[styles.settingLabel, { color: T.subtext }]}>{setting.label}</Text>
                         {setting.editable ? (
                             <TextInput
-                                style={[styles.settingInput, { color: T.text, borderColor: T.border, backgroundColor: T.input }]}
+                                style={[styles.settingInput, isMobile && { width: '100%' }, { color: T.text, borderColor: T.border, backgroundColor: T.input }]}
                                 defaultValue={setting.value}
                             />
                         ) : (
@@ -194,7 +200,7 @@ export default function AdminSettingsView({ isDark, activeTab: initialTab = 'adm
             </View>
 
             {/* Route Pricing Multipliers */}
-            <View style={[styles.tabCard, { backgroundColor: T.card, borderColor: T.border }]}>
+            <View style={[styles.tabCard, isMobile && { padding: 16 }, { backgroundColor: T.card, borderColor: T.border }]}>
                 <Text style={[styles.tabCardTitle, { color: T.text, marginBottom: 4 }]}>Route Pricing Multipliers</Text>
                 <Text style={[styles.tabCardSubtitle, { color: T.subtext, marginBottom: 20 }]}>Adjust the fare multiplier per corridor to account for seasonality or demand surges.</Text>
 
@@ -204,8 +210,8 @@ export default function AdminSettingsView({ isDark, activeTab: initialTab = 'adm
                     { route: 'Haldwani → Dehradun', multiplier: '1.15' },
                     { route: 'Champawat → Pithoragarh', multiplier: '1.30' },
                 ].map(row => (
-                    <View key={row.route} style={[styles.settingRow, { borderBottomColor: T.border }]}>
-                        <Text style={[styles.settingLabel, { color: T.text }]}>{row.route}</Text>
+                    <View key={row.route} style={[styles.settingRow, isMobile && { flexWrap: 'wrap', gap: 8 }, { borderBottomColor: T.border }]}>
+                        <Text style={[styles.settingLabel, { color: T.text, minWidth: 140 }]}>{row.route}</Text>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                             <TextInput
                                 style={[styles.settingInput, { color: T.text, borderColor: T.border, backgroundColor: T.input, width: 72 }]}
@@ -219,7 +225,7 @@ export default function AdminSettingsView({ isDark, activeTab: initialTab = 'adm
             </View>
 
             {/* Danger Zone */}
-            <View style={[styles.tabCard, { backgroundColor: T.card, borderColor: '#DC354520' }]}>
+            <View style={[styles.tabCard, isMobile && { padding: 16 }, { backgroundColor: T.card, borderColor: '#DC354520' }]}>
                 <Text style={[styles.tabCardTitle, { color: '#DC3545', marginBottom: 4 }]}>Danger Zone</Text>
                 <Text style={[styles.tabCardSubtitle, { color: T.subtext, marginBottom: 20 }]}>
                     Destructive admin actions are disabled in Preview / Demo Mode. Sign Out remains active.
@@ -240,7 +246,7 @@ export default function AdminSettingsView({ isDark, activeTab: initialTab = 'adm
     );
 
     return (
-        <ScrollView style={[styles.container, { backgroundColor: T.bg }]} contentContainerStyle={{ paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
+        <ScrollView style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: T.bg }]} contentContainerStyle={{ paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
             {/* Page Header */}
             <View style={styles.pageHeader}>
                 <Text style={[styles.pageTitle, { color: T.text }]}>System Administration</Text>
@@ -259,23 +265,25 @@ export default function AdminSettingsView({ isDark, activeTab: initialTab = 'adm
             </View>
 
             {/* Tab Switcher */}
-            <View style={[styles.tabNav, { borderBottomColor: T.border }]}>
-                {([
-                    { id: 'admins', label: '👥 Admin Users', desc: 'Accounts' },
-                    { id: 'permissions', label: '🔐 Permissions', desc: 'RBAC' },
-                    { id: 'settings', label: '⚙️ Settings', desc: 'Platform' },
-                ] as const).map(tab => (
-                    <TouchableOpacity
-                        key={tab.id}
-                        style={[styles.tabNavItem, activeTab === tab.id && { borderBottomColor: T.accent, borderBottomWidth: 3 }]}
-                        onPress={() => setActiveTab(tab.id)}
-                    >
-                        <Text style={[styles.tabNavLabel, { color: activeTab === tab.id ? T.accent : T.subtext, fontWeight: activeTab === tab.id ? '600' : 'normal' }]}>
-                            {tab.label}
-                        </Text>
-                    </TouchableOpacity>
-                ))}
-            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, borderBottomWidth: 1, borderBottomColor: T.border }}>
+                <View style={styles.tabNav}>
+                    {([
+                        { id: 'admins', label: '👥 Admin Users', desc: 'Accounts' },
+                        { id: 'permissions', label: '🔐 Permissions', desc: 'RBAC' },
+                        { id: 'settings', label: '⚙️ Settings', desc: 'Platform' },
+                    ] as const).map(tab => (
+                        <TouchableOpacity
+                            key={tab.id}
+                            style={[styles.tabNavItem, isMobile && { paddingHorizontal: 12 }, activeTab === tab.id && { borderBottomColor: T.accent, borderBottomWidth: 3 }]}
+                            onPress={() => setActiveTab(tab.id)}
+                        >
+                            <Text style={[styles.tabNavLabel, { color: activeTab === tab.id ? T.accent : T.subtext, fontWeight: activeTab === tab.id ? '600' : 'normal' }]}>
+                                {tab.label}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </View>
+            </ScrollView>
 
             <View style={{ paddingTop: 24 }}>
                 {activeTab === 'admins' && renderAdminsTab()}
@@ -294,7 +302,7 @@ const styles = StyleSheet.create({
     previewBannerText: { fontSize: 12, lineHeight: 18 },
     pageTitle: { fontSize: 20, fontWeight: '600' },
     pageSubtitle: { fontSize: 13, marginTop: 4 },
-    tabNav: { flexDirection: 'row', borderBottomWidth: 1, marginBottom: 0 },
+    tabNav: { flexDirection: 'row', marginBottom: 0 },
     tabNavItem: { paddingVertical: 12, paddingHorizontal: 16, marginBottom: -1 },
     tabNavLabel: { fontSize: 14 },
     tabCard: { borderRadius: 8, borderWidth: 1, padding: 24, marginBottom: 0 },
@@ -304,6 +312,7 @@ const styles = StyleSheet.create({
     addBtn: { backgroundColor: '#3B7DDD', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 4 },
     addBtnText: { color: '#fff', fontSize: 13, fontWeight: '500' },
     adminRow: { flexDirection: 'row', paddingVertical: 16, alignItems: 'center', gap: 0 },
+    adminMetaActions: { flexDirection: 'row', alignItems: 'center' },
     adminAvatar: { width: 42, height: 42, borderRadius: 21, justifyContent: 'center', alignItems: 'center' },
     adminAvatarText: { fontSize: 14, fontWeight: 'bold' },
     adminName: { fontSize: 14, fontWeight: '600' },

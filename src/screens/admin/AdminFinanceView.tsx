@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, ScrollView, TouchableOpacity, TextInput } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, ScrollView, TouchableOpacity, TextInput, useWindowDimensions } from 'react-native';
 import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
 import { downloadCSV } from '../../utils/exportUtils';
@@ -24,6 +24,8 @@ export default function AdminFinanceView({ token: _token, searchQuery = '', isDa
     const { fetchWithAuth } = useAuth();
     const fetchWithAuthRef = useRef(fetchWithAuth);
     fetchWithAuthRef.current = fetchWithAuth;
+    const { width } = useWindowDimensions();
+    const isMobile = width < 768;
 
     const T = {
         bg: isDark ? '#111827' : '#F7F9FC',
@@ -111,9 +113,9 @@ export default function AdminFinanceView({ token: _token, searchQuery = '', isDa
     if (loading) return <ActivityIndicator color="#3B7DDD" size="large" style={{ marginTop: 60 }} />;
 
     return (
-        <ScrollView style={[styles.container, { backgroundColor: T.bg }]} contentContainerStyle={{ paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
-            <View style={styles.headerRow}>
-                <View>
+        <ScrollView style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: T.bg }]} contentContainerStyle={{ paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
+            <View style={[styles.headerRow, isMobile && { flexDirection: 'column', alignItems: 'flex-start', gap: 12 }]}>
+                <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={[styles.sectionTitle, { color: T.text }]}>Commission & Settlement</Text>
                     <Text style={[styles.sectionSubtitle, { color: T.subtext }]}>
                         Manage booking commissions, driver payment settlements, and revenue splits.
@@ -137,29 +139,29 @@ export default function AdminFinanceView({ token: _token, searchQuery = '', isDa
             </View>
 
             {/* Financial Summary Cards */}
-            <View style={styles.summaryGrid}>
+            <View style={[styles.summaryGrid, isMobile && { gap: 12 }]}>
                 {[
                     { label: 'Total Booking Value (GMV)', amount: `₹${totalRevenue.toLocaleString()}`, color: T.text, bg: T.card },
                     { label: 'Platform Commission Fee', amount: `₹${totalCommission.toLocaleString()}`, color: '#28A745', bg: T.card },
                     { label: 'Settled Driver Payouts', amount: `₹${settledPayouts.toLocaleString()}`, color: '#3B7DDD', bg: T.card },
                     { label: 'Pending Settlement Balance', amount: `₹${pendingSettlements.toLocaleString()}`, color: '#FCB92C', bg: T.card },
                 ].map((card, i) => (
-                    <View key={i} style={[styles.summaryCard, { backgroundColor: card.bg, borderColor: T.border }]}>
+                    <View key={i} style={[styles.summaryCard, isMobile && { minWidth: 140, padding: 14 }, { backgroundColor: card.bg, borderColor: T.border }]}>
                         <Text style={[styles.summaryLabel, { color: T.subtext }]}>{card.label}</Text>
-                        <Text style={[styles.summaryAmount, { color: card.color }]}>{card.amount}</Text>
+                        <Text style={[styles.summaryAmount, isMobile && { fontSize: 18 }, { color: card.color }]}>{card.amount}</Text>
                     </View>
                 ))}
             </View>
 
             {/* Row 2: Settings + Quick Settlement Action */}
-            <View style={styles.rowLayout}>
+            <View style={[styles.rowLayout, isMobile && { gap: 14 }]}>
                 {/* Commission Rates config */}
-                <View style={[styles.configCard, { backgroundColor: T.card, borderColor: T.border }]}>
+                <View style={[styles.configCard, isMobile && { minWidth: '100%', padding: 16 }, { backgroundColor: T.card, borderColor: T.border }]}>
                     <Text style={[styles.cardTitle, { color: T.text }]}>Platform Rate configuration</Text>
                     <Text style={[styles.cardSubtitle, { color: T.subtext }]}>
                         This percentage is deducted from driver fare amounts for system usage.
                     </Text>
-                    <View style={styles.inputRow}>
+                    <View style={[styles.inputRow, { flexWrap: 'wrap' }]}>
                         <View style={styles.inputWrapper}>
                             <TextInput
                                 style={[styles.input, { color: T.text, borderColor: T.border }]}
@@ -176,12 +178,12 @@ export default function AdminFinanceView({ token: _token, searchQuery = '', isDa
                 </View>
 
                 {/* Auto Settlement Config */}
-                <View style={[styles.configCard, { backgroundColor: T.card, borderColor: T.border }]}>
+                <View style={[styles.configCard, isMobile && { minWidth: '100%', padding: 16 }, { backgroundColor: T.card, borderColor: T.border }]}>
                     <Text style={[styles.cardTitle, { color: T.text }]}>Settlement Schedule (Preview Only)</Text>
                     <Text style={[styles.cardSubtitle, { color: T.subtext }]}>
                         Demo UI only — automated bank settlement triggers are not connected to a backend payout service.
                     </Text>
-                    <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
+                    <View style={{ flexDirection: 'row', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
                         {['Daily', 'Weekly (Fri)', 'Monthly'].map(opt => (
                             <TouchableOpacity
                                 key={opt}
@@ -202,8 +204,8 @@ export default function AdminFinanceView({ token: _token, searchQuery = '', isDa
             </View>
 
             {/* Ledger Table */}
-            <View style={styles.ledgerHeaderRow}>
-                <View style={{ flexDirection: 'row', gap: 16 }}>
+            <View style={[styles.ledgerHeaderRow, { flexWrap: 'wrap', gap: 8 }]}>
+                <View style={{ flexDirection: 'row', gap: isMobile ? 10 : 16, flexWrap: 'wrap' }}>
                     {['all', 'settled', 'pending'].map(tab => (
                         <TouchableOpacity
                             key={tab}
@@ -223,47 +225,77 @@ export default function AdminFinanceView({ token: _token, searchQuery = '', isDa
             </View>
 
             <View style={[styles.tableCard, { backgroundColor: T.card, borderColor: T.border }]}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    <View style={{ minWidth: 900, padding: 20 }}>
-                        <View style={[styles.tableHeader, { borderBottomColor: T.border }]}>
-                            <Text style={[styles.headerCell, { flex: 1.5, color: T.text }]}>TXID</Text>
-                            <Text style={[styles.headerCell, { flex: 2, color: T.text }]}>DRIVER PARTNER</Text>
-                            <Text style={[styles.headerCell, { flex: 1.2, color: T.text }]}>GROSS FARE</Text>
-                            <Text style={[styles.headerCell, { flex: 1.2, color: T.text }]}>COMMISSION</Text>
-                            <Text style={[styles.headerCell, { flex: 1.2, color: T.text }]}>NET PAYOUT</Text>
-                            <Text style={[styles.headerCell, { flex: 1.5, color: T.text }]}>SETTLEMENT STATUS</Text>
-                        </View>
-
-                        <FlatList
-                            data={filteredTx}
-                            keyExtractor={item => item.id}
-                            renderItem={({ item, index }) => (
-                                <View style={[styles.tableRow, { borderBottomColor: T.border, backgroundColor: index % 2 === 1 ? (isDark ? 'rgba(255,255,255,0.01)' : '#F8FAFC') : 'transparent' }]}>
-                                    <Text style={[styles.cellText, { flex: 1.5, color: T.text, fontWeight: 'bold' }]}>{item.id}</Text>
-                                    <Text style={[styles.cellText, { flex: 2, color: T.text, fontWeight: '500' }]}>{item.driverName}</Text>
-                                    <Text style={[styles.cellText, { flex: 1.2, color: T.text }]}>₹{item.amount.toLocaleString()}</Text>
-                                    <Text style={[styles.cellText, { flex: 1.2, color: '#28A745', fontWeight: '500' }]}>₹{item.commission.toLocaleString()}</Text>
-                                    <Text style={[styles.cellText, { flex: 1.2, color: T.text }]}>₹{item.netPayout.toLocaleString()}</Text>
-                                    <View style={{ flex: 1.5, justifyContent: 'center' }}>
-                                        <View style={[
-                                            styles.statusBadge,
-                                            item.status === 'settled' ? styles.badgeSettled : styles.badgePending
-                                        ]}>
-                                            <Text style={[styles.badgeText, { color: item.status === 'settled' ? '#28A745' : '#FCB92C' }]}>
-                                                {item.status.toUpperCase()}
-                                            </Text>
-                                        </View>
+                {isMobile ? (
+                    filteredTx.length === 0 ? (
+                        <Text style={{ color: T.subtext, textAlign: 'center', padding: 40 }}>
+                            No ledger logs match filters.
+                        </Text>
+                    ) : (
+                        filteredTx.map((item, index) => (
+                            <View key={item.id} style={[styles.mobileTxCard, { borderBottomColor: T.border, backgroundColor: index % 2 === 1 ? (isDark ? 'rgba(255,255,255,0.01)' : '#F8FAFC') : 'transparent' }]}>
+                                <View style={styles.mobileTxTop}>
+                                    <Text style={{ color: T.text, fontWeight: 'bold', fontSize: 13 }}>{item.id}</Text>
+                                    <View style={[
+                                        styles.statusBadge,
+                                        item.status === 'settled' ? styles.badgeSettled : styles.badgePending
+                                    ]}>
+                                        <Text style={[styles.badgeText, { color: item.status === 'settled' ? '#28A745' : '#FCB92C' }]}>
+                                            {item.status.toUpperCase()}
+                                        </Text>
                                     </View>
                                 </View>
-                            )}
-                            ListEmptyComponent={
-                                <Text style={{ color: T.subtext, textAlign: 'center', padding: 40 }}>
-                                    No ledger logs match filters.
-                                </Text>
-                            }
-                        />
-                    </View>
-                </ScrollView>
+                                <Text style={{ color: T.text, fontSize: 14, fontWeight: '500' }} numberOfLines={1}>{item.driverName}</Text>
+                                <View style={styles.mobileTxMeta}>
+                                    <Text style={{ color: T.subtext, fontSize: 12 }}>Gross: <Text style={{ color: T.text, fontWeight: '600' }}>₹{item.amount.toLocaleString()}</Text></Text>
+                                    <Text style={{ color: T.subtext, fontSize: 12 }}>Fee: <Text style={{ color: '#28A745', fontWeight: '600' }}>₹{item.commission.toLocaleString()}</Text></Text>
+                                    <Text style={{ color: T.subtext, fontSize: 12 }}>Net: <Text style={{ color: T.text, fontWeight: '700' }}>₹{item.netPayout.toLocaleString()}</Text></Text>
+                                </View>
+                            </View>
+                        ))
+                    )
+                ) : (
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                        <View style={{ minWidth: 900, padding: 20 }}>
+                            <View style={[styles.tableHeader, { borderBottomColor: T.border }]}>
+                                <Text style={[styles.headerCell, { flex: 1.5, color: T.text }]}>TXID</Text>
+                                <Text style={[styles.headerCell, { flex: 2, color: T.text }]}>DRIVER PARTNER</Text>
+                                <Text style={[styles.headerCell, { flex: 1.2, color: T.text }]}>GROSS FARE</Text>
+                                <Text style={[styles.headerCell, { flex: 1.2, color: T.text }]}>COMMISSION</Text>
+                                <Text style={[styles.headerCell, { flex: 1.2, color: T.text }]}>NET PAYOUT</Text>
+                                <Text style={[styles.headerCell, { flex: 1.5, color: T.text }]}>SETTLEMENT STATUS</Text>
+                            </View>
+
+                            <FlatList
+                                data={filteredTx}
+                                keyExtractor={item => item.id}
+                                renderItem={({ item, index }) => (
+                                    <View style={[styles.tableRow, { borderBottomColor: T.border, backgroundColor: index % 2 === 1 ? (isDark ? 'rgba(255,255,255,0.01)' : '#F8FAFC') : 'transparent' }]}>
+                                        <Text style={[styles.cellText, { flex: 1.5, color: T.text, fontWeight: 'bold' }]}>{item.id}</Text>
+                                        <Text style={[styles.cellText, { flex: 2, color: T.text, fontWeight: '500' }]}>{item.driverName}</Text>
+                                        <Text style={[styles.cellText, { flex: 1.2, color: T.text }]}>₹{item.amount.toLocaleString()}</Text>
+                                        <Text style={[styles.cellText, { flex: 1.2, color: '#28A745', fontWeight: '500' }]}>₹{item.commission.toLocaleString()}</Text>
+                                        <Text style={[styles.cellText, { flex: 1.2, color: T.text }]}>₹{item.netPayout.toLocaleString()}</Text>
+                                        <View style={{ flex: 1.5, justifyContent: 'center' }}>
+                                            <View style={[
+                                                styles.statusBadge,
+                                                item.status === 'settled' ? styles.badgeSettled : styles.badgePending
+                                            ]}>
+                                                <Text style={[styles.badgeText, { color: item.status === 'settled' ? '#28A745' : '#FCB92C' }]}>
+                                                    {item.status.toUpperCase()}
+                                                </Text>
+                                            </View>
+                                        </View>
+                                    </View>
+                                )}
+                                ListEmptyComponent={
+                                    <Text style={{ color: T.subtext, textAlign: 'center', padding: 40 }}>
+                                        No ledger logs match filters.
+                                    </Text>
+                                }
+                            />
+                        </View>
+                    </ScrollView>
+                )}
             </View>
         </ScrollView>
     );
@@ -306,4 +338,7 @@ const styles = StyleSheet.create({
     badgeSettled: { backgroundColor: 'rgba(40,167,69,0.1)', borderColor: 'rgba(40,167,69,0.3)' },
     badgePending: { backgroundColor: 'rgba(252,185,44,0.1)', borderColor: 'rgba(252,185,44,0.3)' },
     badgeText: { fontSize: 11, fontWeight: 'bold' },
+    mobileTxCard: { padding: 14, borderBottomWidth: 1, gap: 6 },
+    mobileTxTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
+    mobileTxMeta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 2 },
 });

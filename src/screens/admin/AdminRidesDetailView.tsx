@@ -40,6 +40,7 @@ export default function AdminRidesDetailView({ isDark, searchQuery = '', initial
      const [timeFrame, setTimeFrame] = useState<'Monthly' | 'Daily'>('Monthly');
      const { fetchWithAuth } = useAuth();
      const { width } = useWindowDimensions();
+     const isMobile = width < 768;
 
      const T = {
           bg: isDark ? '#111827' : '#F7F9FC',
@@ -92,10 +93,10 @@ export default function AdminRidesDetailView({ isDark, searchQuery = '', initial
      if (loading) return <ActivityIndicator color="#3B7DDD" size="large" style={{ marginTop: 60 }} />;
 
      return (
-          <ScrollView style={[styles.container, { backgroundColor: T.bg }]} showsVerticalScrollIndicator={false}>
-               <View style={styles.header}>
+          <ScrollView style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: T.bg }]} showsVerticalScrollIndicator={false}>
+               <View style={[styles.header, isMobile && { flexDirection: 'column', alignItems: 'flex-start', gap: 12 }]}>
                     <Text style={[styles.headerTitle, { color: T.text }]}>Rides Overview</Text>
-                    <View style={styles.headerButtons}>
+                    <View style={[styles.headerButtons, { flexWrap: 'wrap', gap: 10 }]}>
                          <TouchableOpacity onPress={fetchData} style={[styles.ghostBtn, { borderColor: T.border }]}>
                               <Text style={[styles.ghostBtnText, { color: T.text }]}>↻ Refresh</Text>
                          </TouchableOpacity>
@@ -131,9 +132,9 @@ export default function AdminRidesDetailView({ isDark, searchQuery = '', initial
 
                {/* Trend Chart */}
                {trendData.length > 0 && (
-                    <View style={[styles.graphPanel, { backgroundColor: T.card, borderColor: T.border }]}>
+                    <View style={[styles.graphPanel, isMobile && { padding: 16 }, { backgroundColor: T.card, borderColor: T.border }]}>
                          <View style={styles.graphHeader}>
-                              <View>
+                              <View style={{ flex: 1, minWidth: 0 }}>
                                    <Text style={[styles.graphTitle, { color: T.text }]}>Ride Volume — Last 6 Months</Text>
                                    <Text style={[styles.graphSubtitle, { color: T.subtext }]}>Real data from database</Text>
                               </View>
@@ -150,28 +151,60 @@ export default function AdminRidesDetailView({ isDark, searchQuery = '', initial
                )}
 
                {/* Rides Table */}
-               <View style={[styles.tablePanel, { backgroundColor: T.card, borderColor: T.border }]}>
+               <View style={[styles.tablePanel, isMobile && { padding: 16 }, { backgroundColor: T.card, borderColor: T.border }]}>
                     <Text style={[styles.tableTitle, { color: T.text }]}>
                          Ride Records {selectedTab !== 'all' ? `— ${selectedTab}` : ''} ({filteredRides.length})
                     </Text>
-                    <View style={styles.tableHeader}>
-                         {['Route', 'Driver', 'Date / Time', 'Seats', 'Price', 'Status'].map(h => (
-                              <Text key={h} style={[styles.tableHeaderCell, { color: T.subtext }]}>{h}</Text>
-                         ))}
-                    </View>
+                    {!isMobile && (
+                         <View style={styles.tableHeader}>
+                              {['Route', 'Driver', 'Date / Time', 'Seats', 'Price', 'Status'].map(h => (
+                                   <Text key={h} style={[styles.tableHeaderCell, { color: T.subtext }]}>{h}</Text>
+                              ))}
+                         </View>
+                    )}
                     {filteredRides.length === 0 ? (
                          <Text style={{ color: T.subtext, textAlign: 'center', padding: 40 }}>No rides found</Text>
+                    ) : isMobile ? (
+                         filteredRides.map(r => {
+                              const statusColor = STATUS_COLORS[r.status] ?? '#6C757D';
+                              return (
+                                   <View key={r.id} style={[styles.mobileCard, { borderBottomColor: T.border }]}>
+                                        <View style={styles.mobileCardTop}>
+                                             <Text style={{ color: T.text, fontWeight: 'bold', fontSize: 14, flex: 1, minWidth: 0 }} numberOfLines={2}>
+                                                  {r.route}
+                                             </Text>
+                                             <View style={[styles.statusBadge, { backgroundColor: statusColor + '20' }]}>
+                                                  <Text style={{ color: statusColor, fontSize: 11, fontWeight: 'bold' }}>{r.status}</Text>
+                                             </View>
+                                        </View>
+                                        <View style={styles.mobileCardRow}>
+                                             <Text style={{ color: T.text, fontSize: 13, flex: 1, minWidth: 0 }} numberOfLines={1}>
+                                                  Driver: {r.driver || '—'}
+                                             </Text>
+                                             <Text style={{ color: T.subtext, fontSize: 12 }}>
+                                                  {r.date} • {r.departureTime}
+                                             </Text>
+                                        </View>
+                                        <View style={styles.mobileCardRow}>
+                                             <Text style={{ color: T.subtext, fontSize: 12 }}>
+                                                  Seats: <Text style={{ color: T.text, fontWeight: '600' }}>{r.seatsBooked}/{r.seatsTotal}</Text>
+                                             </Text>
+                                             <Text style={{ color: T.text, fontWeight: 'bold', fontSize: 14 }}>₹{r.pricePerSeat}</Text>
+                                        </View>
+                                   </View>
+                              );
+                         })
                     ) : (
                          filteredRides.map(r => {
                               const statusColor = STATUS_COLORS[r.status] ?? '#6C757D';
                               return (
                                    <View key={r.id} style={[styles.tableRow, { borderBottomColor: T.border }]}>
-                                        <Text style={[styles.cell, { color: T.text, fontWeight: 'bold' }]} numberOfLines={1}>{r.route}</Text>
-                                        <Text style={[styles.cell, { color: T.text }]}>{r.driver || '—'}</Text>
-                                        <Text style={[styles.cell, { color: T.subtext, fontSize: 12 }]}>{r.date}{'\n'}{r.departureTime}</Text>
-                                        <Text style={[styles.cell, { color: T.text }]}>{r.seatsBooked}/{r.seatsTotal}</Text>
-                                        <Text style={[styles.cell, { color: T.text, fontWeight: 'bold' }]}>₹{r.pricePerSeat}</Text>
-                                        <View style={styles.cellStatus}>
+                                        <Text style={[styles.cell, { color: T.text, fontWeight: 'bold', minWidth: 0, paddingRight: 8 }]} numberOfLines={1} ellipsizeMode="tail">{r.route}</Text>
+                                        <Text style={[styles.cell, { color: T.text, minWidth: 0, paddingRight: 8 }]} numberOfLines={1} ellipsizeMode="tail">{r.driver || '—'}</Text>
+                                        <Text style={[styles.cell, { color: T.subtext, fontSize: 12, minWidth: 0 }]}>{r.date}{'\n'}{r.departureTime}</Text>
+                                        <Text style={[styles.cell, { color: T.text, minWidth: 0 }]}>{r.seatsBooked}/{r.seatsTotal}</Text>
+                                        <Text style={[styles.cell, { color: T.text, fontWeight: 'bold', minWidth: 0 }]}>₹{r.pricePerSeat}</Text>
+                                        <View style={[styles.cellStatus, { minWidth: 0 }]}>
                                              <View style={[styles.statusBadge, { backgroundColor: statusColor + '20' }]}>
                                                   <Text style={{ color: statusColor, fontSize: 11, fontWeight: 'bold' }}>{r.status}</Text>
                                              </View>
@@ -215,4 +248,7 @@ const styles = StyleSheet.create({
      cell: { flex: 1, fontSize: 13 },
      cellStatus: { flex: 1 },
      statusBadge: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+     mobileCard: { paddingVertical: 14, borderBottomWidth: 1, gap: 8 },
+     mobileCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 },
+     mobileCardRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
 });
