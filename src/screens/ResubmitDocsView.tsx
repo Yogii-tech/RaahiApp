@@ -12,6 +12,7 @@ import {
     ScrollView,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
 import { API_BASE } from '../apiConfig';
@@ -23,13 +24,13 @@ interface ResubmitDocsViewProps {
 }
 
 const ResubmitDocsView: React.FC<ResubmitDocsViewProps> = ({ onClose }) => {
-    const { token, user, setAuth, logout } = useAuth();
+    const { token, refreshToken, user, setAuth, logout } = useAuth();
     const { colors, isDark } = useTheme();
     const { t } = useLanguage();
 
     const [loading, setLoading] = useState(false);
     const [showDocSubmittedModal, setShowDocSubmittedModal] = useState(false);
-    
+
     // Pre-fill with existing vehicle details if available
     const [vehicleDocs, setVehicleDocs] = useState({
         name: user?.vehicle?.vehicle_name || '',
@@ -50,6 +51,13 @@ const ResubmitDocsView: React.FC<ResubmitDocsViewProps> = ({ onClose }) => {
                 token,
                 () => setLoading(true),
                 () => setLoading(false),
+                {
+                    refreshToken,
+                    onTokenRefreshed: (newToken: string) => {
+                        // Keep context + storage in sync so later requests don't reuse the stale token
+                        setAuth(newToken, refreshToken, user);
+                    },
+                },
             ).then(url => {
                 if (url) {
                     setVehicleDocs(prev => ({ ...prev, [type]: url }));
@@ -116,7 +124,10 @@ const ResubmitDocsView: React.FC<ResubmitDocsViewProps> = ({ onClose }) => {
                     vehicle: body.vehicle,
                     verification_status: 'pending',
                 };
-                await setAuth(token, null, updatedUser as any);
+                // apiRequest may have silently refreshed the token in storage; don't overwrite it with a stale one
+                const latestToken = (await AsyncStorage.getItem('auth_token')) || token;
+                const latestRefresh = (await AsyncStorage.getItem('auth_refresh_token')) || refreshToken;
+                await setAuth(latestToken, latestRefresh, updatedUser as any);
                 setShowDocSubmittedModal(true);
             } else {
                 notify(t('common.error'), t('login.failProfile'));

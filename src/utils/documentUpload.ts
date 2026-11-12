@@ -1,4 +1,5 @@
 import { Alert, Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE } from '../apiConfig';
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // must match backend limit (10MB)
@@ -69,8 +70,48 @@ const compressImage = (file: File): Promise<File> =>
         img.src = url;
     });
 
+export interface UploadAuthOptions {
+    /** Refresh token to use if the access token is rejected. Falls back to the one in AsyncStorage. */
+    refreshToken?: string | null;
+    /** Called with the new access token after a successful silent refresh. */
+    onTokenRefreshed?: (newToken: string) => void;
+}
+
+/**
+ * Exchanges a refresh token for a new access token. Returns null if it is not possible.
+ * The upload endpoint is called with a raw token (not through apiRequest), so without this
+ * an expired 24h access token made every document upload fail with "Invalid or expired token".
+ */
+const refreshAccessToken = async (refreshToken?: string | null): Promise<string | null> => {
+    let refresh = refreshToken || null;
+    if (!refresh) {
+        try {
+            refresh = await AsyncStorage.getItem('auth_refresh_token');
+        } catch {
+            refresh = null;
+        }
+    }
+    if (!refresh) return null;
+    try {
+        const res = await fetch(`${API_BASE}/api/auth/refresh`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refresh_token: refresh }),
+        });
+        if (!res.ok) return null;
+        const data = await res.json();
+        return data?.token || null;
+    } catch {
+        return null;
+    }
+};
+
 /** Uploads one file to the backend and returns its public URL. Throws Error with a user-readable message. */
-export const uploadDocumentFile = async (file: File, authToken: string | null): Promise<string> => {
+export const uploadDocumentFile = async (
+    file: File,
+    authToken: string | null,
+    options: UploadAuthOptions = {},
+): Promise<string> => {
     if (!authToken) {
         throw new Error('Your session has expired. Please log in again.');
     }
@@ -80,27 +121,38 @@ export const uploadDocumentFile = async (file: File, authToken: string | null): 
         throw new Error('File is larger than 10MB. Please choose a smaller file.');
     }
 
-    const formData = new FormData();
-    formData.append('file', prepared, prepared.name || 'document');
+    const sendOnce = async (token: string): Promise<Response> => {
+        const formData = new FormData();
+        formData.append('file', prepared, prepared.name || 'document');
 
-    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    const timer = controller ? setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS) : null;
-
-    let response: Response;
-    try {
-        response = await fetch(`${API_BASE}/api/upload`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${authToken}` },
-            body: formData,
-            signal: controller ? controller.signal : undefined,
-        });
-    } catch (err: any) {
-        if (err?.name === 'AbortError') {
-            throw new Error('Upload timed out. Please check your connection and try again.');
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        const timer = controller ? setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS) : null;
+        try {
+            return await fetch(`${API_BASE}/api/upload`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` },
+                body: formData,
+                signal: controller ? controller.signal : undefined,
+            });
+        } catch (err: any) {
+            if (err?.name === 'AbortError') {
+                throw new Error('Upload timed out. Please check your connection and try again.');
+            }
+            throw new Error('Could not reach the server. Please check your internet connection and try again.');
+        } finally {
+            if (timer) clearTimeout(timer);
         }
-        throw new Error('Could not reach the server. Please check your internet connection and try again.');
-    } finally {
-        if (timer) clearTimeout(timer);
+    };
+
+    let response = await sendOnce(authToken);
+
+    // Access token expired/invalid: silently refresh once and retry.
+    if (response.status === 401) {
+        const newToken = await refreshAccessToken(options.refreshToken);
+        if (newToken) {
+            options.onTokenRefreshed?.(newToken);
+            response = await sendOnce(newToken);
+        }
     }
 
     let data: any = null;
@@ -135,6 +187,7 @@ export const pickAndUploadDocument = (
     authToken: string | null,
     onUploadStart?: () => void,
     onUploadEnd?: () => void,
+    authOptions?: UploadAuthOptions,
 ): Promise<string | null> =>
     new Promise(resolve => {
         const input = document.createElement('input');
@@ -158,7 +211,7 @@ export const pickAndUploadDocument = (
             }
             onUploadStart?.();
             try {
-                const url = await uploadDocumentFile(file, authToken);
+                const url = await uploadDocumentFile(file, authToken, authOptions);
                 resolve(url);
             } catch (err: any) {
                 notify('Upload failed', err?.message || 'Upload failed. Please try again.');

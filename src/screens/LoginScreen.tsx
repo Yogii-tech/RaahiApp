@@ -401,6 +401,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 activeToken,
                 () => setLoading(true),
                 () => setLoading(false),
+                {
+                    refreshToken: tempRefreshToken,
+                    onTokenRefreshed: (newToken: string) => setTempToken(newToken),
+                },
             ).then(url => {
                 if (url) {
                     setVehicleDocs(prev => ({ ...prev, [type]: url }));
