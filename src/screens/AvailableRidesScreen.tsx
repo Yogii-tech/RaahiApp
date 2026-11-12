@@ -156,8 +156,15 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ searchPicku
         fetchRides();
     }, [searchPickup, searchDropoff, searchDate]);
 
-    const directRides = rides.filter(r => !r.isPartialMatch);
-    const commonPointRides = rides.filter(r => r.isPartialMatch);
+    const getEffectivePrice = (r: Ride): number =>
+        r.segmentPricePerSeat && r.segmentPricePerSeat > 0 ? r.segmentPricePerSeat : (r.pricePerSeat || 0);
+
+    const directRides = rides
+        .filter(r => !r.isPartialMatch)
+        .sort((a, b) => getEffectivePrice(b) - getEffectivePrice(a));
+    const commonPointRides = rides
+        .filter(r => r.isPartialMatch)
+        .sort((a, b) => getEffectivePrice(b) - getEffectivePrice(a));
     const orderedRides = [...directRides, ...commonPointRides];
 
     const renderRideItem = ({ item, index }: { item: Ride; index: number }) => {
@@ -292,7 +299,21 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ searchPicku
                 </TouchableOpacity>
                 <Text style={[styles.routeDetails, { color: colors.subtextColor }]}>{t('available.routeDetails')}</Text>
             </View>
-            <Text style={[styles.title, { color: colors.textColor }]}>{t('available.title')}</Text>
+            <View style={styles.titleRow}>
+                <Text style={[styles.title, { color: colors.textColor }]}>{t('available.title')}</Text>
+                {rides.length > 0 && (
+                    <View
+                        style={[
+                            styles.sortBadge,
+                            {
+                                backgroundColor: isDark ? 'rgba(0, 200, 83, 0.14)' : 'rgba(0, 200, 83, 0.1)',
+                                borderColor: 'rgba(0, 200, 83, 0.35)',
+                            },
+                        ]}>
+                        <Text style={[styles.sortBadgeText, { color: '#00C853' }]}>Price: High → Low</Text>
+                    </View>
+                )}
+            </View>
 
             {loading ? (
                 <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
@@ -349,10 +370,26 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         letterSpacing: 1,
     },
+    titleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginVertical: 15,
+    },
     title: {
         fontSize: 28,
         fontWeight: 'bold',
-        marginVertical: 15,
+    },
+    sortBadge: {
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 12,
+        borderWidth: 1,
+    },
+    sortBadgeText: {
+        fontSize: 11,
+        fontWeight: 'bold',
+        letterSpacing: 0.4,
     },
     listContent: {
         paddingBottom: 20,

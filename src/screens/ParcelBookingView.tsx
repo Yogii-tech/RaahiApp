@@ -572,8 +572,14 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
     );
 
     const renderRideSelection = () => {
-        const directRides = (availableRides || []).filter((r) => !r.isPartialMatch);
-        const commonPointRides = (availableRides || []).filter((r) => r.isPartialMatch);
+        const getEffectivePrice = (r: any): number =>
+            r.segmentPricePerSeat && r.segmentPricePerSeat > 0 ? r.segmentPricePerSeat : (r.pricePerSeat || 0);
+        const directRides = (availableRides || [])
+            .filter((r) => !r.isPartialMatch)
+            .sort((a, b) => getEffectivePrice(b) - getEffectivePrice(a));
+        const commonPointRides = (availableRides || [])
+            .filter((r) => r.isPartialMatch)
+            .sort((a, b) => getEffectivePrice(b) - getEffectivePrice(a));
         const orderedRides = [...directRides, ...commonPointRides];
 
         return (
