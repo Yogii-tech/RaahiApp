@@ -6,6 +6,7 @@ import {
 import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
 import { downloadCSV } from '../../utils/exportUtils';
+import { notify, confirmAction } from '../../utils/notify';
 
 export interface Driver {
     id: string;
@@ -95,9 +96,7 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
     const handleVerifyAction = async (status: 'verified' | 'rejected') => {
         if (!selectedDriver) return;
         if (status === 'rejected' && !rejectionReason.trim()) {
-            const msg = 'Please enter a rejection reason (e.g. RC document photo is unclear).';
-            if (Platform.OS === 'web') alert(msg);
-            else Alert.alert('Reason Required', msg);
+            notify('Reason Required', 'Please enter a rejection reason (e.g. RC document photo is unclear).');
             return;
         }
 
@@ -113,23 +112,16 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
             });
 
             if (res.ok) {
-                const msg = `Driver ${selectedDriver.name} marked as ${status.toUpperCase()}`;
-                if (Platform.OS === 'web') alert(msg);
-                else Alert.alert('Success', msg);
-
+                notify('Success', `Driver ${selectedDriver.name} marked as ${status.toUpperCase()}`);
                 setInspectModalVisible(false);
                 setSelectedDriver(null);
                 loadDrivers();
             } else {
                 const data = await res.json();
-                const msg = data.error || 'Failed to update verification status';
-                if (Platform.OS === 'web') alert(msg);
-                else Alert.alert('Error', msg);
+                notify('Error', data.error || 'Failed to update verification status');
             }
         } catch (err) {
-            const msg = 'Connection error while updating status';
-            if (Platform.OS === 'web') alert(msg);
-            else Alert.alert('Error', msg);
+            notify('Error', 'Connection error while updating status');
         } finally {
             setSubmittingAction(false);
         }
@@ -137,17 +129,7 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
 
     const handleDeleteDriver = async (driver: Driver) => {
         const confirmMsg = `Are you sure you want to permanently delete driver "${driver.name}" (${driver.phone})?\n\nThis will also delete all their rides and bookings. This action CANNOT be undone.`;
-        if (Platform.OS === 'web') {
-            if (!window.confirm(confirmMsg)) return;
-        } else {
-            // For native, we'd use Alert.alert with buttons, but for simplicity:
-            Alert.alert('Confirm Delete', confirmMsg, [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Delete', style: 'destructive', onPress: () => executeDelete(driver) }
-            ]);
-            return;
-        }
-        await executeDelete(driver);
+        confirmAction('Confirm Delete', confirmMsg, () => executeDelete(driver), 'Delete', 'Cancel');
     };
 
     const executeDelete = async (driver: Driver) => {
@@ -158,22 +140,16 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
             });
             if (res.ok) {
                 const data = await res.json();
-                const msg = data.message || `Driver ${driver.name} deleted successfully`;
-                if (Platform.OS === 'web') alert(msg);
-                else Alert.alert('Deleted', msg);
+                notify('Deleted', data.message || `Driver ${driver.name} deleted successfully`);
                 setInspectModalVisible(false);
                 setSelectedDriver(null);
                 loadDrivers();
             } else {
                 const data = await res.json();
-                const msg = data.error || 'Failed to delete driver';
-                if (Platform.OS === 'web') alert(msg);
-                else Alert.alert('Error', msg);
+                notify('Error', data.error || 'Failed to delete driver');
             }
         } catch (err) {
-            const msg = 'Connection error while deleting driver';
-            if (Platform.OS === 'web') alert(msg);
-            else Alert.alert('Error', msg);
+            notify('Error', 'Connection error while deleting driver');
         } finally {
             setDeletingDriverId(null);
         }
@@ -198,24 +174,17 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
             });
 
             if (res.ok) {
-                const msg = `Re-KYC request sent to ${rekycDriver.name} (${rekycDriver.phone}). The driver will be notified to re-upload documents.`;
-                if (Platform.OS === 'web') alert(msg);
-                else Alert.alert('Notification Sent', msg);
-
+                notify('Notification Sent', `Re-KYC request sent to ${rekycDriver.name} (${rekycDriver.phone}). The driver will be notified to re-upload documents.`);
                 setRekycModalVisible(false);
                 setRekycDriver(null);
                 if (inspectModalVisible) setInspectModalVisible(false);
                 loadDrivers();
             } else {
                 const data = await res.json();
-                const msg = data.error || 'Failed to request Re-KYC';
-                if (Platform.OS === 'web') alert(msg);
-                else Alert.alert('Error', msg);
+                notify('Error', data.error || 'Failed to request Re-KYC');
             }
         } catch (err) {
-            const msg = 'Connection error while requesting Re-KYC';
-            if (Platform.OS === 'web') alert(msg);
-            else Alert.alert('Error', msg);
+            notify('Error', 'Connection error while requesting Re-KYC');
         } finally {
             setRekycLoading(false);
         }

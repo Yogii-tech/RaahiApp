@@ -234,10 +234,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 
                 setResendTimer(119);
                 navigateToStep(isAdmin ? 'admin_otp' : 'otp');
-                notify(
-                    t('login.otpSent'),
-                    `Firebase OTP request successful for +91 ${phoneNumber.trim()}.\nPlease enter the 6-digit code.`
-                );
             } else {
                 notify('Error', 'Firebase Web Auth is supported on Web browsers.');
             }

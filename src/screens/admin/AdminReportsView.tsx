@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, Alert, ScrollView, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView, useWindowDimensions } from 'react-native';
 import { API_BASE } from '../../apiConfig';
+import { notify } from '../../utils/notify';
 
 const REPORTS = [
     { label: 'Daily Bookings', type: 'daily_bookings', icon: '📋' },
@@ -29,9 +30,9 @@ export default function AdminReportsView({ token }: { token: string }) {
                     anchor.click();
                     URL.revokeObjectURL(blobUrl);
                 })
-                .catch(() => Alert.alert('Error', 'Download failed'));
+                .catch(() => notify('Error', 'Download failed'));
         } else {
-            Alert.alert('Download', `${label} CSV will be available on web.`);
+            notify('Download', `${label} CSV will be available on web.`);
         }
     };
 

@@ -17,6 +17,7 @@ import AdminFinanceView from './AdminFinanceView';
 import AdminAuditLogsView from './AdminAuditLogsView';
 import AdminSettingsView from './AdminSettingsView';
 import RaahiLogo from '../../components/RaahiLogo';
+import { notify } from '../../utils/notify';
 
 type AdminView =
     | 'dashboard'
@@ -163,11 +164,7 @@ export default function AdminDashboardScreen() {
     const T = isDark ? DARK_THEME : LIGHT_THEME;
 
     const handleAction = (msg: string) => {
-        if (Platform.OS === 'web') {
-            window.alert(msg);
-        } else {
-            Alert.alert('Raahi Admin', msg);
-        }
+        notify('Raahi Admin', msg);
     };
 
     const handleLogout = () => { logout(); };
