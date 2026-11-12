@@ -127,6 +127,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ refresh_token: storedRefresh }),
+                credentials: 'include',
             });
             if (!res.ok) {
                 // Refresh token itself is invalid/expired - force logout
@@ -135,9 +136,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
             const data = await res.json();
             const newToken = data.token;
-            setToken(newToken);
-            await AsyncStorage.setItem('auth_token', newToken);
-            return newToken;
+            if (newToken) {
+                setToken(newToken);
+                await AsyncStorage.setItem('auth_token', newToken);
+            }
+            if (data.refresh_token) {
+                setRefreshToken(data.refresh_token);
+                await AsyncStorage.setItem('auth_refresh_token', data.refresh_token);
+            }
+            return newToken || null;
         } catch (e) {
             console.error('Token refresh failed:', e);
             return null;

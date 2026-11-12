@@ -37,12 +37,11 @@ export const downloadCSV = (data: any[], filename: string) => {
           document.body.appendChild(link);
           link.click();
           document.body.removeChild(link);
+          URL.revokeObjectURL(url);
      } else {
-          // Fallback for mobile if needed (using Alert for now)
-          console.log('CSV Data:', csvString);
-          // In a real app we would use react-native-fs or expo-file-system
+          // Fallback for mobile without dumping PII/financial CSV data to console
           if (typeof alert !== 'undefined') {
-               alert('CSV Export is currently supported on Web. Data logged to console.');
+               alert('CSV Export is currently supported on Web.');
           }
      }
 };

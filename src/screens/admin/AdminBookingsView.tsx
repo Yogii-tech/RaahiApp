@@ -291,16 +291,24 @@ export default function AdminBookingsView({ token, searchQuery = '' }: { token: 
                                     </View>
                                 ) : null}
 
-                                {selectedBookingDetails.parcel?.photoUrl ? (
-                                    <View style={styles.notesBlock}>
-                                        <Text style={styles.blockTitle}>🖼️ PARCEL PHOTO</Text>
-                                        <Image
-                                            source={{ uri: selectedBookingDetails.parcel.photoUrl }}
-                                            style={{ width: '100%', height: 180, borderRadius: 8, marginTop: 8 }}
-                                            resizeMode="cover"
-                                        />
-                                    </View>
-                                ) : null}
+                                {selectedBookingDetails.parcel?.photoUrl ? (() => {
+                                    const rawUrl = String(selectedBookingDetails.parcel.photoUrl).trim();
+                                    const safeUrl = /^https?:\/\//i.test(rawUrl)
+                                        ? rawUrl
+                                        : rawUrl.startsWith('/')
+                                            ? `${API_BASE}${rawUrl}`
+                                            : '';
+                                    return safeUrl ? (
+                                        <View style={styles.notesBlock}>
+                                            <Text style={styles.blockTitle}>🖼️ PARCEL PHOTO</Text>
+                                            <Image
+                                                source={{ uri: safeUrl }}
+                                                style={{ width: '100%', height: 180, borderRadius: 8, marginTop: 8 }}
+                                                resizeMode="cover"
+                                            />
+                                        </View>
+                                    ) : null;
+                                })() : null}
                             </ScrollView>
 
                             {/* Footer */}

@@ -2,7 +2,7 @@ import { Alert, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE } from '../apiConfig';
 
-const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // must match backend limit (10MB)
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024; // must match backend limit (5MB)
 const COMPRESS_ABOVE_BYTES = 1.5 * 1024 * 1024;
 const MAX_IMAGE_DIMENSION = 2000;
 const UPLOAD_TIMEOUT_MS = 60000;
@@ -100,6 +100,16 @@ const refreshAccessToken = async (refreshToken?: string | null): Promise<string 
         });
         if (!res.ok) return null;
         const data = await res.json();
+        if (data?.token) {
+            try {
+                await AsyncStorage.setItem('auth_token', data.token);
+                if (data.refresh_token) {
+                    await AsyncStorage.setItem('auth_refresh_token', data.refresh_token);
+                }
+            } catch {
+                // ignore storage write failures
+            }
+        }
         return data?.token || null;
     } catch {
         return null;
@@ -116,9 +126,13 @@ export const uploadDocumentFile = async (
         throw new Error('Your session has expired. Please log in again.');
     }
 
+    if (file.size > MAX_UPLOAD_BYTES) {
+        throw new Error('File is larger than 5MB. Please choose an image or PDF under 5MB.');
+    }
+
     const prepared = await compressImage(file);
     if (prepared.size > MAX_UPLOAD_BYTES) {
-        throw new Error('File is larger than 10MB. Please choose a smaller file.');
+        throw new Error('File is larger than 5MB. Please choose an image or PDF under 5MB.');
     }
 
     const sendOnce = async (token: string): Promise<Response> => {

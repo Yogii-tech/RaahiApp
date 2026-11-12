@@ -67,17 +67,17 @@ export default function AdminRidesDetailView({ isDark, searchQuery = '', initial
      useEffect(() => { fetchData(); }, []);
 
      const filteredRides = rides.filter(r => {
-          const matchesSearch = r.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-               r.driver.toLowerCase().includes(searchQuery.toLowerCase()) ||
-               r.route.toLowerCase().includes(searchQuery.toLowerCase());
+          const matchesSearch = (r.id || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+               (r.driver || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+               (r.route || '').toLowerCase().includes(searchQuery.toLowerCase());
           const matchesTab = selectedTab === 'all' || r.status === selectedTab;
           return matchesSearch && matchesTab;
      });
 
-     const totalRides = statsData?.rides.total ?? rides.length;
-     const available = statsData?.rides.available ?? rides.filter(r => r.status === 'available').length;
-     const completed = statsData?.rides.completed ?? rides.filter(r => r.status === 'completed').length;
-     const cancelled = statsData?.rides.cancelled ?? rides.filter(r => r.status === 'cancelled').length;
+     const totalRides = statsData?.rides?.total ?? rides.length;
+     const available = statsData?.rides?.available ?? rides.filter(r => r.status === 'available').length;
+     const completed = statsData?.rides?.completed ?? rides.filter(r => r.status === 'completed').length;
+     const cancelled = statsData?.rides?.cancelled ?? rides.filter(r => r.status === 'cancelled').length;
 
      const trendData = (statsData?.monthlyTrend || statsData?.trends || []).map((m: any) => typeof m.rides === 'number' ? m.rides : (typeof m.count === 'number' ? m.count : 0));
      const trendLabels = (statsData?.monthlyTrend || statsData?.trends || []).map((m: any) => m.month || '');

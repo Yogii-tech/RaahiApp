@@ -53,15 +53,18 @@ const ResubmitDocsView: React.FC<ResubmitDocsViewProps> = ({ onClose }) => {
                 () => setLoading(false),
                 {
                     refreshToken,
-                    onTokenRefreshed: (newToken: string) => {
+                    onTokenRefreshed: async (newToken: string) => {
                         // Keep context + storage in sync so later requests don't reuse the stale token
-                        setAuth(newToken, refreshToken, user);
+                        const latestRefresh = (await AsyncStorage.getItem('auth_refresh_token')) || refreshToken;
+                        await setAuth(newToken, latestRefresh, user);
                     },
                 },
             ).then(url => {
                 if (url) {
                     setVehicleDocs(prev => ({ ...prev, [type]: url }));
                 }
+            }).catch(() => {
+                setLoading(false);
             });
         } else {
             Alert.prompt(
@@ -72,7 +75,10 @@ const ResubmitDocsView: React.FC<ResubmitDocsViewProps> = ({ onClose }) => {
                     {
                         text: 'Upload',
                         onPress: (url?: string) => {
-                            const finalUrl = url && url.trim() ? url.trim() : 'https://via.placeholder.com/600x400.png?text=Document+Uploaded';
+                            const trimmed = url ? url.trim() : '';
+                            const finalUrl = /^https?:\/\//i.test(trimmed)
+                                ? trimmed
+                                : 'https://via.placeholder.com/600x400.png?text=Document+Uploaded';
                             setVehicleDocs(prev => ({ ...prev, [type]: finalUrl }));
                         }
 

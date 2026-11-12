@@ -21,6 +21,7 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import { API_BASE } from '../apiConfig';
 import LocationInput from '../components/LocationInput';
 import { apiRequest } from '../utils/api';
+import { uploadDocumentFile, notify } from '../utils/documentUpload';
 import { saveFormDraft, loadFormDraft, clearFormDraft } from '../utils/formDraftStorage';
 import { pushSubViewHistory, popSubViewHistory, useBrowserBack } from '../utils/browserHistory';
 
@@ -233,27 +234,18 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
             input.type = 'file';
             input.accept = 'image/*';
             input.onchange = async (e: any) => {
-                const file = e.target.files[0];
+                const file = e.target.files?.[0];
                 if (file) {
+                    if (file.size > 5 * 1024 * 1024) {
+                        notify(t('common.error'), 'Image must be under 5MB.');
+                        return;
+                    }
                     setLoading(true);
                     try {
-                        const formData = new FormData();
-                        formData.append('file', file);
-
-                        const response = await fetch(`${API_BASE}/api/upload`, {
-                            method: 'POST',
-                            headers: { 'Authorization': `Bearer ${token}` },
-                            body: formData
-                        });
-
-                        const data = await response.json();
-                        if (response.ok) {
-                            setParcelPhoto(data.url);
-                        } else {
-                            Alert.alert(t('common.error'), data.error || 'Upload failed');
-                        }
-                    } catch (err) {
-                        Alert.alert(t('common.error'), 'Upload failed');
+                        const url = await uploadDocumentFile(file, token);
+                        setParcelPhoto(url);
+                    } catch (err: any) {
+                        notify(t('common.error'), err?.message || 'Upload failed');
                     } finally {
                         setLoading(false);
                     }

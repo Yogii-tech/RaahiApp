@@ -103,8 +103,10 @@ function handleNotificationNavigation(data: FCMNotificationPayload, navigate: Na
 let foregroundUnsubscribe: (() => void) | null = null;
 // Track whether SW message listener is already attached to avoid duplicates
 let swMessageListenerAttached = false;
-// Track native unsubscribe handle
+// Track native unsubscribe handles
 let nativeForegroundUnsubscribe: (() => void) | null = null;
+let nativeOpenedAppUnsubscribe: (() => void) | null = null;
+let nativeTokenRefreshUnsubscribe: (() => void) | null = null;
 
 export async function registerFCM(authToken: string, onNavigate: NavigateToScreen): Promise<void> {
   await syncPendingToken(authToken);
@@ -119,8 +121,18 @@ export async function registerFCM(authToken: string, onNavigate: NavigateToScree
 // ─── Native (Android / iOS) Registration Logic ────────────────────────────────
 async function registerNativeFCM(authToken: string, onNavigate: NavigateToScreen): Promise<void> {
   try {
-    // Dynamically import @react-native-firebase/messaging (not available on web build)
-    const { default: messaging } = await import('@react-native-firebase/messaging');
+    // Dynamically import @react-native-firebase/messaging modular API (not available on web build)
+    const {
+      getMessaging,
+      getToken,
+      onMessage,
+      onNotificationOpenedApp,
+      getInitialNotification,
+      onTokenRefresh,
+      requestPermission,
+      AuthorizationStatus,
+    } = await import('@react-native-firebase/messaging');
+    const messagingInstance = getMessaging();
 
     // Android 13+ (API 33+) requires POST_NOTIFICATIONS at runtime.
     // Declaring it in the manifest is not enough — the user must also grant it interactively.
@@ -145,10 +157,10 @@ async function registerNativeFCM(authToken: string, onNavigate: NavigateToScreen
 
     // iOS: request notification permission via Firebase Messaging
     if (Platform.OS === 'ios') {
-      const authStatus = await messaging().requestPermission();
+      const authStatus = await requestPermission(messagingInstance);
       const enabled =
-        authStatus === (messaging as any).AuthorizationStatus?.AUTHORIZED ||
-        authStatus === (messaging as any).AuthorizationStatus?.PROVISIONAL;
+        authStatus === AuthorizationStatus.AUTHORIZED ||
+        authStatus === AuthorizationStatus.PROVISIONAL;
       if (!enabled) {
         console.warn('[FCM Native iOS] Notification permission denied.');
         return;
@@ -156,7 +168,7 @@ async function registerNativeFCM(authToken: string, onNavigate: NavigateToScreen
     }
 
     // Get the native device FCM token
-    const token = await messaging().getToken();
+    const token = await getToken(messagingInstance);
     if (token) {
       console.log('[FCM Native] Got device token, uploading...');
       await uploadToken(token, authToken);
@@ -166,21 +178,22 @@ async function registerNativeFCM(authToken: string, onNavigate: NavigateToScreen
 
     // Handle foreground messages (app is open and in focus)
     if (nativeForegroundUnsubscribe) nativeForegroundUnsubscribe();
-    nativeForegroundUnsubscribe = messaging().onMessage(async (remoteMessage: any) => {
+    nativeForegroundUnsubscribe = onMessage(messagingInstance, async (remoteMessage) => {
       console.log('[FCM Native] Foreground message:', remoteMessage?.messageId);
       const data = remoteMessage?.data || {};
       handleNotificationNavigation(data as FCMNotificationPayload, onNavigate);
     });
 
     // Handle notification taps when app is in background (not fully quit)
-    messaging().onNotificationOpenedApp((remoteMessage: any) => {
+    if (nativeOpenedAppUnsubscribe) nativeOpenedAppUnsubscribe();
+    nativeOpenedAppUnsubscribe = onNotificationOpenedApp(messagingInstance, (remoteMessage) => {
       console.log('[FCM Native] Background tap:', remoteMessage?.messageId);
       const data = remoteMessage?.data || {};
       handleNotificationNavigation(data as FCMNotificationPayload, onNavigate);
     });
 
     // Handle notification taps when app was fully quit (cold start)
-    const initialMessage = await messaging().getInitialNotification();
+    const initialMessage = await getInitialNotification(messagingInstance);
     if (initialMessage) {
       console.log('[FCM Native] Cold-start tap:', initialMessage?.messageId);
       const data = initialMessage?.data || {};
@@ -188,7 +201,8 @@ async function registerNativeFCM(authToken: string, onNavigate: NavigateToScreen
     }
 
     // Listen for token refreshes and re-upload to keep backend in sync
-    messaging().onTokenRefresh(async (newToken: string) => {
+    if (nativeTokenRefreshUnsubscribe) nativeTokenRefreshUnsubscribe();
+    nativeTokenRefreshUnsubscribe = onTokenRefresh(messagingInstance, async (newToken: string) => {
       console.log('[FCM Native] Token refreshed, uploading...');
       await uploadToken(newToken, authToken);
     });
@@ -264,10 +278,9 @@ async function registerWebFCM(authToken: string, onNavigate: NavigateToScreen): 
 
     if (foregroundUnsubscribe) foregroundUnsubscribe();
     foregroundUnsubscribe = onMessage(messaging, (payload: any) => {
-      console.log('[FCM Web] Foreground message received:', payload);
-
       // Deduplicate by message ID
       const msgId = payload?.messageId || payload?.fcmMessageId || '';
+      console.log('[FCM Web] Foreground message received:', msgId || payload?.data?.type || 'notification');
       if (msgId && shownForegroundIds.has(msgId)) {
         console.log('[FCM Web] Duplicate foreground message suppressed:', msgId);
         return;
@@ -314,7 +327,7 @@ async function registerWebFCM(authToken: string, onNavigate: NavigateToScreen): 
       swMessageListenerAttached = true;
       navigator.serviceWorker.addEventListener('message', (event) => {
         if (event.data?.type === 'NOTIFICATION_CLICK') {
-          console.log('[FCM Web] SW notification click relayed:', event.data.data);
+          console.log('[FCM Web] SW notification click relayed:', event.data?.data?.type || 'tap');
           handleNotificationNavigation(event.data.data as FCMNotificationPayload, onNavigate);
         }
       });
@@ -336,6 +349,14 @@ export async function unregisterFCM(authToken?: string): Promise<void> {
   if (nativeForegroundUnsubscribe) {
     nativeForegroundUnsubscribe();
     nativeForegroundUnsubscribe = null;
+  }
+  if (nativeOpenedAppUnsubscribe) {
+    nativeOpenedAppUnsubscribe();
+    nativeOpenedAppUnsubscribe = null;
+  }
+  if (nativeTokenRefreshUnsubscribe) {
+    nativeTokenRefreshUnsubscribe();
+    nativeTokenRefreshUnsubscribe = null;
   }
 
   if (currentFCMToken && authToken) {

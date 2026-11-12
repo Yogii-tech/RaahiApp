@@ -63,9 +63,9 @@ export default function AdminParcelsDetailView({ isDark, searchQuery = '' }: { i
      if (loading) return <ActivityIndicator color="#3B7DDD" size="large" style={{ marginTop: 60 }} />;
 
      const filteredParcels = parcels.filter(p =>
-          p.sender.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          p.recipient.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          p.id.toLowerCase().includes(searchQuery.toLowerCase())
+          (p.sender || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (p.recipient || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (p.id || '').toLowerCase().includes(searchQuery.toLowerCase())
      );
 
      return (

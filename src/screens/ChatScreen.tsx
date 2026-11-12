@@ -69,14 +69,19 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
     const flatListRef = useRef<FlatList>(null);
 
     const fetchMessages = async () => {
+        if (!bookingId) {
+            setIsLoading(false);
+            return;
+        }
         try {
             const response = await apiRequest(`/api/chat/${bookingId}`, { method: 'GET' }, logout);
             if (response.ok) {
                 const data = await response.json();
-                setMessages(data);
+                const safeMessages = Array.isArray(data) ? data : [];
+                setMessages(safeMessages);
                 // Mark as read
-                if (data.length > 0) {
-                    apiRequest(`/api/chat/${bookingId}/read`, { method: 'POST' }, logout);
+                if (safeMessages.length > 0) {
+                    apiRequest(`/api/chat/${bookingId}/read`, { method: 'POST' }, logout).catch(() => {});
                 }
             }
         } catch (err) {
@@ -186,7 +191,7 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
                         <View>
                             <Text style={styles.recipientName}>{recipientName}</Text>
                             <View style={styles.routePill}>
-                                <Text style={styles.routeText}>RA-{bookingId.slice(-4).toUpperCase()}</Text>
+                                <Text style={styles.routeText}>RA-{(bookingId || '').slice(-4).toUpperCase()}</Text>
                                 <Text style={styles.routeArrow}> 🛣️ {pickup} → {dropoff}</Text>
                             </View>
                         </View>
@@ -197,19 +202,20 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
                     <TouchableOpacity
                         style={styles.actionCircle}
                         onPress={() => {
-                            if (!recipientPhone) {
+                            const safePhone = (recipientPhone || '').replace(/[^0-9+]/g, '');
+                            if (!safePhone) {
                                 Alert.alert('Phone Unavailable', 'The phone number for this user is not available.');
                                 return;
                             }
                             if (Platform.OS === 'web') {
                                 // On web, tel: links open the dialer app if available; else show the number
-                                const confirmed = window.confirm(`Call ${recipientName} at ${recipientPhone}?`);
+                                const confirmed = window.confirm(`Call ${recipientName} at ${safePhone}?`);
                                 if (confirmed) {
-                                    window.open(`tel:${recipientPhone}`, '_self');
+                                    window.open(`tel:${safePhone}`, '_self');
                                 }
                             } else {
-                                Linking.openURL(`tel:${recipientPhone}`).catch(() => {
-                                    Alert.alert('Error', 'Could not open phone dialer. Number: ' + recipientPhone);
+                                Linking.openURL(`tel:${safePhone}`).catch(() => {
+                                    Alert.alert('Error', 'Could not open phone dialer. Number: ' + safePhone);
                                 });
                             }
                         }}

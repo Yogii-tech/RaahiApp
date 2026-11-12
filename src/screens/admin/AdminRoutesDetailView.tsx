@@ -54,9 +54,9 @@ export default function AdminRoutesDetailView({ isDark, searchQuery = '' }: { is
      useEffect(() => { fetchData(); }, []);
 
      const filteredRoutes = routes.filter(r =>
-          r.route.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          r.topDriver.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          r.id.toLowerCase().includes(searchQuery.toLowerCase())
+          (r.route || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (r.topDriver || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (r.id || '').toLowerCase().includes(searchQuery.toLowerCase())
      );
 
      // Derived stats from real data

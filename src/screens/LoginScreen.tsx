@@ -32,6 +32,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
     const [driverConsentChecked, setDriverConsentChecked] = useState(false);
     const [adminSecretKey, setAdminSecretKey] = useState('');
     const [adminTempToken, setAdminTempToken] = useState<string | null>(null);
+    const [adminTempRefreshToken, setAdminTempRefreshToken] = useState<string | null>(null);
     const [adminTempUser, setAdminTempUser] = useState<any | null>(null);
     const [vehicleDocs, setVehicleDocs] = useState({
         name: '',
@@ -222,7 +223,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 const auth = getAuth(app);
                 
                 const fullPhone = `+91${phoneNumber.trim()}`;
-                console.log('[Firebase OTP] Requesting Firebase SMS OTP for:', fullPhone);
+                console.log('[Firebase OTP] Requesting Firebase SMS OTP');
                 if (!recaptchaVerifierRef.current) {
                     throw new Error('RecaptchaVerifier not initialized');
                 }
@@ -293,7 +294,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
             });
             const data = await response.json();
             if (!response.ok) { Alert.alert('Error', data.error || 'Invalid OTP'); return; }
-            setAdminTempToken(data.token);
+            setAdminTempToken(data.token || null);
+            setAdminTempRefreshToken(data.refresh_token || null);
             setAdminTempUser(data.user);
             navigateToStep('admin_secret');
         } catch (fbErr: any) {
@@ -315,7 +317,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 Alert.alert('Access Denied', promoteData.error || 'Invalid secret key');
                 return;
             }
-            await setAuth(adminTempToken, null, { ...adminTempUser, role: 'admin' });
+            await setAuth(adminTempToken, adminTempRefreshToken, { ...adminTempUser, role: 'admin' });
             onAuthenticated();
         } catch {
             Alert.alert('Error', 'Promotion failed. Check secret key.');
@@ -335,7 +337,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
 
         setLoading(true);
         try {
-            console.log('[Firebase Verify] Confirming OTP code:', otp.trim());
             const userCredential = await confirmationResult.confirm(otp.trim());
             const idToken = await userCredential.user.getIdToken();
             console.log('[Firebase Verify] Successfully obtained Firebase ID Token!');
@@ -409,6 +410,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 if (url) {
                     setVehicleDocs(prev => ({ ...prev, [type]: url }));
                 }
+            }).catch(() => {
+                setLoading(false);
             });
         } else {
             Alert.prompt(
@@ -419,7 +422,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                     {
                         text: 'Upload',
                         onPress: (url?: string) => {
-                            const finalUrl = url && url.trim() ? url.trim() : 'https://via.placeholder.com/600x400.png?text=Document+Uploaded';
+                            const trimmed = url ? url.trim() : '';
+                            const finalUrl = /^https?:\/\//i.test(trimmed)
+                                ? trimmed
+                                : 'https://via.placeholder.com/600x400.png?text=Document+Uploaded';
                             setVehicleDocs(prev => ({ ...prev, [type]: finalUrl }));
                         }
 

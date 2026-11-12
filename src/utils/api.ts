@@ -49,9 +49,12 @@ export const apiRequest = async (
                 const data = await refreshResponse.json();
                 const newToken = data.token;
 
-                // Save new token (for Native apps, browser ignores this if it's in cookie)
+                // Save new token and rotated refresh token (for Native apps & storage sync)
                 if (newToken) {
                     await AsyncStorage.setItem('auth_token', newToken);
+                }
+                if (data.refresh_token) {
+                    await AsyncStorage.setItem('auth_refresh_token', data.refresh_token);
                 }
 
                 // Retry original request with NEW token

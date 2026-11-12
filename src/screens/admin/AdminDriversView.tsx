@@ -240,6 +240,10 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
     const getFullUrl = (url?: string) => {
         if (!url) return '';
         let full = url.trim();
+        // Reject dangerous schemes (e.g., javascript:, data:, vbscript:)
+        if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/i.test(full) && !/^https?:\/\//i.test(full)) {
+            return '';
+        }
         if (!/^https?:\/\//i.test(full)) {
             full = `${API_BASE}${full.startsWith('/') ? '' : '/'}${full}`;
         }
@@ -254,8 +258,10 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
     const isPdf = (url: string) => /\.pdf(\?|#|$)/i.test(url);
 
     const openExternally = (url: string) => {
-        if (Platform.OS === 'web' && typeof window !== 'undefined') window.open(url, '_blank', 'noopener');
-        else Linking.openURL(url).catch(() => {});
+        const safeUrl = getFullUrl(url);
+        if (!safeUrl || !/^https?:\/\//i.test(safeUrl)) return;
+        if (Platform.OS === 'web' && typeof window !== 'undefined') window.open(safeUrl, '_blank', 'noopener,noreferrer');
+        else Linking.openURL(safeUrl).catch(() => {});
     };
 
     if (loading) return <ActivityIndicator color="#3B7DDD" size="large" style={{ marginTop: 60 }} />;

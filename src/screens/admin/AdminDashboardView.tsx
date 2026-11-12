@@ -113,20 +113,20 @@ export default function AdminDashboardView({ token, onNavigateToRides, onNavigat
     const statCards = [
         {
             id: 'rides', label: 'Rides', icon: '🚙',
-            value: stats?.rides.total ?? 0,
-            sub: `${stats?.rides.available ?? 0} active`,
+            value: stats?.rides?.total ?? 0,
+            sub: `${stats?.rides?.available ?? 0} active`,
             onPress: onNavigateToRides,
         },
         {
             id: 'bookings', label: 'Bookings', icon: '🎫',
-            value: stats?.bookings.total ?? 0,
-            sub: `${stats?.bookings.pending ?? 0} pending`,
+            value: stats?.bookings?.total ?? 0,
+            sub: `${stats?.bookings?.pending ?? 0} pending`,
             onPress: onNavigateToParcels,
         },
         {
             id: 'users', label: 'Users', icon: '👥',
-            value: stats?.users.total ?? 0,
-            sub: `${stats?.users.drivers ?? 0} drivers`,
+            value: stats?.users?.total ?? 0,
+            sub: `${stats?.users?.drivers ?? 0} drivers`,
             onPress: onNavigateToVisitors,
         },
         {
@@ -151,7 +151,11 @@ export default function AdminDashboardView({ token, onNavigateToRides, onNavigat
                         style={[styles.ghostBtn, { backgroundColor: T.card, borderColor: T.border }]}
                         onPress={() => {
                             setLoading(true); setError(null);
-                            fetchWithAuth(`${API_BASE}/api/admin/stats`).then(r => r.json()).then(setStats).catch(() => setError('Could not load')).finally(() => setLoading(false));
+                            fetchWithAuth(`${API_BASE}/api/admin/stats`)
+                                .then(r => { if (!r.ok) throw new Error(`Server error: ${r.status}`); return r.json(); })
+                                .then(setStats)
+                                .catch(() => setError('Could not load'))
+                                .finally(() => setLoading(false));
                         }}
                     >
                         <Text style={[styles.ghostBtnText, { color: T.text }]}>↻ Refresh</Text>
