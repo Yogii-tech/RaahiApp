@@ -98,6 +98,9 @@ interface Ride {
     matchedPickup?: string;
     matchedDropoff?: string;
     totalDistanceM?: number;
+    matchType?: 'full' | 'common_pickup' | 'common_dropoff';
+    isPartialMatch?: boolean;
+    route?: string[];
 }
 
 interface AvailableRidesScreenProps {
@@ -137,7 +140,7 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ searchPicku
             const response = await apiRequest(url.replace(API_BASE, ''), {}, logout);
             if (response.ok) {
                 const data = await response.json();
-                setRides(data);
+                setRides(Array.isArray(data) ? data : []);
             }
         } catch (err) {
             console.error('Failed to fetch rides:', err);
@@ -153,83 +156,131 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ searchPicku
         fetchRides();
     }, [searchPickup, searchDropoff, searchDate]);
 
-    const renderRideItem = ({ item }: { item: Ride }) => {
+    const directRides = rides.filter(r => !r.isPartialMatch);
+    const commonPointRides = rides.filter(r => r.isPartialMatch);
+    const orderedRides = [...directRides, ...commonPointRides];
+
+    const renderRideItem = ({ item, index }: { item: Ride; index: number }) => {
         // Use segment price if available, otherwise full price
         const displayPrice = item.segmentPricePerSeat && item.segmentPricePerSeat > 0
             ? item.segmentPricePerSeat
             : item.pricePerSeat;
 
         // Display route: matched pickup → matched dropoff, or full route
-        const pickupDisplay = item.matchedPickup || item.pickup;
-        const dropoffDisplay = item.matchedDropoff || item.dropoff;
-        const isSegment = item.matchedPickup && item.matchedDropoff;
+        const pickupDisplay = item.matchedPickup || item.pickup || '';
+        const dropoffDisplay = item.matchedDropoff || item.dropoff || '';
+        const isSegment = Boolean(item.matchedPickup && item.matchedDropoff);
+        const rawSegmentPriceLabel = t('available.segmentPrice');
+        const segmentPriceLabel =
+            rawSegmentPriceLabel && rawSegmentPriceLabel !== 'available.segmentPrice'
+                ? rawSegmentPriceLabel
+                : 'SEGMENT PRICE';
+        const showCommonPointDivider = directRides.length > 0 && commonPointRides.length > 0 && index === directRides.length;
+
+        const badgeLabel = item.matchType === 'common_dropoff'
+            ? `COMMON DESTINATION · STARTS FROM ${pickupDisplay.toUpperCase()}`
+            : `COMMON STARTING POINT · GOES UP TO ${dropoffDisplay.toUpperCase()}`;
 
         return (
-            <TouchableOpacity
-                style={[styles.rideCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}
-                onPress={() => onSelectRide(item)}>
-                <View style={styles.rideHeader}>
-                    <View style={styles.timeContainer}>
-                        <Text style={[styles.label, { color: colors.subtextColor }]}>{t('available.departs')}</Text>
-                        <Text style={[styles.timeText, { color: colors.textColor }]}>{item.departureTime}</Text>
-                    </View>
-                    <View style={styles.vehicleContainer}>
-                        <Text style={[styles.vehicleModel, { color: colors.textColor }]}>{item.vehicleModel}</Text>
-                        <Text style={[styles.vehicleNumber, { color: colors.subtextColor }]}>{item.vehicleNumber}</Text>
-                    </View>
-                    <View style={styles.priceContainer}>
-                        <Text style={[styles.label, { color: colors.subtextColor }]}>
-                            {isSegment ? t('available.segmentPrice') || 'SEGMENT PRICE' : t('available.perSeatPrice')}
+            <View>
+                {showCommonPointDivider && (
+                    <View style={[styles.sectionHeader, { borderTopColor: colors.borderColor }]}>
+                        <Text style={[styles.sectionHeaderTitle, { color: colors.textColor }]}>
+                            Other Drivers from Common Point
                         </Text>
-                        <Text style={[styles.priceText, { color: '#00C853' }]}>₹ {Math.round(displayPrice)}</Text>
+                        <Text style={[styles.sectionHeaderSubtitle, { color: colors.subtextColor }]}>
+                            Drivers starting from or passing through your route points
+                        </Text>
                     </View>
-                </View>
-
-                {/* Route display */}
-                <View style={styles.routeRow}>
-                    <Text style={[styles.routePoint, { color: colors.textColor }]}>{pickupDisplay.toUpperCase()}</Text>
-                    <Text style={[styles.routeArrow, { color: colors.subtextColor }]}>→</Text>
-                    <Text style={[styles.routePoint, { color: colors.textColor }]}>{dropoffDisplay.toUpperCase()}</Text>
-                </View>
-
-
-
-                {/* Date & Time Row */}
-                <View style={styles.dateTimeRow}>
-                    <View style={styles.dateTimeChip}>
-                        <Text style={styles.dateTimeChipIcon}>📅</Text>
-                        <Text style={[styles.dateTimeChipText, { color: colors.textColor }]}>{item.date || t('available.noDate')}</Text>
-                    </View>
-                    <View style={[styles.dateTimeChip, { marginLeft: 10 }]}>
-                        <Text style={styles.dateTimeChipIcon}>🕒</Text>
-                        <Text style={[styles.dateTimeChipText, { color: colors.textColor }]}>{item.departureTime || '—'}</Text>
-                    </View>
-                    {item.segmentDistanceKm && item.segmentDistanceKm > 0 ? (
-                        <View style={[styles.dateTimeChip, { marginLeft: 10, backgroundColor: 'rgba(0, 200, 83, 0.12)' }]}>
-                            <Text style={styles.dateTimeChipIcon}>📏</Text>
-                            <Text style={[styles.dateTimeChipText, { color: '#00C853' }]}>~ {Math.round(item.segmentDistanceKm)} km</Text>
+                )}
+                <TouchableOpacity
+                    style={[styles.rideCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}
+                    onPress={() => onSelectRide(item)}>
+                    {item.isPartialMatch && (
+                        <View
+                            style={[
+                                styles.segmentBadge,
+                                {
+                                    backgroundColor: isDark ? 'rgba(255, 179, 0, 0.16)' : 'rgba(255, 143, 0, 0.12)',
+                                    borderWidth: 1,
+                                    borderColor: '#FFB300',
+                                },
+                            ]}>
+                            <Text style={[styles.partialBadgeText, { color: isDark ? '#FFD54F' : '#EF6C00' }]}>
+                                {badgeLabel}
+                            </Text>
                         </View>
-                    ) : null}
-                </View>
+                    )}
 
-                <View style={styles.rideFooter}>
-                    <View style={styles.driverInfo}>
-                        <View style={[styles.avatar, { backgroundColor: '#37474F' }]}>
-                            <Text style={styles.avatarText}>{(item.driverName || 'V')[0].toUpperCase()}</Text>
+                    <View style={styles.rideHeader}>
+                        <View style={styles.timeContainer}>
+                            <Text style={[styles.label, { color: colors.subtextColor }]}>{t('available.departs')}</Text>
+                            <Text style={[styles.timeText, { color: colors.textColor }]}>{item.departureTime}</Text>
                         </View>
-                        <View>
-                            <Text style={[styles.driverName, { color: colors.textColor }]}>{item.driverName || t('available.communityDriver')} ✅</Text>
-                            <Text style={[styles.driverRole, { color: colors.subtextColor }]}>{t('available.communityDriver').toUpperCase()}</Text>
+                        <View style={styles.vehicleContainer}>
+                            <Text style={[styles.vehicleModel, { color: colors.textColor }]}>{item.vehicleModel}</Text>
+                            <Text style={[styles.vehicleNumber, { color: colors.subtextColor }]}>{item.vehicleNumber}</Text>
                         </View>
-                    </View>
-                    <View style={styles.seatsInfo}>
-                        <Text style={[styles.seatsLeft, { color: '#00C853' }]}>{item.seatsTotal - (item.takenSeats?.length || 0)} {t('available.seatsLeft')}</Text>
-                        <View style={[styles.arrowBtn, { backgroundColor: colors.borderColor, marginTop: 4 }]}>
-                            <Text style={styles.arrowText}>›</Text>
+                        <View style={styles.priceContainer}>
+                            <Text style={[styles.label, { color: colors.subtextColor }]}>
+                                {isSegment ? segmentPriceLabel : t('available.perSeatPrice')}
+                            </Text>
+                            <Text style={[styles.priceText, { color: '#00C853' }]}>₹ {Math.round(displayPrice || 0)}</Text>
                         </View>
                     </View>
-                </View>
-            </TouchableOpacity>
+
+                    {/* Route display */}
+                    <View style={styles.routeRow}>
+                        <Text style={[styles.routePoint, { color: colors.textColor }]}>{pickupDisplay.toUpperCase()}</Text>
+                        <Text style={[styles.routeArrow, { color: colors.subtextColor }]}>→</Text>
+                        <Text style={[styles.routePoint, { color: colors.textColor }]}>{dropoffDisplay.toUpperCase()}</Text>
+                    </View>
+
+                    {Array.isArray(item.route) && item.route.length > 2 && (
+                        <View style={[styles.stopsPreview, { borderTopColor: colors.borderColor }]}>
+                            <Text style={[styles.stopsPreviewText, { color: colors.subtextColor }]}>
+                                {item.route.filter(Boolean).join(' → ')}
+                            </Text>
+                        </View>
+                    )}
+
+                    {/* Date & Time Row */}
+                    <View style={styles.dateTimeRow}>
+                        <View style={styles.dateTimeChip}>
+                            <Text style={styles.dateTimeChipIcon}>📅</Text>
+                            <Text style={[styles.dateTimeChipText, { color: colors.textColor }]}>{item.date || t('available.noDate')}</Text>
+                        </View>
+                        <View style={[styles.dateTimeChip, { marginLeft: 10 }]}>
+                            <Text style={styles.dateTimeChipIcon}>🕒</Text>
+                            <Text style={[styles.dateTimeChipText, { color: colors.textColor }]}>{item.departureTime || '—'}</Text>
+                        </View>
+                        {item.segmentDistanceKm && item.segmentDistanceKm > 0 ? (
+                            <View style={[styles.dateTimeChip, { marginLeft: 10, backgroundColor: 'rgba(0, 200, 83, 0.12)' }]}>
+                                <Text style={styles.dateTimeChipIcon}>📏</Text>
+                                <Text style={[styles.dateTimeChipText, { color: '#00C853' }]}>~ {Math.round(item.segmentDistanceKm)} km</Text>
+                            </View>
+                        ) : null}
+                    </View>
+
+                    <View style={styles.rideFooter}>
+                        <View style={styles.driverInfo}>
+                            <View style={[styles.avatar, { backgroundColor: '#37474F' }]}>
+                                <Text style={styles.avatarText}>{(item.driverName || 'V')[0].toUpperCase()}</Text>
+                            </View>
+                            <View>
+                                <Text style={[styles.driverName, { color: colors.textColor }]}>{item.driverName || t('available.communityDriver')} ✅</Text>
+                                <Text style={[styles.driverRole, { color: colors.subtextColor }]}>{t('available.communityDriver').toUpperCase()}</Text>
+                            </View>
+                        </View>
+                        <View style={styles.seatsInfo}>
+                            <Text style={[styles.seatsLeft, { color: '#00C853' }]}>{Math.max(0, (item.seatsTotal || 0) - (item.takenSeats?.length || 0))} {t('available.seatsLeft')}</Text>
+                            <View style={[styles.arrowBtn, { backgroundColor: colors.borderColor, marginTop: 4 }]}>
+                                <Text style={[styles.arrowText, { color: colors.textColor }]}>›</Text>
+                            </View>
+                        </View>
+                    </View>
+                </TouchableOpacity>
+            </View>
         );
     };
 
@@ -247,10 +298,29 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ searchPicku
                 <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
             ) : (
                 <FlatList
-                    data={rides}
-                    keyExtractor={(item) => item.id}
+                    data={orderedRides}
+                    keyExtractor={(item, index) => item.id || (item as any)._id || String(index)}
                     renderItem={renderRideItem}
                     contentContainerStyle={styles.listContent}
+                    ListHeaderComponent={
+                        directRides.length === 0 && commonPointRides.length > 0 ? (
+                            <View
+                                style={[
+                                    styles.commonPointBanner,
+                                    {
+                                        backgroundColor: isDark ? 'rgba(255, 179, 0, 0.12)' : 'rgba(255, 143, 0, 0.1)',
+                                        borderColor: '#FFB300',
+                                    },
+                                ]}>
+                                <Text style={[styles.commonPointBannerTitle, { color: isDark ? '#FFD54F' : '#EF6C00' }]}>
+                                    COMMON ROUTE POINT DRIVERS
+                                </Text>
+                                <Text style={[styles.commonPointBannerText, { color: colors.textColor }]}>
+                                    {`No direct rides from ${searchPickup || 'your pickup'} to ${searchDropoff || 'your destination'}, but these drivers share a common point on your route:`}
+                                </Text>
+                            </View>
+                        ) : null
+                    }
                     ListEmptyComponent={<Text style={{ color: colors.textColor, textAlign: 'center', marginTop: 20 }}>{t('available.noRides')}</Text>}
                 />
             )}
@@ -391,14 +461,54 @@ const styles = StyleSheet.create({
         paddingHorizontal: 12,
         paddingVertical: 6,
         borderRadius: 10,
-        marginBottom: 10,
+        marginBottom: 12,
         alignSelf: 'flex-start' as const,
+    },
+    partialBadgeText: {
+        fontSize: 10,
+        fontWeight: 'bold',
+        letterSpacing: 0.6,
     },
     stopsPreview: {
         borderTopWidth: 1,
         paddingTop: 10,
         paddingBottom: 10,
         marginBottom: 10,
+    },
+    stopsPreviewText: {
+        fontSize: 11,
+        fontWeight: '600',
+        textAlign: 'center',
+    },
+    sectionHeader: {
+        borderTopWidth: 1,
+        paddingTop: 18,
+        marginTop: 6,
+        marginBottom: 14,
+    },
+    sectionHeaderTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        marginBottom: 4,
+    },
+    sectionHeaderSubtitle: {
+        fontSize: 12,
+    },
+    commonPointBanner: {
+        borderWidth: 1,
+        borderRadius: 14,
+        padding: 14,
+        marginBottom: 16,
+    },
+    commonPointBannerTitle: {
+        fontSize: 11,
+        fontWeight: 'bold',
+        letterSpacing: 0.8,
+        marginBottom: 4,
+    },
+    commonPointBannerText: {
+        fontSize: 13,
+        lineHeight: 18,
     },
     dateTimeRow: {
         flexDirection: 'row',

@@ -137,10 +137,33 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
         }
     };
 
-    const getTravelStats = (p: string, d: string, depTime: string) => {
-        // Use real road distance if fetched, otherwise fallback to estimates
-        const distance = roadDistance !== null ? roadDistance : 35;
-        const durationHours = roadDuration !== null ? roadDuration : Math.ceil(distance / 30) + 1;
+    const getEffectivePickup = (ride?: any): string => {
+        if (!ride) return pickup.trim();
+        if (ride.matchedPickup) return ride.matchedPickup;
+        if (ride.isPartialMatch && ride.matchType === 'common_dropoff') {
+            return ride.pickup || pickup.trim();
+        }
+        return pickup.trim() || ride.pickup || '';
+    };
+
+    const getEffectiveDropoff = (ride?: any): string => {
+        if (!ride) return dropoff.trim();
+        if (ride.matchedDropoff) return ride.matchedDropoff;
+        if (ride.isPartialMatch && ride.matchType === 'common_pickup') {
+            return ride.dropoff || dropoff.trim();
+        }
+        return dropoff.trim() || ride.dropoff || '';
+    };
+
+    const getTravelStats = (p: string, d: string, depTime: string, ride?: any) => {
+        const segmentKm = ride?.segmentDistanceKm && ride.segmentDistanceKm > 0
+            ? Math.round(ride.segmentDistanceKm)
+            : null;
+        // Use segment distance when available, then real road distance, otherwise fallback to estimates
+        const distance = segmentKm !== null ? segmentKm : (roadDistance !== null ? roadDistance : 35);
+        const durationHours = segmentKm !== null
+            ? Math.max(1, Math.ceil(distance / 30))
+            : (roadDuration !== null ? roadDuration : Math.ceil(distance / 30) + 1);
 
         // Calculate Arrival Time
         let arrivalTime = '—';
@@ -181,13 +204,17 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
 
         setLoading(true);
         try {
-            const url = `${API_BASE}/api/rides/available?pickup=${encodeURIComponent(pickup)}&dropoff=${encodeURIComponent(dropoff)}&date=${encodeURIComponent(selectedDate)}`;
+            const dateParts = selectedDate.trim().split('/');
+            const apiDate = dateParts.length === 3
+                ? `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`
+                : selectedDate.trim();
+            const url = `${API_BASE}/api/rides/available?pickup=${encodeURIComponent(pickup.trim())}&dropoff=${encodeURIComponent(dropoff.trim())}&date=${encodeURIComponent(apiDate)}`;
             const response = await fetch(url, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             const data = await response.json();
             if (response.ok) {
-                setAvailableRides(data);
+                setAvailableRides(Array.isArray(data) ? data : []);
                 navigateToStep('rides');
             } else {
                 Alert.alert(t('common.error'), data.error || 'Failed to fetch vehicles');
@@ -259,18 +286,14 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
             return;
         }
 
-        const stats = getTravelStats(pickup, dropoff, selectedRide.departureTime);
-        const distNum = parseInt(stats.distance) || 0;
-        const rate = selectedSize === 'small' ? 2 : selectedSize === 'medium' ? 2.5 : 3;
-        const price = Math.ceil(distNum * rate);
-
-
+        const effectivePickup = getEffectivePickup(selectedRide);
+        const effectiveDropoff = getEffectiveDropoff(selectedRide);
 
         setLoading(true);
         try {
             const rideId = selectedRide.id || selectedRide._id;
             const fullUrl = `${API_BASE}/api/rides/${rideId}/book`;
-            const stats = getTravelStats(pickup, dropoff, selectedRide.departureTime);
+            const stats = getTravelStats(effectivePickup, effectiveDropoff, selectedRide.departureTime, selectedRide);
             const distNum = parseInt(stats.distance) || 0;
             const rate = selectedSize === 'small' ? 2 : selectedSize === 'medium' ? 2.5 : 3;
             const calculatedPrice = Math.ceil(distNum * rate);
@@ -283,8 +306,8 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                 },
                 body: JSON.stringify({
                     type: 'parcel',
-                    pickup,
-                    dropoff,
+                    pickup: effectivePickup,
+                    dropoff: effectiveDropoff,
                     parcelSize: selectedSize,
                     recipientName,
                     contactNumber,
@@ -321,11 +344,11 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
 
     const renderPriceCalculator = () => {
         if (!selectedRide) return null;
-        const stats = getTravelStats(pickup, dropoff, selectedRide.departureTime);
+        const effectivePickup = getEffectivePickup(selectedRide);
+        const effectiveDropoff = getEffectiveDropoff(selectedRide);
+        const stats = getTravelStats(effectivePickup, effectiveDropoff, selectedRide.departureTime, selectedRide);
         const distNum = parseInt(stats.distance);
         const rate = selectedSize === 'small' ? 2 : selectedSize === 'medium' ? 2.5 : 3;
-        const baseCharge = distNum * 2;
-        const weightPremium = selectedSize === 'small' ? 0 : selectedSize === 'medium' ? distNum * 0.5 : distNum * 1;
         const totalPrice = Math.ceil(distNum * rate);
 
         return (
@@ -336,8 +359,27 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
 
                 <Text style={[styles.title, { color: colors.textColor }]}>Price Calculator</Text>
                 <Text style={[styles.routeSummary, { color: colors.subtextColor }]}>
-                    Freight calculation for your shipment
+                    {`${effectivePickup} → ${effectiveDropoff}`}
                 </Text>
+
+                {selectedRide.isPartialMatch && (
+                    <View
+                        style={{
+                            borderWidth: 1,
+                            borderRadius: 14,
+                            padding: 14,
+                            marginTop: 16,
+                            backgroundColor: isDark ? 'rgba(255, 179, 0, 0.12)' : 'rgba(255, 143, 0, 0.1)',
+                            borderColor: '#FFB300',
+                        }}>
+                        <Text style={{ fontSize: 11, fontWeight: 'bold', letterSpacing: 0.8, marginBottom: 4, color: isDark ? '#FFD54F' : '#EF6C00' }}>
+                            COMMON-POINT SEGMENT BOOKING
+                        </Text>
+                        <Text style={{ fontSize: 13, fontWeight: '600', color: colors.textColor }}>
+                            {`Shipping parcel on route segment: ${effectivePickup} → ${effectiveDropoff}`}
+                        </Text>
+                    </View>
+                )}
 
                 <View style={styles.spacer32} />
 
@@ -529,106 +571,166 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
         </View>
     );
 
-    const renderRideSelection = () => (
-        <View style={styles.content}>
-            <TouchableOpacity onPress={() => { setStep('search'); popSubViewHistory(); }} style={styles.backButton}>
-                <Text style={[styles.backText, { color: colors.primary }]}>
-                    ← {t('common.back')}
+    const renderRideSelection = () => {
+        const directRides = (availableRides || []).filter((r) => !r.isPartialMatch);
+        const commonPointRides = (availableRides || []).filter((r) => r.isPartialMatch);
+        const orderedRides = [...directRides, ...commonPointRides];
+
+        return (
+            <View style={styles.content}>
+                <TouchableOpacity onPress={() => { setStep('search'); popSubViewHistory(); }} style={styles.backButton}>
+                    <Text style={[styles.backText, { color: colors.primary }]}>
+                        ← {t('common.back')}
+                    </Text>
+                </TouchableOpacity>
+
+                <Text style={[styles.title, { color: colors.textColor }]}>{t('available.title') || 'Select Vehicle'}</Text>
+                <View style={styles.spacer6} />
+                <Text style={[styles.routeSummary, { color: colors.subtextColor }]}>
+                    {pickup} → {dropoff} · {selectedDate}
                 </Text>
-            </TouchableOpacity>
 
-            <Text style={[styles.title, { color: colors.textColor }]}>{t('available.title') || 'Select Vehicle'}</Text>
-            <View style={styles.spacer6} />
-            <Text style={[styles.routeSummary, { color: colors.subtextColor }]}>
-                {pickup} → {dropoff} · {selectedDate}
-            </Text>
+                <View style={styles.spacer24} />
 
-            <View style={styles.spacer24} />
+                {loading ? (
+                    <ActivityIndicator color={colors.primary} size="large" style={{ marginTop: 40 }} />
+                ) : orderedRides.length === 0 ? (
+                    <View style={{ alignItems: 'center', marginTop: 40 }}>
+                        <Icon name="car-outline" size={64} color={colors.borderColor} />
+                        <Text style={{ color: colors.subtextColor, marginTop: 16, fontSize: 16 }}>No vehicles available for this route.</Text>
+                        <TouchableOpacity
+                            style={{ marginTop: 24, padding: 12 }}
+                            onPress={() => setStep('search')}>
+                            <Text style={{ color: colors.primary, fontWeight: 'bold' }}>GO BACK & CHANGE DETAILS</Text>
+                        </TouchableOpacity>
+                    </View>
+                ) : (
+                    <ScrollView showsVerticalScrollIndicator={false}>
+                        {directRides.length === 0 && commonPointRides.length > 0 && (
+                            <View
+                                style={{
+                                    borderWidth: 1,
+                                    borderRadius: 14,
+                                    padding: 14,
+                                    marginBottom: 16,
+                                    backgroundColor: isDark ? 'rgba(255, 179, 0, 0.12)' : 'rgba(255, 143, 0, 0.1)',
+                                    borderColor: '#FFB300',
+                                }}>
+                                <Text style={{ fontSize: 11, fontWeight: 'bold', letterSpacing: 0.8, marginBottom: 4, color: isDark ? '#FFD54F' : '#EF6C00' }}>
+                                    COMMON ROUTE POINT DRIVERS
+                                </Text>
+                                <Text style={{ fontSize: 13, lineHeight: 18, color: colors.textColor }}>
+                                    {`No direct vehicles from ${pickup || 'your pickup'} to ${dropoff || 'your destination'}, but these drivers share a common point on your route:`}
+                                </Text>
+                            </View>
+                        )}
+                        {orderedRides.map((ride, index) => {
+                            const price = selectedSize === 'small' ? '150' : selectedSize === 'medium' ? '280' : '450';
+                            const effectivePickup = getEffectivePickup(ride);
+                            const effectiveDropoff = getEffectiveDropoff(ride);
+                            const stats = getTravelStats(effectivePickup, effectiveDropoff, ride.departureTime, ride);
+                            const showCommonPointDivider =
+                                directRides.length > 0 && commonPointRides.length > 0 && index === directRides.length;
+                            const badgeLabel =
+                                ride.matchType === 'common_dropoff'
+                                    ? `COMMON DESTINATION · STARTS FROM ${effectivePickup.toUpperCase()}`
+                                    : `COMMON STARTING POINT · GOES UP TO ${effectiveDropoff.toUpperCase()}`;
 
-            {loading ? (
-                <ActivityIndicator color={colors.primary} size="large" style={{ marginTop: 40 }} />
-            ) : (availableRides || []).length === 0 ? (
-                <View style={{ alignItems: 'center', marginTop: 40 }}>
-                    <Icon name="car-outline" size={64} color={colors.borderColor} />
-                    <Text style={{ color: colors.subtextColor, marginTop: 16, fontSize: 16 }}>No vehicles available for this route.</Text>
-                    <TouchableOpacity
-                        style={{ marginTop: 24, padding: 12 }}
-                        onPress={() => setStep('search')}>
-                        <Text style={{ color: colors.primary, fontWeight: 'bold' }}>GO BACK & CHANGE DETAILS</Text>
-                    </TouchableOpacity>
-                </View>
-            ) : (
-                <ScrollView showsVerticalScrollIndicator={false}>
-                    {(availableRides || []).map((ride) => {
-                        const price = selectedSize === 'small' ? '150' : selectedSize === 'medium' ? '280' : '450';
-                        const stats = getTravelStats(pickup, dropoff, ride.departureTime);
-
-                        return (
-                            <TouchableOpacity
-                                key={ride.id}
-                                style={[styles.rideCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}
-                                onPress={() => handleFinalBooking(ride)}>
-                                <View style={styles.rideHeader}>
-                                    <View style={styles.timeContainer}>
-                                        <Text style={[styles.label, { color: colors.subtextColor }]}>DEPARTS</Text>
-                                        <Text style={[styles.timeText, { color: colors.textColor }]}>{ride.departureTime}</Text>
-                                    </View>
-                                    <View style={styles.vehicleContainer}>
-                                        <Text style={[styles.vehicleModel, { color: colors.textColor }]}>{ride.vehicleModel}</Text>
-                                        <Text style={[styles.vehicleNumber, { color: colors.subtextColor }]}>{ride.vehicleNumber}</Text>
-                                    </View>
-                                    <View style={styles.priceContainer}>
-                                        <Text style={[styles.label, { color: colors.subtextColor }]}>FIXED FAIR</Text>
-                                        <Text style={[styles.priceText, { color: '#00C853' }]}>₹ {price}</Text>
-                                    </View>
-                                </View>
-
-                                <View style={styles.routeRow}>
-                                    <Text style={[styles.routePoint, { color: colors.textColor }]}>{pickup.toUpperCase()}</Text>
-                                    <Text style={[styles.routeArrow, { color: colors.subtextColor }]}>→</Text>
-                                    <Text style={[styles.routePoint, { color: colors.textColor }]}>{dropoff.toUpperCase()}</Text>
-                                </View>
-
-                                <View style={styles.dateTimeRow}>
-                                    <View style={styles.dateTimeChip}>
-                                        <Text style={styles.dateTimeChipIcon}>📅</Text>
-                                        <Text style={[styles.dateTimeChipText, { color: colors.textColor }]}>{selectedDate}</Text>
-                                    </View>
-                                    <View style={[styles.dateTimeChip, { marginLeft: 10 }]}>
-                                        <Text style={styles.dateTimeChipIcon}>🕒</Text>
-                                        <Text style={[styles.dateTimeChipText, { color: colors.textColor }]}>{ride.departureTime}</Text>
-                                    </View>
-                                    <View style={[styles.dateTimeChip, { marginLeft: 10, backgroundColor: 'rgba(31, 175, 99, 0.1)' }]}>
-                                        <Text style={styles.dateTimeChipIcon}>🏁</Text>
-                                        <Text style={[styles.dateTimeChipText, { color: colors.textColor }]}>{stats.arrival}</Text>
-                                    </View>
-                                </View>
-
-                                <View style={styles.rideFooter}>
-                                    <View style={styles.driverInfo}>
-                                        <View style={[styles.avatar, { backgroundColor: isDark ? '#37474F' : '#EEE' }]}>
-                                            <Text style={[styles.avatarText, { color: colors.textColor }]}>{(ride.driverName || 'V')[0].toUpperCase()}</Text>
+                            return (
+                                <View key={ride.id || ride._id || String(index)}>
+                                    {showCommonPointDivider && (
+                                        <View style={{ borderTopWidth: 1, borderTopColor: colors.borderColor, paddingTop: 18, marginTop: 6, marginBottom: 14 }}>
+                                            <Text style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 4, color: colors.textColor }}>
+                                                Other Drivers from Common Point
+                                            </Text>
+                                            <Text style={{ fontSize: 12, color: colors.subtextColor }}>
+                                                Drivers starting from or passing through your route points
+                                            </Text>
                                         </View>
-                                        <View>
-                                            <Text style={[styles.driverName, { color: colors.textColor }]}>{ride.driverName || 'Verified Driver'} ✅</Text>
-                                            <Text style={[styles.driverRole, { color: colors.subtextColor }]}>PARCEL PARTNER</Text>
+                                    )}
+                                    <TouchableOpacity
+                                        style={[styles.rideCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}
+                                        onPress={() => handleFinalBooking(ride)}>
+                                        {ride.isPartialMatch && (
+                                            <View
+                                                style={{
+                                                    paddingHorizontal: 12,
+                                                    paddingVertical: 6,
+                                                    borderRadius: 10,
+                                                    marginBottom: 12,
+                                                    alignSelf: 'flex-start',
+                                                    backgroundColor: isDark ? 'rgba(255, 179, 0, 0.16)' : 'rgba(255, 143, 0, 0.12)',
+                                                    borderWidth: 1,
+                                                    borderColor: '#FFB300',
+                                                }}>
+                                                <Text style={{ fontSize: 10, fontWeight: 'bold', letterSpacing: 0.6, color: isDark ? '#FFD54F' : '#EF6C00' }}>
+                                                    {badgeLabel}
+                                                </Text>
+                                            </View>
+                                        )}
+                                        <View style={styles.rideHeader}>
+                                            <View style={styles.timeContainer}>
+                                                <Text style={[styles.label, { color: colors.subtextColor }]}>DEPARTS</Text>
+                                                <Text style={[styles.timeText, { color: colors.textColor }]}>{ride.departureTime}</Text>
+                                            </View>
+                                            <View style={styles.vehicleContainer}>
+                                                <Text style={[styles.vehicleModel, { color: colors.textColor }]}>{ride.vehicleModel}</Text>
+                                                <Text style={[styles.vehicleNumber, { color: colors.subtextColor }]}>{ride.vehicleNumber}</Text>
+                                            </View>
+                                            <View style={styles.priceContainer}>
+                                                <Text style={[styles.label, { color: colors.subtextColor }]}>FIXED FAIR</Text>
+                                                <Text style={[styles.priceText, { color: '#00C853' }]}>₹ {price}</Text>
+                                            </View>
                                         </View>
-                                    </View>
-                                    <View style={styles.seatsInfo}>
-                                        <Text style={[styles.seatsLeft, { color: '#00C853' }]}>{stats.distance} • {stats.duration}</Text>
-                                        <View style={[styles.arrowBtn, { backgroundColor: colors.borderColor }]}>
-                                            <Text style={styles.arrowText}>›</Text>
+
+                                        <View style={styles.routeRow}>
+                                            <Text style={[styles.routePoint, { color: colors.textColor }]}>{effectivePickup.toUpperCase()}</Text>
+                                            <Text style={[styles.routeArrow, { color: colors.subtextColor }]}>→</Text>
+                                            <Text style={[styles.routePoint, { color: colors.textColor }]}>{effectiveDropoff.toUpperCase()}</Text>
                                         </View>
-                                    </View>
+
+                                        <View style={styles.dateTimeRow}>
+                                            <View style={styles.dateTimeChip}>
+                                                <Text style={styles.dateTimeChipIcon}>📅</Text>
+                                                <Text style={[styles.dateTimeChipText, { color: colors.textColor }]}>{selectedDate}</Text>
+                                            </View>
+                                            <View style={[styles.dateTimeChip, { marginLeft: 10 }]}>
+                                                <Text style={styles.dateTimeChipIcon}>🕒</Text>
+                                                <Text style={[styles.dateTimeChipText, { color: colors.textColor }]}>{ride.departureTime}</Text>
+                                            </View>
+                                            <View style={[styles.dateTimeChip, { marginLeft: 10, backgroundColor: 'rgba(31, 175, 99, 0.1)' }]}>
+                                                <Text style={styles.dateTimeChipIcon}>🏁</Text>
+                                                <Text style={[styles.dateTimeChipText, { color: colors.textColor }]}>{stats.arrival}</Text>
+                                            </View>
+                                        </View>
+
+                                        <View style={styles.rideFooter}>
+                                            <View style={styles.driverInfo}>
+                                                <View style={[styles.avatar, { backgroundColor: isDark ? '#37474F' : '#EEE' }]}>
+                                                    <Text style={[styles.avatarText, { color: colors.textColor }]}>{(ride.driverName || 'V')[0].toUpperCase()}</Text>
+                                                </View>
+                                                <View>
+                                                    <Text style={[styles.driverName, { color: colors.textColor }]}>{ride.driverName || 'Verified Driver'} ✅</Text>
+                                                    <Text style={[styles.driverRole, { color: colors.subtextColor }]}>PARCEL PARTNER</Text>
+                                                </View>
+                                            </View>
+                                            <View style={styles.seatsInfo}>
+                                                <Text style={[styles.seatsLeft, { color: '#00C853' }]}>{stats.distance} • {stats.duration}</Text>
+                                                <View style={[styles.arrowBtn, { backgroundColor: colors.borderColor }]}>
+                                                    <Text style={[styles.arrowText, { color: colors.textColor }]}>›</Text>
+                                                </View>
+                                            </View>
+                                        </View>
+                                    </TouchableOpacity>
                                 </View>
-                            </TouchableOpacity>
-                        );
-                    })}
-                    <View style={styles.spacer40} />
-                </ScrollView>
-            )}
-        </View>
-    );
+                            );
+                        })}
+                        <View style={styles.spacer40} />
+                    </ScrollView>
+                )}
+            </View>
+        );
+    };
 
     return (
         <ScrollView style={[styles.container, { backgroundColor: colors.background }]} showsVerticalScrollIndicator={false} scrollEnabled={step !== 'rides'}>

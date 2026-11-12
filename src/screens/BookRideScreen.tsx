@@ -32,6 +32,11 @@ interface BookRideScreenProps {
         segmentDistanceKm?: number;
         matchedPickup?: string;
         matchedDropoff?: string;
+        pickup?: string;
+        dropoff?: string;
+        matchType?: string;
+        isPartialMatch?: boolean;
+        route?: string[];
     };
     searchPickup?: string;
     searchDropoff?: string;
@@ -50,6 +55,28 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [bookingId, setBookingId] = useState('');
 
+    const isPartialMatch = Boolean(ride.isPartialMatch ?? initialRide.isPartialMatch);
+    const matchType = ride.matchType || initialRide.matchType;
+    const effectivePickup =
+        ride.matchedPickup ||
+        initialRide.matchedPickup ||
+        (isPartialMatch && matchType === 'common_dropoff'
+            ? ride.pickup || initialRide.pickup || searchPickup || ''
+            : searchPickup || ride.pickup || initialRide.pickup || '');
+    const effectiveDropoff =
+        ride.matchedDropoff ||
+        initialRide.matchedDropoff ||
+        (isPartialMatch && matchType === 'common_pickup'
+            ? ride.dropoff || initialRide.dropoff || searchDropoff || ''
+            : searchDropoff || ride.dropoff || initialRide.dropoff || '');
+    const unitPrice =
+        ride.segmentPricePerSeat && ride.segmentPricePerSeat > 0
+            ? ride.segmentPricePerSeat
+            : initialRide.segmentPricePerSeat && initialRide.segmentPricePerSeat > 0
+                ? initialRide.segmentPricePerSeat
+                : ride.pricePerSeat || initialRide.pricePerSeat || 0;
+    const totalPrice = Math.round(unitPrice * selectedSeats.length);
+
     useEffect(() => {
         fetchRideDetails();
         const interval = setInterval(fetchRideDetails, 5000); // Poll every 5 seconds for real-time
@@ -58,10 +85,11 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
 
     const fetchRideDetails = async () => {
         try {
-            let url = `/api/rides/${initialRide.id}`;
+            const rideId = initialRide.id || (initialRide as any)._id;
+            let url = `/api/rides/${rideId}`;
             const queryParams = [];
-            if (searchPickup) queryParams.push(`pickup=${encodeURIComponent(searchPickup)}`);
-            if (searchDropoff) queryParams.push(`dropoff=${encodeURIComponent(searchDropoff)}`);
+            if (effectivePickup) queryParams.push(`pickup=${encodeURIComponent(effectivePickup)}`);
+            if (effectiveDropoff) queryParams.push(`dropoff=${encodeURIComponent(effectiveDropoff)}`);
             if (queryParams.length > 0) {
                 url += `?${queryParams.join('&')}`;
             }
@@ -69,7 +97,19 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
             const response = await apiRequest(url, {}, logout);
             if (response.ok) {
                 const data = await response.json();
-                setRide(data);
+                setRide(prev => ({
+                    ...prev,
+                    ...data,
+                    segmentPricePerSeat: data.segmentPricePerSeat ?? initialRide.segmentPricePerSeat,
+                    segmentDistanceKm: data.segmentDistanceKm ?? initialRide.segmentDistanceKm,
+                    matchedPickup: data.matchedPickup ?? initialRide.matchedPickup,
+                    matchedDropoff: data.matchedDropoff ?? initialRide.matchedDropoff,
+                    matchType: data.matchType ?? initialRide.matchType,
+                    isPartialMatch: data.isPartialMatch ?? initialRide.isPartialMatch,
+                }));
+                if (Array.isArray(data.takenSeats)) {
+                    setSelectedSeats(prev => prev.filter(s => !data.takenSeats.includes(s)));
+                }
             }
         } catch (err) {
             console.error('Fetch ride details error:', err);
@@ -81,7 +121,7 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
             setSelectedSeats(selectedSeats.filter(s => s !== index));
         } else {
             // Check if there's a reason to limit, like max 6 per person or just based on available
-            if (selectedSeats.length < (ride.seatsTotal - (ride.takenSeats?.length || 0))) {
+            if (selectedSeats.length < ((ride.seatsTotal || 0) - (ride.takenSeats?.length || 0))) {
                 setSelectedSeats([...selectedSeats, index]);
             }
         }
@@ -95,17 +135,18 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
 
         setLoading(true);
         try {
-            const response = await apiRequest(`/api/rides/${ride.id}/book`, {
+            const rideId = ride.id || (ride as any)._id || initialRide.id;
+            const response = await apiRequest(`/api/rides/${rideId}/book`, {
                 method: 'POST',
                 body: JSON.stringify({
                     type: 'seat',
-                    pickup: searchPickup || '',
-                    dropoff: searchDropoff || '',
+                    pickup: effectivePickup,
+                    dropoff: effectiveDropoff,
                     seatsRequested: selectedSeats.length,
                     seatLayout: selectedSeats,
                     roofCarrier,
                 }),
-            });
+            }, logout);
 
             if (response.ok) {
                 const randomId = Math.floor(1000 + Math.random() * 9000);
@@ -144,6 +185,47 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
             </View>
 
             <View style={styles.content}>
+                {(effectivePickup || effectiveDropoff) ? (
+                    <View
+                        style={[
+                            styles.headerInfoRow,
+                            {
+                                backgroundColor: colors.cardColor,
+                                borderWidth: 1,
+                                borderColor: colors.borderColor,
+                                justifyContent: 'space-between',
+                            },
+                        ]}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                            <Text style={styles.headerIcon}>📍</Text>
+                            <Text style={[styles.headerInfoText, { color: colors.textColor }]}>
+                                {`${effectivePickup} → ${effectiveDropoff}`}
+                            </Text>
+                        </View>
+                        <Text style={[styles.headerInfoText, { color: '#00C853', marginLeft: 8 }]}>
+                            {`₹ ${Math.round(unitPrice)} / seat`}
+                        </Text>
+                    </View>
+                ) : null}
+
+                {isPartialMatch && (
+                    <View
+                        style={[
+                            styles.partialSegmentNotice,
+                            {
+                                backgroundColor: isDark ? 'rgba(255, 179, 0, 0.12)' : 'rgba(255, 143, 0, 0.1)',
+                                borderColor: '#FFB300',
+                            },
+                        ]}>
+                        <Text style={[styles.partialSegmentTitle, { color: isDark ? '#FFD54F' : '#EF6C00' }]}>
+                            COMMON-POINT SEGMENT BOOKING
+                        </Text>
+                        <Text style={[styles.partialSegmentText, { color: colors.textColor }]}>
+                            {`Booking route segment: ${effectivePickup} → ${effectiveDropoff}`}
+                        </Text>
+                    </View>
+                )}
+
                 <JeepLayout
                     selectedSeats={selectedSeats}
                     takenSeats={ride.takenSeats}
@@ -173,7 +255,7 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
                     onPress={handleBook}
                     disabled={loading}>
                     <Text style={styles.bookBtnText}>
-                        {loading ? t('book.processing') : `${t('book.confirmBooking')} (₹ ${Math.round((ride.segmentPricePerSeat || ride.pricePerSeat) * selectedSeats.length)})`}
+                        {loading ? t('book.processing') : `${t('book.confirmBooking')} (₹ ${totalPrice})`}
                     </Text>
                 </TouchableOpacity>
             </View>
@@ -190,6 +272,11 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
                             <Text style={styles.successIcon}>✓</Text>
                         </View>
                         <Text style={[styles.modalTitle, { color: colors.textColor }]}>{t('book.requestSent')}</Text>
+                        {effectivePickup && effectiveDropoff ? (
+                            <Text style={[styles.partialSegmentText, { color: colors.primary, marginBottom: 8, textAlign: 'center' }]}>
+                                {`${effectivePickup} → ${effectiveDropoff}`}
+                            </Text>
+                        ) : null}
                         <Text style={[styles.modalSubtitle, { color: colors.subtextColor }]}>
                             {t('book.awaitingApproval')}
                         </Text>
@@ -231,6 +318,22 @@ const styles = StyleSheet.create({
     content: {
         paddingHorizontal: 20,
         paddingBottom: 40,
+    },
+    partialSegmentNotice: {
+        borderWidth: 1,
+        borderRadius: 14,
+        padding: 14,
+        marginBottom: 16,
+    },
+    partialSegmentTitle: {
+        fontSize: 11,
+        fontWeight: 'bold',
+        letterSpacing: 0.8,
+        marginBottom: 4,
+    },
+    partialSegmentText: {
+        fontSize: 13,
+        fontWeight: '600',
     },
     layoutCard: {
         borderRadius: 24,
