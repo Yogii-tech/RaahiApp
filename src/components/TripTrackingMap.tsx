@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, Platform, ActivityIndicator, Text, TouchableOpacity } from 'react-native';
-import maplibregl from 'maplibre-gl';
+import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useTheme } from '../context/ThemeContext';
 
@@ -32,7 +32,7 @@ const TripTrackingMap: React.FC<TripTrackingMapProps> = ({ bookingId, pickup, dr
                 osm: {
                     type: 'raster' as const,
                     tiles: [
-                        isDark 
+                        isDark
                             ? 'https://basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png'
                             : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
                     ],
@@ -53,7 +53,7 @@ const TripTrackingMap: React.FC<TripTrackingMapProps> = ({ bookingId, pickup, dr
 
         map.on('load', () => {
             setLoading(false);
-            
+
             // Add Route Layer
             map.addSource('route', {
                 type: 'geojson',
@@ -108,7 +108,7 @@ const TripTrackingMap: React.FC<TripTrackingMapProps> = ({ bookingId, pickup, dr
             const progress = (Date.now() % 30000) / 30000;
             const currentLat = pickupCoords[0] + (dropoffCoords[0] - pickupCoords[0]) * progress;
             const currentLng = pickupCoords[1] + (dropoffCoords[1] - pickupCoords[1]) * progress;
-            
+
             setDriverLoc({ lat: currentLat, lng: currentLng });
         }, 1000);
 
@@ -160,7 +160,7 @@ const TripTrackingMap: React.FC<TripTrackingMapProps> = ({ bookingId, pickup, dr
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
             <View ref={mapContainerRef as any} style={styles.map} />
-            
+
             <TouchableOpacity style={styles.closeButton} onPress={onClose}>
                 <Text style={styles.closeText}>✕</Text>
             </TouchableOpacity>
