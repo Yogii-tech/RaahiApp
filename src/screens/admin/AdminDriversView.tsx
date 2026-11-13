@@ -6,7 +6,7 @@ import {
 import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
 import { downloadCSV } from '../../utils/exportUtils';
-import { notify, confirmAction } from '../../utils/notify';
+import { notify } from '../../utils/notify';
 
 export interface Driver {
     id: string;
@@ -43,6 +43,7 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
     const [rejectionReason, setRejectionReason] = useState('');
     const [submittingAction, setSubmittingAction] = useState(false);
     const [deletingDriverId, setDeletingDriverId] = useState<string | null>(null);
+    const [deleteConfirmDriver, setDeleteConfirmDriver] = useState<Driver | null>(null);
     const [rekycModalVisible, setRekycModalVisible] = useState(false);
     const [rekycDriver, setRekycDriver] = useState<Driver | null>(null);
     const [rekycReason, setRekycReason] = useState('');
@@ -127,9 +128,24 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
         }
     };
 
-    const handleDeleteDriver = async (driver: Driver) => {
-        const confirmMsg = `Are you sure you want to permanently delete driver "${driver.name}" (${driver.phone})?\n\nThis will also delete all their rides and bookings. This action CANNOT be undone.`;
-        confirmAction('Confirm Delete', confirmMsg, () => executeDelete(driver), 'Delete', 'Cancel');
+    // Step 1: Delete button pressed -> only open the confirmation popup (nothing is deleted yet).
+    const handleDeleteDriver = (driver: Driver) => {
+        if (deletingDriverId) return;
+        setDeleteConfirmDriver(driver);
+    };
+
+    // "No" -> close the popup, nothing happens.
+    const handleCancelDelete = () => {
+        if (deletingDriverId) return;
+        setDeleteConfirmDriver(null);
+    };
+
+    // "Yes" -> close the popup and perform the actual delete.
+    const handleConfirmDelete = async () => {
+        if (!deleteConfirmDriver || deletingDriverId) return;
+        const driver = deleteConfirmDriver;
+        await executeDelete(driver);
+        setDeleteConfirmDriver(null);
     };
 
     const executeDelete = async (driver: Driver) => {
@@ -744,6 +760,51 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                 </Modal>
             )}
 
+            {/* Delete Driver Confirmation Popup */}
+            {deleteConfirmDriver && (
+                <Modal
+                    visible={!!deleteConfirmDriver}
+                    transparent={true}
+                    animationType="fade"
+                    onRequestClose={handleCancelDelete}
+                >
+                    <View style={[styles.modalBackdrop, { zIndex: 9999 }]}>
+                        <View style={styles.deleteConfirmCard}>
+                            <Text style={styles.deleteConfirmIcon}>⚠️</Text>
+                            <Text style={styles.deleteConfirmTitle}>Do you really want to delete this driver?</Text>
+                            <Text style={styles.deleteConfirmName}>
+                                {deleteConfirmDriver.name} ({deleteConfirmDriver.phone})
+                            </Text>
+                            <Text style={styles.deleteConfirmText}>
+                                This will also permanently delete all their rides and bookings. This action cannot be undone.
+                            </Text>
+                            <View style={{ flexDirection: 'row', gap: 12, marginTop: 20, alignSelf: 'stretch' }}>
+                                <TouchableOpacity
+                                    style={[styles.actionBtn, { backgroundColor: '#374151' }, !!deletingDriverId && { opacity: 0.6 }]}
+                                    onPress={handleCancelDelete}
+                                    disabled={!!deletingDriverId}
+                                    activeOpacity={0.8}
+                                >
+                                    <Text style={styles.actionBtnText}>No</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[styles.actionBtn, { backgroundColor: '#DC2626' }, !!deletingDriverId && { opacity: 0.6 }]}
+                                    onPress={handleConfirmDelete}
+                                    disabled={!!deletingDriverId}
+                                    activeOpacity={0.8}
+                                >
+                                    {deletingDriverId ? (
+                                        <ActivityIndicator color="#FFFFFF" size="small" />
+                                    ) : (
+                                        <Text style={styles.actionBtnText}>Yes, Delete</Text>
+                                    )}
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    </View>
+                </Modal>
+            )}
+
             {/* Image Preview Sub-Modal */}
             {previewImage && (
                 <Modal visible={!!previewImage} transparent={true} animationType="fade" onRequestClose={() => setPreviewImage(null)}>
@@ -973,6 +1034,16 @@ const styles = StyleSheet.create({
     },
     rekycInfoIcon: { fontSize: 16, marginRight: 8, marginTop: 2 },
     rekycInfoText: { flex: 1, color: '#FDE68A', fontSize: 13, lineHeight: 18 },
+
+    // Delete confirmation popup
+    deleteConfirmCard: {
+        width: '100%', maxWidth: 420, backgroundColor: '#1E293B', borderRadius: 16,
+        borderWidth: 1, borderColor: 'rgba(239,68,68,0.4)', padding: 24, alignItems: 'center'
+    },
+    deleteConfirmIcon: { fontSize: 36, marginBottom: 8 },
+    deleteConfirmTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold', textAlign: 'center' },
+    deleteConfirmName: { color: '#FCA5A5', fontSize: 14, fontWeight: 'bold', marginTop: 10, textAlign: 'center' },
+    deleteConfirmText: { color: '#9CA3AF', fontSize: 13, marginTop: 8, textAlign: 'center', lineHeight: 19 },
 
     // Preview Sub-modal
     previewBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center', padding: 20 },
