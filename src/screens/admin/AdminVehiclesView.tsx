@@ -86,11 +86,14 @@ export default function AdminVehiclesView({ token, searchQuery = '', isDark }: {
     const rejectedCount = vehicles.filter(v => getNormalizedStatus(v.verificationStatus) === 'rejected').length;
 
     const filteredVehicles = vehicles.filter(v => {
+        const q = searchQuery.toLowerCase();
         const matchesSearch =
-            v.vehicleName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            v.vehicleNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            v.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            v.vehicleType?.toLowerCase().includes(searchQuery.toLowerCase());
+            v.id?.toLowerCase().includes(q) ||
+            v.phone?.toLowerCase().includes(q) ||
+            v.vehicleName?.toLowerCase().includes(q) ||
+            v.vehicleNumber?.toLowerCase().includes(q) ||
+            v.name?.toLowerCase().includes(q) ||
+            v.vehicleType?.toLowerCase().includes(q);
 
         const status = getNormalizedStatus(v.verificationStatus);
         if (activeFilter === 'verified') return matchesSearch && status === 'verified';

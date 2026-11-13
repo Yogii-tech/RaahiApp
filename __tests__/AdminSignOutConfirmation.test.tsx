@@ -3,10 +3,20 @@ import ReactTestRenderer, { act } from 'react-test-renderer';
 import { ActivityIndicator, Alert, Dimensions, Modal, Platform, Text } from 'react-native';
 
 const mockLogout = jest.fn<Promise<void>, []>(async () => {});
-const mockFetchWithAuth = jest.fn(async () => ({
-  ok: true,
-  json: async () => ({}),
-}));
+const mockFetchWithAuth = jest.fn(async (url?: string) => {
+  const data =
+    typeof url === 'string' && url.includes('/api/notifications/unread-count')
+      ? { unreadCount: 0 }
+      : typeof url === 'string' && url.includes('/api/notifications/')
+        ? []
+        : {};
+  return {
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify(data),
+    json: async () => data,
+  };
+});
 
 jest.mock('../src/context/AuthContext', () => ({
   useAuth: () => ({
@@ -20,6 +30,12 @@ jest.mock('../src/context/AuthContext', () => ({
     tryRefreshToken: jest.fn(),
     fetchWithAuth: mockFetchWithAuth,
   }),
+}));
+
+jest.mock('../src/services/fcmService', () => ({
+  registerFCM: jest.fn(async () => ({ permission: 'granted', tokenUploaded: true })),
+  unregisterFCM: jest.fn(async () => undefined),
+  getWebNotificationPermission: jest.fn(() => 'granted'),
 }));
 
 jest.mock('../src/utils/notify', () => ({
@@ -75,6 +91,7 @@ const collectText = (root: ReactTestRenderer.ReactTestInstance) =>
 
 describe('Admin Sign Out Confirmation Modal', () => {
   const originalOS = Platform.OS;
+  let activeRenderer: ReactTestRenderer.ReactTestRenderer | null = null;
 
   const setViewportWidth = (width: number) => {
     jest.spyOn(Dimensions, 'get').mockReturnValue({
@@ -91,7 +108,14 @@ describe('Admin Sign Out Confirmation Modal', () => {
     setViewportWidth(1280);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    if (activeRenderer) {
+      const toUnmount = activeRenderer;
+      activeRenderer = null;
+      await act(async () => {
+        toUnmount.unmount();
+      });
+    }
     jest.restoreAllMocks();
     Object.defineProperty(Platform, 'OS', {
       value: originalOS,
@@ -105,6 +129,7 @@ describe('Admin Sign Out Confirmation Modal', () => {
 
     await act(async () => {
       renderer = ReactTestRenderer.create(<AdminDashboardScreen />);
+      activeRenderer = renderer;
     });
 
     // Modal should be closed initially
@@ -167,6 +192,7 @@ describe('Admin Sign Out Confirmation Modal', () => {
     expect(mockLogout).toHaveBeenCalledTimes(1);
     expect(queryByTestId(renderer.root, 'admin-signout-confirm-btn')).toHaveLength(0);
 
+    activeRenderer = null;
     await act(async () => {
       renderer.unmount();
     });
@@ -185,6 +211,7 @@ describe('Admin Sign Out Confirmation Modal', () => {
     let renderer!: ReactTestRenderer.ReactTestRenderer;
     await act(async () => {
       renderer = ReactTestRenderer.create(<AdminDashboardScreen />);
+      activeRenderer = renderer;
     });
 
     await act(async () => {
@@ -217,6 +244,7 @@ describe('Admin Sign Out Confirmation Modal', () => {
     });
     expect(queryByTestId(renderer.root, 'admin-signout-confirm-btn')).toHaveLength(0);
 
+    activeRenderer = null;
     await act(async () => {
       renderer.unmount();
     });
@@ -274,6 +302,7 @@ describe('Admin Sign Out Confirmation Modal', () => {
     let renderer!: ReactTestRenderer.ReactTestRenderer;
     await act(async () => {
       renderer = ReactTestRenderer.create(<AdminDashboardScreen />);
+      activeRenderer = renderer;
     });
 
     // Open mobile sidebar drawer via hamburger button
@@ -301,6 +330,7 @@ describe('Admin Sign Out Confirmation Modal', () => {
     });
     expect(mockLogout).toHaveBeenCalledTimes(1);
 
+    activeRenderer = null;
     await act(async () => {
       renderer.unmount();
     });
@@ -332,6 +362,7 @@ describe('Admin Sign Out Confirmation Modal', () => {
     });
     expect(collectText(renderer.root)).toContain('Yes, Sign Out');
 
+    activeRenderer = null;
     await act(async () => {
       renderer.unmount();
     });

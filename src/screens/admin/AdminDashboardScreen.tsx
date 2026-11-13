@@ -1,7 +1,14 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    View, Text, StyleSheet, TouchableOpacity,
-    Platform, ScrollView, useWindowDimensions, TextInput
+    AppState,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import AdminDashboardView from './AdminDashboardView';
@@ -17,34 +24,40 @@ import AdminFinanceView from './AdminFinanceView';
 import AdminAuditLogsView from './AdminAuditLogsView';
 import AdminSettingsView from './AdminSettingsView';
 import RaahiLogo from '../../components/RaahiLogo';
-import { notify } from '../../utils/notify';
+import { confirmAction, notify } from '../../utils/notify';
+import { createRequestAbort } from '../../utils/json';
 import SignOutConfirmModal, { useSignOutConfirmation } from './SignOutConfirmModal';
-
-type AdminView =
-    | 'dashboard'
-    // Driver Operations
-    | 'driver_verification'
-    | 'document_review'
-    | 'drivers'
-    | 'vehicles'
-    // Ride Operations
-    | 'active_rides'
-    | 'completed_rides'
-    | 'cancelled_rides'
-    | 'routes'
-    // Booking Operations
-    | 'bookings'
-    | 'parcels'
-    // Finance
-    | 'finance'
-    // Monitoring
-    | 'NOTIFICATIONS'
-    | 'reports'
-    | 'audit_logs'
-    // System
-    | 'admin_users'
-    | 'permissions'
-    | 'settings';
+import {
+    FCMNotificationPayload,
+    getWebNotificationPermission,
+    registerFCM,
+    WebPushPermissionState,
+} from '../../services/fcmService';
+import {
+    ADMIN_PAGE_TITLES,
+    AdminDeepLinkPayload,
+    AdminNotification,
+    AdminNotificationFilter,
+    AdminView,
+    clearAllNotificationsApi,
+    extractNotificationContext,
+    fetchAdminNotificationsApi,
+    fetchUnreadNotificationCountApi,
+    markAllNotificationsReadApi,
+    markNotificationReadApi,
+    mergeAndDeduplicateNotifications,
+    normalizeNotificationRecord,
+    parseAdminDeepLinkSearch,
+    resolveAdminTargetView,
+    resolveNotificationCategory,
+    sendTestPushApi,
+} from '../../utils/adminNotifications';
+import {
+    AdminForegroundToast,
+    AdminNotificationBellPopover,
+    AdminNotificationsView,
+    AdminPushPermissionBanner,
+} from './AdminNotificationsPanel';
 
 interface NavSection {
     group: string;
@@ -133,38 +146,87 @@ const DARK_THEME = {
     contentBg: '#111827',
 };
 
-const PAGE_TITLES: Record<AdminView, string> = {
-    dashboard: 'Analytics Dashboard',
-    driver_verification: 'Driver Verification Queue',
-    document_review: 'Document Review',
-    drivers: 'Registered Drivers',
-    vehicles: 'Vehicle Fleet',
-    active_rides: 'Active Rides',
-    completed_rides: 'Completed Rides',
-    cancelled_rides: 'Cancelled / Removed Rides',
-    routes: 'Route Analytics',
-    bookings: 'Bookings Management',
-    parcels: 'Parcels Overview',
-    finance: 'Commission & Settlement',
-    NOTIFICATIONS: 'System Notifications',
-    reports: 'Reports & Analytics',
-    audit_logs: 'Audit Logs',
-    admin_users: 'Admin Users',
-    permissions: 'Permissions',
-    settings: 'Settings',
-};
+const POLL_INTERVAL_MS = 15000;
+const TOAST_DURATION_MS = 5500;
+
+function isAppCurrentlyActive(): boolean {
+    if (Platform.OS === 'web') {
+        return typeof document === 'undefined' || document.visibilityState === 'visible';
+    }
+    const state = AppState.currentState;
+    return typeof state !== 'string' || (state !== 'background' && state !== 'inactive');
+}
+
+interface ForegroundToastState {
+    id: string;
+    title: string;
+    body: string;
+    type?: string;
+    category?: string;
+    payload: FCMNotificationPayload;
+}
 
 export default function AdminDashboardScreen() {
-    const { token, user, logout } = useAuth();
+    const { token, user, logout, fetchWithAuth } = useAuth();
     const [activeView, setActiveView] = useState<AdminView>('dashboard');
     const [isDark, setIsDark] = useState(true);
     const { width } = useWindowDimensions();
     const isMobile = width < 768;
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
-    const [notifications, setNotifications] = useState<{ id: string; title: string; message: string; time: string; type: string; read: boolean }[]>([]);
 
-    const unreadCount = notifications.filter(n => !n.read).length;
+    // Notification state
+    const [notifications, setNotifications] = useState<AdminNotification[]>([]);
+    const [serverUnreadCount, setServerUnreadCount] = useState<number | null>(null);
+    const [loadingNotifications, setLoadingNotifications] = useState(false);
+    const [refreshingNotifications, setRefreshingNotifications] = useState(false);
+    const [notifError, setNotifError] = useState<string | null>(null);
+    const [markingAllRead, setMarkingAllRead] = useState(false);
+    const [clearingNotifications, setClearingNotifications] = useState(false);
+    const [testingPush, setTestingPush] = useState(false);
+    const [bellPopoverOpen, setBellPopoverOpen] = useState(false);
+    const [pushPermission, setPushPermission] = useState<WebPushPermissionState>(() =>
+        getWebNotificationPermission()
+    );
+    const [pushBannerDismissed, setPushBannerDismissed] = useState(false);
+    const [foregroundToast, setForegroundToast] = useState<ForegroundToastState | null>(null);
+
+    const [isAppActive, setIsAppActive] = useState<boolean>(() => isAppCurrentlyActive());
+
+    const isMountedRef = useRef(true);
+    const fetchWithAuthRef = useRef(fetchWithAuth);
+    fetchWithAuthRef.current = fetchWithAuth;
+    const tokenRef = useRef(token);
+    tokenRef.current = token;
+    const activeViewRef = useRef(activeView);
+    activeViewRef.current = activeView;
+    const fcmRegisteredUserRef = useRef<string | null>(null);
+    const notificationsRef = useRef(notifications);
+    notificationsRef.current = notifications;
+    const notifAbortRef = useRef<AbortController | null>(null);
+    const notifFetchSeqRef = useRef(0);
+    const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const coldStartHandledRef = useRef(false);
+
+    useEffect(() => {
+        isMountedRef.current = true;
+        return () => {
+            isMountedRef.current = false;
+            notifFetchSeqRef.current += 1;
+            notifAbortRef.current?.abort();
+            if (toastTimerRef.current) {
+                clearTimeout(toastTimerRef.current);
+                toastTimerRef.current = null;
+            }
+        };
+    }, []);
+
+    const localUnreadCount = useMemo(
+        () => notifications.filter((n) => !n.read).length,
+        [notifications]
+    );
+    const unreadCount = serverUnreadCount !== null ? serverUnreadCount : localUnreadCount;
+
     const T = isDark ? DARK_THEME : LIGHT_THEME;
 
     const handleAction = (msg: string) => {
@@ -179,13 +241,442 @@ export default function AdminDashboardScreen() {
         confirmSignOut,
     } = useSignOutConfirmation(logout);
 
-    const navigate = (view: AdminView) => {
-        if (view !== activeView) {
+    const navigate = useCallback((view: AdminView) => {
+        if (view !== activeViewRef.current) {
             setSearchQuery('');
         }
         setActiveView(view);
+        setBellPopoverOpen(false);
         if (isMobile) setIsSidebarOpen(false);
-    };
+    }, [isMobile]);
+
+    const dismissToast = useCallback(() => {
+        if (toastTimerRef.current) {
+            clearTimeout(toastTimerRef.current);
+            toastTimerRef.current = null;
+        }
+        setForegroundToast(null);
+    }, []);
+
+    const loadNotifications = useCallback(async (background = false) => {
+        if (!tokenRef.current) return;
+
+        notifAbortRef.current?.abort();
+        const { controller, cleanup, didTimeout } = createRequestAbort(10000);
+        notifAbortRef.current = controller;
+        const seq = ++notifFetchSeqRef.current;
+
+        if (background) {
+            setRefreshingNotifications(true);
+        } else if (notificationsRef.current.length === 0) {
+            setLoadingNotifications(true);
+        }
+
+        try {
+            const [listResult, countResult] = await Promise.allSettled([
+                fetchAdminNotificationsApi(fetchWithAuthRef.current, {
+                    limit: 100,
+                    signal: controller.signal,
+                }),
+                fetchUnreadNotificationCountApi(fetchWithAuthRef.current, controller.signal),
+            ]);
+
+            if (!isMountedRef.current || seq !== notifFetchSeqRef.current) return;
+
+            if (listResult.status === 'fulfilled') {
+                setNotifications(listResult.value);
+                setNotifError(null);
+                if (countResult.status === 'fulfilled' && countResult.value !== null) {
+                    setServerUnreadCount(countResult.value);
+                } else {
+                    setServerUnreadCount(null);
+                }
+            } else {
+                const reason = listResult.reason as any;
+                if (reason?.name === 'AbortError' && !didTimeout()) return;
+                setNotifError(
+                    didTimeout()
+                        ? 'Timed out loading notifications'
+                        : reason?.message || 'Failed to load notifications'
+                );
+            }
+        } catch (err: any) {
+            if (!isMountedRef.current || seq !== notifFetchSeqRef.current) return;
+            if (err?.name === 'AbortError' && !didTimeout()) return;
+            setNotifError(err?.message || 'Failed to load notifications');
+        } finally {
+            cleanup();
+            if (isMountedRef.current && seq === notifFetchSeqRef.current) {
+                setLoadingNotifications(false);
+                setRefreshingNotifications(false);
+            }
+        }
+    }, []);
+
+    const loadNotificationsRef = useRef(loadNotifications);
+    loadNotificationsRef.current = loadNotifications;
+
+    // Mark a single notification as read (optimistic + API call)
+    const markNotificationRead = useCallback((notificationId: string) => {
+        if (!notificationId) return;
+        const existing = notificationsRef.current.find((n) => n.id === notificationId);
+        const wasUnread = existing ? !existing.read : false;
+
+        if (existing && !existing.read) {
+            setNotifications((prev) =>
+                prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
+            );
+        }
+        if (wasUnread) {
+            setServerUnreadCount((prev) => (prev !== null ? Math.max(0, prev - 1) : null));
+        }
+
+        markNotificationReadApi(fetchWithAuthRef.current, notificationId).catch(() => {});
+    }, []);
+
+    // Navigate from an in-app notification, push toast, SW click, or cold-start deep link
+    const navigateFromNotificationPayload = useCallback(
+        (payload: AdminDeepLinkPayload & { id?: string }) => {
+            const notifId = payload.notificationId || payload.id || '';
+            if (notifId) {
+                markNotificationRead(notifId);
+            }
+
+            const targetView = resolveAdminTargetView({
+                targetView: payload.targetView,
+                adminView: payload.adminView,
+                type: payload.type,
+                url: payload.url,
+                metadata: payload.metadata,
+            });
+
+            const { searchQuery: contextSearch } = extractNotificationContext({
+                type: payload.type,
+                relatedId: payload.relatedId,
+                targetView,
+                metadata: payload.metadata,
+            });
+
+            setActiveView(targetView);
+            setSearchQuery(contextSearch);
+            setBellPopoverOpen(false);
+            if (isMobile) setIsSidebarOpen(false);
+            dismissToast();
+        },
+        [dismissToast, isMobile, markNotificationRead]
+    );
+
+    const navigateFromNotificationPayloadRef = useRef(navigateFromNotificationPayload);
+    navigateFromNotificationPayloadRef.current = navigateFromNotificationPayload;
+
+    const handleSelectNotification = useCallback(
+        (notif: AdminNotification) => {
+            navigateFromNotificationPayload({
+                id: notif.id,
+                notificationId: notif.id,
+                type: notif.type,
+                category: notif.category,
+                targetView: notif.targetView,
+                relatedId: notif.relatedId,
+                metadata: notif.metadata,
+                title: notif.title,
+                body: notif.message,
+            });
+        },
+        [navigateFromNotificationPayload]
+    );
+
+    const handleMarkAllRead = useCallback(async (filter?: AdminNotificationFilter) => {
+        if (markingAllRead) return;
+        const categoryParam =
+            filter && filter !== 'all' && filter !== 'unread' ? filter : undefined;
+
+        setMarkingAllRead(true);
+        try {
+            const ok = await markAllNotificationsReadApi(fetchWithAuthRef.current, categoryParam);
+            if (!isMountedRef.current) return;
+            if (ok) {
+                setNotifications((prev) =>
+                    prev.map((n) => {
+                        if (!categoryParam) return { ...n, read: true };
+                        const cat = resolveNotificationCategory({
+                            category: n.category,
+                            type: n.type,
+                            metadata: n.metadata,
+                        });
+                        return cat === categoryParam ? { ...n, read: true } : n;
+                    })
+                );
+                if (!categoryParam) {
+                    setServerUnreadCount(0);
+                } else {
+                    setServerUnreadCount(null);
+                    loadNotificationsRef.current(true);
+                }
+            } else {
+                notify('Error', 'Could not mark notifications as read.');
+            }
+        } catch {
+            if (isMountedRef.current) {
+                notify('Error', 'Could not mark notifications as read.');
+            }
+        } finally {
+            if (isMountedRef.current) {
+                setMarkingAllRead(false);
+            }
+        }
+    }, [markingAllRead]);
+
+    const handleClearAll = useCallback(() => {
+        if (clearingNotifications || notificationsRef.current.length === 0) return;
+        confirmAction(
+            'Clear All Notifications',
+            'Remove all notifications from your admin feed? This cannot be undone.',
+            async () => {
+                if (!isMountedRef.current) return;
+                setClearingNotifications(true);
+                try {
+                    const ok = await clearAllNotificationsApi(fetchWithAuthRef.current);
+                    if (!isMountedRef.current) return;
+                    if (ok) {
+                        setNotifications([]);
+                        setServerUnreadCount(0);
+                    } else {
+                        notify('Error', 'Failed to clear notifications.');
+                    }
+                } catch {
+                    if (isMountedRef.current) {
+                        notify('Error', 'Failed to clear notifications.');
+                    }
+                } finally {
+                    if (isMountedRef.current) {
+                        setClearingNotifications(false);
+                    }
+                }
+            },
+            'Clear All',
+            'Cancel'
+        );
+    }, [clearingNotifications]);
+
+    const handleSendTestPush = useCallback(async () => {
+        if (testingPush) return;
+        setTestingPush(true);
+        try {
+            const result = await sendTestPushApi(fetchWithAuthRef.current);
+            if (!isMountedRef.current) return;
+            notify(result.ok ? 'Test Push Sent' : 'Push Notification Error', result.message);
+        } catch {
+            if (isMountedRef.current) {
+                notify('Push Notification Error', 'Could not trigger test push notification.');
+            }
+        } finally {
+            if (isMountedRef.current) {
+                setTestingPush(false);
+            }
+        }
+    }, [testingPush]);
+
+    // Foreground push handler (shows interactive toast + refreshes bell immediately)
+    const handleForegroundPush = useCallback((payload: FCMNotificationPayload) => {
+        if (!isMountedRef.current) return;
+
+        const incomingId = payload.notificationId || `push-${Date.now()}`;
+        const synthetic = normalizeNotificationRecord({
+            id: incomingId,
+            title: payload.title || 'New Platform Alert',
+            message: payload.body || '',
+            type: payload.type || 'general',
+            category: payload.category,
+            targetView: payload.targetView || payload.adminView,
+            relatedId: payload.relatedId || payload.bookingId || payload.rideId || payload.driverId || payload.userId,
+            metadata: payload,
+            read: false,
+            createdAt: new Date().toISOString(),
+        });
+
+        if (synthetic && payload.notificationId) {
+            setNotifications((prev) => mergeAndDeduplicateNotifications(prev, [synthetic]));
+            setServerUnreadCount((prev) => (prev !== null ? prev + 1 : null));
+        }
+
+        // Fetch authoritative list & unread count from backend
+        loadNotificationsRef.current(true);
+
+        if (toastTimerRef.current) {
+            clearTimeout(toastTimerRef.current);
+        }
+        setForegroundToast({
+            id: incomingId,
+            title: payload.title || 'GoRaahi Admin Alert',
+            body: payload.body || 'Tap to review details.',
+            type: payload.type,
+            category: payload.category,
+            payload,
+        });
+        toastTimerRef.current = setTimeout(() => {
+            toastTimerRef.current = null;
+            if (isMountedRef.current) {
+                setForegroundToast(null);
+            }
+        }, TOAST_DURATION_MS);
+    }, []);
+
+    const handleBackgroundPushHint = useCallback((_payload: FCMNotificationPayload) => {
+        if (!isMountedRef.current) return;
+        loadNotificationsRef.current(true);
+    }, []);
+
+    const handleFCMNavigate = useCallback((_type: string, data: FCMNotificationPayload) => {
+        if (!isMountedRef.current) return;
+        const metadata: Record<string, string> = {};
+        for (const [k, v] of Object.entries(data || {})) {
+            if (typeof v === 'string' && v) metadata[k] = v;
+        }
+        navigateFromNotificationPayloadRef.current({
+            ...data,
+            metadata,
+        });
+    }, []);
+
+    // Track browser visibility / window focus / native AppState
+    useEffect(() => {
+        if (Platform.OS === 'web') {
+            if (typeof document === 'undefined') return;
+            const handleVisibility = () => {
+                const visible = document.visibilityState === 'visible';
+                setIsAppActive(visible);
+                if (visible) {
+                    setPushPermission(getWebNotificationPermission());
+                    loadNotificationsRef.current(true);
+                }
+            };
+            const handleWindowFocus = () => {
+                setIsAppActive(true);
+                setPushPermission(getWebNotificationPermission());
+                loadNotificationsRef.current(true);
+            };
+            document.addEventListener('visibilitychange', handleVisibility);
+            if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+                window.addEventListener('focus', handleWindowFocus);
+            }
+            return () => {
+                document.removeEventListener('visibilitychange', handleVisibility);
+                if (typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {
+                    window.removeEventListener('focus', handleWindowFocus);
+                }
+            };
+        }
+
+        const sub = AppState.addEventListener('change', (nextState) => {
+            const active =
+                typeof nextState !== 'string' ||
+                (nextState !== 'background' && nextState !== 'inactive');
+            setIsAppActive(active);
+            if (active) {
+                loadNotificationsRef.current(true);
+            }
+        });
+        return () => sub?.remove?.();
+    }, []);
+
+    // Load notifications on mount + smart active polling
+    useEffect(() => {
+        if (!token || !isAppActive) return;
+        loadNotificationsRef.current(false);
+        const interval = setInterval(() => {
+            if (!isAppCurrentlyActive()) {
+                return;
+            }
+            loadNotificationsRef.current(true);
+        }, POLL_INTERVAL_MS);
+
+        return () => clearInterval(interval);
+    }, [token, isAppActive]);
+
+    // Register FCM for Admin on login / session restore
+    useEffect(() => {
+        if (!token || !user?.id) {
+            fcmRegisteredUserRef.current = null;
+            return;
+        }
+        if (fcmRegisteredUserRef.current === user.id) {
+            return;
+        }
+        fcmRegisteredUserRef.current = user.id;
+        let cancelled = false;
+        let completed = false;
+
+        if (Platform.OS === 'web') {
+            setPushPermission(getWebNotificationPermission());
+        }
+
+        registerFCM(token, handleFCMNavigate, {
+            promptIfDefault: false,
+            onForegroundMessage: handleForegroundPush,
+            onPushReceived: handleBackgroundPushHint,
+        })
+            .then((result) => {
+                completed = true;
+                if (!cancelled && isMountedRef.current && Platform.OS === 'web' && result?.permission) {
+                    setPushPermission(result.permission);
+                }
+            })
+            .catch(() => {
+                if (!cancelled) {
+                    fcmRegisteredUserRef.current = null;
+                }
+            });
+
+        return () => {
+            cancelled = true;
+            if (!completed) {
+                fcmRegisteredUserRef.current = null;
+            }
+        };
+    }, [token, user?.id, handleFCMNavigate, handleForegroundPush, handleBackgroundPushHint]);
+
+    const handleRequestPushPermission = useCallback(async () => {
+        if (!tokenRef.current) return;
+        try {
+            const result = await registerFCM(tokenRef.current, handleFCMNavigate, {
+                promptIfDefault: true,
+                onForegroundMessage: handleForegroundPush,
+                onPushReceived: handleBackgroundPushHint,
+            });
+            if (!isMountedRef.current) return;
+            setPushPermission(result.permission);
+            if (result.permission === 'granted') {
+                setPushBannerDismissed(true);
+                notify('Push Notifications Enabled', 'Real-time admin alerts are now active.');
+            } else if (result.permission === 'denied') {
+                notify(
+                    'Notifications Blocked',
+                    'Please allow notifications for this site in your browser settings.'
+                );
+            }
+        } catch {
+            if (isMountedRef.current) {
+                notify('Push Error', 'Could not enable browser push notifications.');
+            }
+        }
+    }, [handleFCMNavigate, handleForegroundPush, handleBackgroundPushHint]);
+
+    // Handle Cold-Start Web Deep Links (e.g. /?adminView=bookings&relatedId=...&notificationId=...)
+    useEffect(() => {
+        if (coldStartHandledRef.current) return;
+        if (Platform.OS === 'web' && typeof window !== 'undefined' && token) {
+            const deepLink = parseAdminDeepLinkSearch(window.location.search || '');
+            if (deepLink) {
+                coldStartHandledRef.current = true;
+                if (typeof window.history?.replaceState === 'function') {
+                    const pageTitle = typeof document !== 'undefined' ? document.title : '';
+                    window.history.replaceState({}, pageTitle, window.location.pathname || '/');
+                }
+                navigateFromNotificationPayload(deepLink);
+            }
+        }
+    }, [token, navigateFromNotificationPayload]);
 
     const safeToken = token || '';
 
@@ -240,15 +731,23 @@ export default function AdminDashboardScreen() {
                 {activeView === 'NOTIFICATIONS' && (
                     <AdminNotificationsView
                         notifications={notifications}
-                        onMarkRead={(id: string) => {
-                            setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
-                        }}
-                        onNavigate={(type: string) => {
-                            if (Object.prototype.hasOwnProperty.call(PAGE_TITLES, type)) {
-                                navigate(type as AdminView);
-                            }
-                        }}
+                        unreadCount={unreadCount}
+                        loading={loadingNotifications}
+                        refreshing={refreshingNotifications}
+                        error={notifError}
+                        markingAllRead={markingAllRead}
+                        clearing={clearingNotifications}
+                        testingPush={testingPush}
+                        searchQuery={searchQuery}
                         isDark={isDark}
+                        pushPermission={pushPermission}
+                        onRefresh={() => loadNotifications(true)}
+                        onMarkRead={markNotificationRead}
+                        onMarkAllRead={handleMarkAllRead}
+                        onClearAll={handleClearAll}
+                        onNavigateNotification={handleSelectNotification}
+                        onRequestPushPermission={handleRequestPushPermission}
+                        onSendTestPush={handleSendTestPush}
                     />
                 )}
                 {activeView === 'reports' && <AdminReportsView token={safeToken} />}
@@ -267,6 +766,8 @@ export default function AdminDashboardScreen() {
             </ScrollView>
         );
     };
+
+    const badgeDisplay = unreadCount > 99 ? '99+' : String(unreadCount);
 
     return (
         <View style={[styles.wrapper, { backgroundColor: T.bg }]}>
@@ -307,9 +808,11 @@ export default function AdminDashboardScreen() {
                                 </Text>
                                 {section.items.map(item => {
                                     const isActive = activeView === item.id;
+                                    const showSidebarBadge = item.id === 'NOTIFICATIONS' && unreadCount > 0;
                                     return (
                                         <TouchableOpacity
                                             key={item.id}
+                                            testID={`admin-nav-${item.id}`}
                                             style={[
                                                 styles.navItem,
                                                 isActive && { borderLeftWidth: 3, borderLeftColor: T.accent, backgroundColor: T.sidebarActiveBg },
@@ -325,7 +828,13 @@ export default function AdminDashboardScreen() {
                                                     {item.label}
                                                 </Text>
                                             </View>
-                                            {isActive && <View style={styles.activeDot} />}
+                                            {showSidebarBadge ? (
+                                                <View style={styles.sidebarBadge}>
+                                                    <Text style={styles.sidebarBadgeText}>{badgeDisplay}</Text>
+                                                </View>
+                                            ) : (
+                                                isActive && <View style={styles.activeDot} />
+                                            )}
                                         </TouchableOpacity>
                                     );
                                 })}
@@ -382,26 +891,47 @@ export default function AdminDashboardScreen() {
                         ]}>
                             <Text style={styles.searchIcon}>🔍</Text>
                             <TextInput
+                                testID="admin-global-search-input"
                                 style={[styles.searchInput, { color: T.text }]}
                                 placeholder="Search everything..."
                                 placeholderTextColor={T.subtext}
                                 value={searchQuery}
                                 onChangeText={setSearchQuery}
                             />
+                            {searchQuery.length > 0 && (
+                                <TouchableOpacity
+                                    testID="admin-search-clear-btn"
+                                    onPress={() => setSearchQuery('')}
+                                    style={styles.searchClearBtn}
+                                    accessibilityLabel="Clear search filter"
+                                >
+                                    <Text style={{ color: T.subtext, fontSize: 12, fontWeight: '700' }}>✕</Text>
+                                </TouchableOpacity>
+                            )}
                         </View>
                         {!isMobile && (
                             <Text style={[styles.breadcrumb, { color: T.subtext }]} numberOfLines={1}>
-                                Admin / {PAGE_TITLES[activeView]}
+                                Admin / {ADMIN_PAGE_TITLES[activeView]}
                             </Text>
                         )}
                     </View>
 
                     <View style={[styles.topBarRight, isMobile && styles.topBarRightMobile]}>
-                        <TouchableOpacity onPress={() => navigate('NOTIFICATIONS')} style={styles.notificationWrapper}>
+                        <TouchableOpacity
+                            testID="admin-bell-button"
+                            onPress={() => {
+                                const next = !bellPopoverOpen;
+                                setBellPopoverOpen(next);
+                                if (next) loadNotificationsRef.current(true);
+                            }}
+                            style={styles.notificationWrapper}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`}
+                        >
                             <Text style={styles.headerIcon}>🔔</Text>
                             {unreadCount > 0 && (
-                                <View style={styles.badge}>
-                                    <Text style={styles.badgeText}>{unreadCount}</Text>
+                                <View testID="admin-bell-badge" style={styles.badge}>
+                                    <Text style={styles.badgeText}>{badgeDisplay}</Text>
                                 </View>
                             )}
                         </TouchableOpacity>
@@ -413,11 +943,50 @@ export default function AdminDashboardScreen() {
                     </View>
                 </View>
 
+                {/* Non-intrusive Web Push Permission Prompt Banner */}
+                {!pushBannerDismissed && activeView !== 'NOTIFICATIONS' && (
+                    <AdminPushPermissionBanner
+                        permission={pushPermission}
+                        isDark={isDark}
+                        onEnable={handleRequestPushPermission}
+                        onDismiss={() => setPushBannerDismissed(true)}
+                    />
+                )}
+
                 {/* Page Body */}
                 <View style={styles.pageBody}>
                     {renderContent()}
                 </View>
             </View>
+
+            {/* Bell Quick Dropdown / Popover */}
+            <AdminNotificationBellPopover
+                visible={bellPopoverOpen}
+                notifications={notifications}
+                unreadCount={unreadCount}
+                loading={loadingNotifications}
+                markingAllRead={markingAllRead}
+                isDark={isDark}
+                pushPermission={pushPermission}
+                onClose={() => setBellPopoverOpen(false)}
+                onSelectNotification={handleSelectNotification}
+                onMarkAllRead={() => handleMarkAllRead()}
+                onViewAll={() => navigate('NOTIFICATIONS')}
+                onRefresh={() => loadNotifications(true)}
+                onRequestPushPermission={handleRequestPushPermission}
+            />
+
+            {/* Foreground Push Toast */}
+            <AdminForegroundToast
+                toast={foregroundToast}
+                isDark={isDark}
+                onOpen={() => {
+                    if (foregroundToast) {
+                        navigateFromNotificationPayload(foregroundToast.payload);
+                    }
+                }}
+                onDismiss={dismissToast}
+            />
 
             <SignOutConfirmModal
                 visible={signOutModalVisible}
@@ -507,6 +1076,20 @@ const styles = StyleSheet.create({
         backgroundColor: '#FFFFFF',
         opacity: 0.5,
     },
+    sidebarBadge: {
+        backgroundColor: '#DC3545',
+        borderRadius: 10,
+        minWidth: 20,
+        height: 18,
+        paddingHorizontal: 6,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    sidebarBadgeText: {
+        color: '#FFFFFF',
+        fontSize: 10,
+        fontWeight: '700',
+    },
     topBarRight: { flexDirection: 'row', alignItems: 'center', gap: 20, flexShrink: 0 },
     topBarRightMobile: { gap: 12 },
     headerIcon: { fontSize: 20, color: '#6C757D' },
@@ -518,7 +1101,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         borderWidth: 1,
-        borderColor: '#DEE2E6'
+        borderColor: '#DEE2E6',
     },
     profileBtn: { marginLeft: 8, flexShrink: 0 },
     searchBar: {
@@ -536,6 +1119,10 @@ const styles = StyleSheet.create({
     },
     searchIcon: { fontSize: 14, color: '#6C757D', marginRight: 8, flexShrink: 0 },
     searchInput: { flex: 1, minWidth: 0, fontSize: 14, padding: 0, outlineStyle: 'none' } as any,
+    searchClearBtn: {
+        paddingLeft: 8,
+        paddingVertical: 2,
+    },
     breadcrumb: { marginLeft: 20, fontSize: 13, opacity: 0.7, flexShrink: 1 },
     navItem: {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -554,59 +1141,17 @@ const styles = StyleSheet.create({
         gap: 10,
     },
     pageBody: { flex: 1 },
-    notificationWrapper: { position: 'relative' },
+    notificationWrapper: { position: 'relative', padding: 4 },
     badge: {
         position: 'absolute',
-        top: -4, right: -4,
+        top: -2, right: -4,
         backgroundColor: '#DC3545',
         borderRadius: 10,
-        width: 18, height: 18,
+        minWidth: 18,
+        height: 18,
+        paddingHorizontal: 4,
         justifyContent: 'center', alignItems: 'center',
         borderWidth: 2, borderColor: '#fff',
     },
     badgeText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
 });
-
-function AdminNotificationsView({ notifications, onMarkRead, onNavigate, isDark }: any) {
-    const T = {
-        bg: isDark ? '#1F2937' : '#fff',
-        border: isDark ? 'rgba(255,255,255,0.08)' : '#eee',
-        text: isDark ? '#fff' : '#333',
-        sub: isDark ? '#9CA3AF' : '#666',
-    };
-
-    return (
-        <ScrollView style={{ padding: 24 }}>
-            <Text style={{ fontSize: 24, fontWeight: 'bold', color: T.text, marginBottom: 20 }}>All Notifications</Text>
-            {notifications.length === 0 && (
-                <View style={{ alignItems: 'center', paddingTop: 60 }}>
-                    <Text style={{ fontSize: 40, marginBottom: 16 }}>🔔</Text>
-                    <Text style={{ color: T.sub, fontSize: 15 }}>No notifications yet.</Text>
-                </View>
-            )}
-            {notifications.map((n: any) => (
-                <TouchableOpacity
-                    key={n.id}
-                    onPress={() => {
-                        onMarkRead(n.id);
-                        onNavigate(n.type);
-                    }}
-                    style={{
-                        backgroundColor: T.bg,
-                        padding: 20, borderRadius: 12, marginBottom: 12,
-                        borderWidth: 1, borderColor: T.border,
-                        opacity: n.read ? 0.7 : 1,
-                        flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'
-                    }}
-                >
-                    <View style={{ flex: 1, minWidth: 0, paddingRight: 12 }}>
-                        <Text style={{ fontWeight: 'bold', fontSize: 16, color: T.text }}>{n.title}</Text>
-                        <Text style={{ color: T.sub, marginTop: 4 }}>{n.message}</Text>
-                        <Text style={{ fontSize: 12, color: T.sub, marginTop: 8 }}>{n.time}</Text>
-                    </View>
-                    {!n.read && <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#3B7DDD' }} />}
-                </TouchableOpacity>
-            ))}
-        </ScrollView>
-    );
-}

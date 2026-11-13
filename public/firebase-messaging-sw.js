@@ -1,6 +1,6 @@
 // public/firebase-messaging-sw.js
 // Firebase Cloud Messaging Service Worker — handles background & lock screen notifications.
-// v4 — fixes: reliable lock-screen delivery via raw push event, proper event.waitUntil usage.
+// v5 — adds: admin deep-link routing, unique tags when relatedId is empty, and PUSH_RECEIVED relay to open tabs.
 
 importScripts('https://www.gstatic.com/firebasejs/11.7.1/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/11.7.1/firebase-messaging-compat.js');
@@ -54,7 +54,8 @@ function isDuplicate(msgId, fallbackKey) {
 // ─── Build rich notification options from FCM payload ───────────────────────
 function buildNotificationOptions(data, notificationType) {
   const type      = data?.type      || notificationType || 'general';
-  const relatedId = data?.relatedId || data?.bookingId  || '';
+  const relatedId = data?.relatedId || data?.bookingId || data?.rideId || data?.driverId || data?.userId || '';
+  const notifId   = data?.notificationId || '';
   const bookingId = data?.bookingId || '';
   const pickup    = data?.pickup    || '';
   const dropoff   = data?.dropoff   || '';
@@ -69,12 +70,20 @@ function buildNotificationOptions(data, notificationType) {
     }
   }
 
+  const tag = relatedId
+    ? `${type}-${relatedId}`
+    : (notifId ? `${type}-${notifId}` : `${type}-${Date.now()}`);
+
   return {
     icon:               '/logo192.png',
     badge:              '/logo192.png',
-    tag:                `${type}-${relatedId}`,   // collapse duplicates per type+ride
-    renotify:           true,                      // vibrate even if tag already exists
-    requireInteraction: type === 'booking_request' || type === 'chat', // stay on screen for actionable notifs
+    tag,
+    renotify:           true,
+    requireInteraction:
+      type === 'booking_request' ||
+      type === 'chat' ||
+      type === 'driver_kyc_submitted' ||
+      type === 'driver_kyc_resubmitted',
     vibrate:            [200, 100, 200, 100, 200],
     silent:             false,
     data:               { ...data, _extraLines: extraLines },
@@ -91,18 +100,10 @@ function buildNotificationOptions(data, notificationType) {
 // no-op for any message the `push` event already deduplicated.
 messaging.onBackgroundMessage((payload) => {
   console.log('[SW] onBackgroundMessage (secondary handler):', payload?.messageId || '');
-  // The raw push handler below has already shown or will show this notification.
-  // Return undefined (no-op) to prevent the compat SDK from showing a generic
-  // notification on its own.
   return Promise.resolve();
 });
 
 // ─── Primary push event handler ───────────────────────────────────────────────
-// This is the ONLY reliable way to show lock-screen notifications for ALL FCM
-// message types (data-only AND notification+data). The raw `push` event fires
-// for every FCM delivery, regardless of whether the Firebase compat SDK surfaces
-// it through onBackgroundMessage. We handle everything here and deduplicate so
-// the compat SDK's secondary handler is always a no-op.
 self.addEventListener('push', (event) => {
   if (!event.data) return;
 
@@ -110,19 +111,16 @@ self.addEventListener('push', (event) => {
   try { payload = event.data.json(); }
   catch { payload = { data: { body: event.data.text() } }; }
 
-  // FCM wraps data-only pushes under payload.data and notification pushes under
-  // payload.notification (and also under payload.data.FCM_MSG in some cases).
-  // We normalise both shapes into a single `data` object and `notification` object.
   const notifBlock = payload.notification || {};
   const dataBlock  = payload.data        || {};
 
   // Extract the real message ID from whichever field FCM uses
   const msgId = payload.messageId || payload.fcmMessageId ||
-                dataBlock.google?.c_id || '';
+                dataBlock.notificationId || dataBlock.google?.c_id || '';
 
   const data  = dataBlock;
   const type  = data.type || 'general';
-  const relatedId = data.relatedId || data.bookingId || '';
+  const relatedId = data.relatedId || data.bookingId || data.rideId || data.driverId || data.userId || '';
   const title = notifBlock.title || data.title || 'GoRaahi';
   const opts  = buildNotificationOptions(data, type);
 
@@ -131,7 +129,7 @@ self.addEventListener('push', (event) => {
     body = body + opts.data._extraLines;
   }
 
-  // Deduplicate — use messageId when present, otherwise a time-windowed fallback key
+  // Deduplicate — use messageId/notificationId when present, otherwise a time-windowed fallback key
   const fallbackKey = `${type}:${relatedId}:${data.action || ''}:${title}:${body}`;
   if (isDuplicate(msgId, fallbackKey)) {
     console.log('[SW] push: duplicate suppressed:', msgId || fallbackKey);
@@ -140,13 +138,25 @@ self.addEventListener('push', (event) => {
 
   console.log('[SW] push: showing notification — type:', type, 'title:', title);
 
-  // CRITICAL: event.waitUntil keeps the SW alive until showNotification resolves.
-  // Without this the browser may kill the SW before the OS delivers the notification.
-  event.waitUntil(
-    self.registration.showNotification(title, { body, ...opts })
-      .then(() => console.log('[SW] push: showNotification resolved for type:', type))
-      .catch(err => console.error('[SW] push: showNotification error:', err))
-  );
+  const showPromise = self.registration.showNotification(title, { body, ...opts })
+    .then(() => console.log('[SW] push: showNotification resolved for type:', type))
+    .catch(err => console.error('[SW] push: showNotification error:', err));
+
+  // Notify any open GoRaahi tabs so the Admin bell badge refreshes immediately
+  const relayPromise = clients.matchAll({ type: 'window', includeUncontrolled: true })
+    .then((windowClients) => {
+      for (const client of windowClients) {
+        if (client.url.startsWith(self.location.origin)) {
+          client.postMessage({
+            type: 'PUSH_RECEIVED',
+            data: { ...data, title, body },
+          });
+        }
+      }
+    })
+    .catch(() => {});
+
+  event.waitUntil(Promise.all([showPromise, relayPromise]));
 });
 
 // ─── Notification click handler ───────────────────────────────────────────────
@@ -160,18 +170,25 @@ self.addEventListener('notificationclick', (event) => {
   delete payloadData._extraLines;
 
   const type      = payloadData.type;
-  const relatedId = payloadData.relatedId || payloadData.bookingId || '';
+  const relatedId = payloadData.relatedId || payloadData.bookingId || payloadData.rideId || payloadData.driverId || payloadData.userId || '';
   const bookingId = payloadData.bookingId || '';
 
-  console.log('[SW] Notification clicked, type:', type, 'bookingId:', bookingId);
+  console.log('[SW] Notification clicked, type:', type, 'bookingId:', bookingId, 'targetView:', payloadData.targetView || '');
 
   // Determine the deep-link URL.
-  // Priority: explicit url field → type/action-based path → root
+  // Priority: explicit url field → admin targetView → user/driver type-based path → root
   let path = payloadData.url || '/';
 
-  // Override for well-known types if url wasn't set in data
   if (!payloadData.url) {
-    if (payloadData.action === 'rekyc') {
+    if (payloadData.audience === 'admin' || payloadData.targetView || payloadData.adminView) {
+      const view = payloadData.targetView || payloadData.adminView || 'NOTIFICATIONS';
+      const params = new URLSearchParams();
+      params.set('adminView', view);
+      if (relatedId) params.set('relatedId', relatedId);
+      if (type) params.set('type', type);
+      if (payloadData.notificationId) params.set('notificationId', payloadData.notificationId);
+      path = `/?${params.toString()}`;
+    } else if (payloadData.action === 'rekyc') {
       path = '/?rekyc=true';
     } else if (type === 'booking_request') {
       path = '/?openRequests=true';
@@ -193,8 +210,7 @@ self.addEventListener('notificationclick', (event) => {
           return client.focus();
         }
       }
-      // No existing tab — open a new window. The app reads URL params on load
-      // to handle navigation (see App.tsx cold-start handler).
+      // No existing tab — open a new window. The app reads URL params on load.
       if (clients.openWindow) {
         return clients.openWindow(urlToOpen);
       }
@@ -203,7 +219,6 @@ self.addEventListener('notificationclick', (event) => {
 });
 
 // ─── Service Worker lifecycle ─────────────────────────────────────────────────
-// Skip waiting so the new SW activates immediately without requiring a page reload.
 self.addEventListener('install',  () => self.skipWaiting());
 self.addEventListener('activate', (event) => event.waitUntil(clients.claim()));
 self.addEventListener('message',  (event) => {

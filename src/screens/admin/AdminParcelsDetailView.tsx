@@ -121,10 +121,13 @@ export default function AdminParcelsDetailView({ isDark, searchQuery = '' }: { i
           );
      }
 
+     const q = searchQuery.toLowerCase();
      const filteredParcels = parcels.filter(p =>
-          (p.sender || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (p.recipient || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (p.id || '').toLowerCase().includes(searchQuery.toLowerCase())
+          (p.sender || '').toLowerCase().includes(q) ||
+          (p.recipient || '').toLowerCase().includes(q) ||
+          (p.pickup || '').toLowerCase().includes(q) ||
+          (p.dropoff || '').toLowerCase().includes(q) ||
+          (p.id || '').toLowerCase().includes(q)
      );
 
      return (

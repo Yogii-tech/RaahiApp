@@ -336,11 +336,13 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
     const rejectedCount = drivers.filter(d => d.verificationStatus === 'rejected').length;
 
     const filteredDrivers = drivers.filter(d => {
+        const q = searchQuery.toLowerCase();
         const matchesSearch =
-            d.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            d.phone?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            d.vehicleNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            d.location?.toLowerCase().includes(searchQuery.toLowerCase());
+            d.id?.toLowerCase().includes(q) ||
+            d.name?.toLowerCase().includes(q) ||
+            d.phone?.toLowerCase().includes(q) ||
+            d.vehicleNumber?.toLowerCase().includes(q) ||
+            d.location?.toLowerCase().includes(q);
 
         const status = d.verificationStatus || 'pending';
         if (activeFilter === 'pending') return matchesSearch && status === 'pending';

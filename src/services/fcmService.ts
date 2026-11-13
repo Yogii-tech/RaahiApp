@@ -16,16 +16,48 @@ import { getAuthSessionGeneration, refreshAuthToken } from '../utils/api';
 export type FCMNotificationPayload = {
   type?: string;
   action?: string;
+  category?: string;
+  targetView?: string;
+  adminView?: string;
   bookingId?: string;
+  bid?: string;
   rideId?: string;
+  driverId?: string;
+  userId?: string;
+  notificationId?: string;
+  audience?: string;
   status?: string;
   relatedId?: string;
   pickup?: string;
   dropoff?: string;
+  actorName?: string;
+  actorPhone?: string;
+  vehicleNumber?: string;
+  vehicleName?: string;
+  bookingType?: string;
+  rating?: string;
+  parcelSize?: string;
+  recipientName?: string;
+  title?: string;
+  body?: string;
   url?: string;
 };
 
+export type WebPushPermissionState = 'granted' | 'denied' | 'default' | 'unsupported';
+
+export type RegisterFCMOptions = {
+  onForegroundMessage?: (payload: FCMNotificationPayload) => void;
+  onPushReceived?: (payload: FCMNotificationPayload) => void;
+  promptIfDefault?: boolean;
+};
+
+export type FCMRegistrationResult = {
+  permission: WebPushPermissionState;
+  tokenUploaded: boolean;
+};
+
 type NavigateToScreen = (type: string, data: FCMNotificationPayload) => void;
+type PayloadCallback = (payload: FCMNotificationPayload) => void;
 
 // ─── Web Firebase Lazy Imports ─────────────────────────────────────────────────
 
@@ -54,20 +86,60 @@ async function getWebMessaging() {
   return webMessaging;
 }
 
+export function getWebNotificationPermission(): WebPushPermissionState {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') {
+    return 'unsupported';
+  }
+  if (typeof Notification === 'undefined') {
+    return 'unsupported';
+  }
+  const perm = Notification.permission;
+  if (perm === 'granted' || perm === 'denied' || perm === 'default') {
+    return perm;
+  }
+  return 'unsupported';
+}
+
 // ─── Token Upload ──────────────────────────────────────────────────────────────
 
 const ACTIVE_FCM_TOKEN_KEY = 'active_fcm_token';
 const PENDING_FCM_TOKEN_KEY = 'pending_fcm_token';
+const MAX_FOREGROUND_DEDUP_IDS = 50;
 
 let currentFCMToken: string | null = null;
+let unregisterInFlightPromise: Promise<void> | null = null;
 
-async function uploadToken(fcmToken: string, authToken: string, expectedGeneration?: number): Promise<void> {
+async function safeStorageGetItem(key: string): Promise<string | null> {
+  try {
+    return await AsyncStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+async function safeStorageSetItem(key: string, value: string): Promise<void> {
+  try {
+    await AsyncStorage.setItem(key, value);
+  } catch {
+    // Ignore storage errors in tests or restricted web private modes
+  }
+}
+
+async function safeStorageRemoveItem(key: string): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(key);
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+async function uploadToken(fcmToken: string, authToken: string, expectedGeneration?: number): Promise<boolean> {
   try {
     if (expectedGeneration !== undefined && getAuthSessionGeneration() !== expectedGeneration) {
-      return;
+      return false;
     }
     currentFCMToken = fcmToken;
-    await AsyncStorage.setItem(ACTIVE_FCM_TOKEN_KEY, fcmToken).catch(() => {});
+    await safeStorageSetItem(ACTIVE_FCM_TOKEN_KEY, fcmToken);
     const sendPut = async (bearer: string) =>
       fetch(`${API_BASE}/api/user/fcm-token`, {
         method: 'PUT',
@@ -81,7 +153,7 @@ async function uploadToken(fcmToken: string, authToken: string, expectedGenerati
 
     let res = await sendPut(authToken);
     if (res.status === 401 && (expectedGeneration === undefined || getAuthSessionGeneration() === expectedGeneration)) {
-      const latestToken = await AsyncStorage.getItem('auth_token').catch(() => null);
+      const latestToken = await safeStorageGetItem('auth_token');
       const nextToken =
         (expectedGeneration === undefined || getAuthSessionGeneration() === expectedGeneration) &&
         latestToken &&
@@ -94,21 +166,24 @@ async function uploadToken(fcmToken: string, authToken: string, expectedGenerati
     }
 
     if (expectedGeneration !== undefined && getAuthSessionGeneration() !== expectedGeneration) {
-      return;
+      return false;
     }
 
     if (res.ok) {
       console.log('[FCM] Token uploaded to backend successfully');
-      await AsyncStorage.removeItem(PENDING_FCM_TOKEN_KEY);
+      await safeStorageRemoveItem(PENDING_FCM_TOKEN_KEY);
+      return true;
     } else {
       console.warn('[FCM] Backend token upload failed:', res.status);
-      await AsyncStorage.setItem(PENDING_FCM_TOKEN_KEY, fcmToken);
+      await safeStorageSetItem(PENDING_FCM_TOKEN_KEY, fcmToken);
+      return false;
     }
   } catch (e) {
     console.warn('[FCM] Failed to upload token (network error). Caching for retry:', e);
     if (expectedGeneration === undefined || getAuthSessionGeneration() === expectedGeneration) {
-      await AsyncStorage.setItem(PENDING_FCM_TOKEN_KEY, fcmToken);
+      await safeStorageSetItem(PENDING_FCM_TOKEN_KEY, fcmToken);
     }
+    return false;
   }
 }
 
@@ -117,7 +192,7 @@ async function syncPendingToken(authToken: string, expectedGeneration?: number):
     if (expectedGeneration !== undefined && getAuthSessionGeneration() !== expectedGeneration) {
       return;
     }
-    const pendingToken = await AsyncStorage.getItem(PENDING_FCM_TOKEN_KEY);
+    const pendingToken = await safeStorageGetItem(PENDING_FCM_TOKEN_KEY);
     if (pendingToken && (expectedGeneration === undefined || getAuthSessionGeneration() === expectedGeneration)) {
       console.log('[FCM] Found pending token, syncing...');
       await uploadToken(pendingToken, authToken, expectedGeneration);
@@ -128,42 +203,86 @@ async function syncPendingToken(authToken: string, expectedGeneration?: number):
 }
 
 function handleNotificationNavigation(data: FCMNotificationPayload, navigate: NavigateToScreen): void {
-  if (!data?.type) return;
-  console.log('[FCM] Notification tap → type:', data.type);
-  navigate(data.type, data);
+  if (!data?.type && !data?.targetView && !data?.adminView && !data?.url) return;
+  const resolvedType = data.type || 'general';
+  console.log('[FCM] Notification tap → type:', resolvedType);
+  navigate(resolvedType, data);
 }
 
 // ─── Main Registration ─────────────────────────────────────────────────────────
 
 let foregroundUnsubscribe: (() => void) | null = null;
-// Mutable callback ref so persistent SW / native listeners always call the latest MainTabs handler
+// Mutable callback refs so persistent SW / native listeners always call the latest handler
 let activeNavigateCallback: NavigateToScreen | null = null;
-// Track whether SW message listener is already attached to avoid duplicates
-let swMessageListenerAttached = false;
+let activeForegroundCallback: PayloadCallback | null = null;
+let activePushReceivedCallback: PayloadCallback | null = null;
+// Track ServiceWorkerContainer instance that already has the message listener attached
+let attachedServiceWorkerContainer: any = null;
 // Track native unsubscribe handles
 let nativeForegroundUnsubscribe: (() => void) | null = null;
 let nativeOpenedAppUnsubscribe: (() => void) | null = null;
 let nativeTokenRefreshUnsubscribe: (() => void) | null = null;
 
-export async function registerFCM(authToken: string, onNavigate: NavigateToScreen): Promise<void> {
+function attachWebServiceWorkerMessageListener(): void {
+  if (
+    Platform.OS === 'web' &&
+    typeof navigator !== 'undefined' &&
+    'serviceWorker' in navigator &&
+    navigator.serviceWorker &&
+    attachedServiceWorkerContainer !== navigator.serviceWorker
+  ) {
+    attachedServiceWorkerContainer = navigator.serviceWorker;
+    navigator.serviceWorker.addEventListener('message', (event) => {
+      if (event.data?.type === 'NOTIFICATION_CLICK') {
+        console.log('[FCM Web] SW notification click relayed:', event.data?.data?.type || 'tap');
+        if (activeNavigateCallback) {
+          handleNotificationNavigation((event.data.data || {}) as FCMNotificationPayload, activeNavigateCallback);
+        }
+      } else if (event.data?.type === 'PUSH_RECEIVED') {
+        const payload = (event.data.data || {}) as FCMNotificationPayload;
+        activePushReceivedCallback?.(payload);
+      }
+    });
+  }
+}
+
+export async function registerFCM(
+  authToken: string,
+  onNavigate: NavigateToScreen,
+  options?: RegisterFCMOptions
+): Promise<FCMRegistrationResult> {
   const startGen = getAuthSessionGeneration();
   activeNavigateCallback = onNavigate;
+  activeForegroundCallback = options?.onForegroundMessage ?? null;
+  activePushReceivedCallback = options?.onPushReceived ?? null;
+
   const dispatchNavigate: NavigateToScreen = (type, data) => {
     activeNavigateCallback?.(type, data);
   };
 
+  attachWebServiceWorkerMessageListener();
+
   await syncPendingToken(authToken, startGen);
-  if (getAuthSessionGeneration() !== startGen) return;
+  if (getAuthSessionGeneration() !== startGen) {
+    return { permission: getWebNotificationPermission(), tokenUploaded: false };
+  }
 
   if (Platform.OS === 'web') {
-    await registerWebFCM(authToken, dispatchNavigate, startGen);
+    return registerWebFCM(authToken, dispatchNavigate, startGen, options);
   } else if (Platform.OS === 'android' || Platform.OS === 'ios') {
-    await registerNativeFCM(authToken, dispatchNavigate, startGen);
+    const uploaded = await registerNativeFCM(authToken, dispatchNavigate, startGen);
+    return { permission: uploaded ? 'granted' : 'default', tokenUploaded: uploaded };
   }
+
+  return { permission: 'unsupported', tokenUploaded: false };
 }
 
 // ─── Native (Android / iOS) Registration Logic ────────────────────────────────
-async function registerNativeFCM(authToken: string, onNavigate: NavigateToScreen, startGen: number): Promise<void> {
+async function registerNativeFCM(
+  authToken: string,
+  onNavigate: NavigateToScreen,
+  startGen: number
+): Promise<boolean> {
   try {
     // Dynamically import @react-native-firebase/messaging modular API (not available on web build)
     const {
@@ -188,14 +307,14 @@ async function registerNativeFCM(authToken: string, onNavigate: NavigateToScreen
         PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
         {
           title: 'GoRaahi Notifications',
-          message: 'Allow GoRaahi to send you ride and booking notifications.',
+          message: 'Allow GoRaahi to send you ride, booking, and platform notifications.',
           buttonPositive: 'Allow',
           buttonNegative: 'Deny',
         }
       );
       if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
         console.warn('[FCM Native] POST_NOTIFICATIONS permission denied. Lock screen notifications will not work.');
-        return;
+        return false;
       }
     }
 
@@ -207,28 +326,39 @@ async function registerNativeFCM(authToken: string, onNavigate: NavigateToScreen
         authStatus === AuthorizationStatus.PROVISIONAL;
       if (!enabled) {
         console.warn('[FCM Native iOS] Notification permission denied.');
-        return;
+        return false;
       }
     }
 
     // Get the native device FCM token
-    if (getAuthSessionGeneration() !== startGen) return;
+    if (getAuthSessionGeneration() !== startGen) return false;
     const token = await getToken(messagingInstance);
-    if (getAuthSessionGeneration() !== startGen) return;
+    if (getAuthSessionGeneration() !== startGen) return false;
+    let uploaded = false;
     if (token) {
       console.log('[FCM Native] Got device token, uploading...');
-      await uploadToken(token, authToken, startGen);
+      uploaded = await uploadToken(token, authToken, startGen);
     } else {
       console.warn('[FCM Native] Empty token — check google-services.json / APNs configuration.');
     }
-    if (getAuthSessionGeneration() !== startGen) return;
+    if (getAuthSessionGeneration() !== startGen) return false;
 
     // Handle foreground messages (app is open and in focus)
     if (nativeForegroundUnsubscribe) nativeForegroundUnsubscribe();
     nativeForegroundUnsubscribe = onMessage(messagingInstance, async (remoteMessage) => {
       console.log('[FCM Native] Foreground message:', remoteMessage?.messageId);
-      const data = remoteMessage?.data || {};
-      handleNotificationNavigation(data as FCMNotificationPayload, onNavigate);
+      const rawData = (remoteMessage?.data || {}) as Record<string, string>;
+      const normalizedPayload: FCMNotificationPayload = {
+        ...rawData,
+        title: remoteMessage?.notification?.title || rawData.title,
+        body: remoteMessage?.notification?.body || rawData.body,
+      };
+      activePushReceivedCallback?.(normalizedPayload);
+      if (activeForegroundCallback) {
+        activeForegroundCallback(normalizedPayload);
+      } else {
+        handleNotificationNavigation(normalizedPayload, onNavigate);
+      }
     });
 
     // Handle notification taps when app is in background (not fully quit)
@@ -252,33 +382,65 @@ async function registerNativeFCM(authToken: string, onNavigate: NavigateToScreen
     nativeTokenRefreshUnsubscribe = onTokenRefresh(messagingInstance, async (newToken: string) => {
       if (getAuthSessionGeneration() !== startGen) return;
       console.log('[FCM Native] Token refreshed, uploading...');
-      const latestAuthToken = await AsyncStorage.getItem('auth_token').catch(() => null);
+      const latestAuthToken = await safeStorageGetItem('auth_token');
       if (!latestAuthToken || getAuthSessionGeneration() !== startGen) return;
       await uploadToken(newToken, latestAuthToken, startGen);
     });
 
     console.log('[FCM Native] Registration complete.');
+    return uploaded;
   } catch (e) {
     console.warn('[FCM Native] Registration failed (google-services.json may be missing or this is a web build):', e);
+    return false;
   }
 }
 
 // ─── Web Registration Logic ────────────────────────────────────────────────────
-async function registerWebFCM(authToken: string, onNavigate: NavigateToScreen, startGen: number): Promise<void> {
+async function registerWebFCM(
+  authToken: string,
+  onNavigate: NavigateToScreen,
+  startGen: number,
+  options?: RegisterFCMOptions
+): Promise<FCMRegistrationResult> {
+  const initialPermission = getWebNotificationPermission();
+  if (initialPermission === 'unsupported') {
+    return { permission: 'unsupported', tokenUploaded: false };
+  }
+
+  let permission: WebPushPermissionState = initialPermission;
+  if (permission === 'default') {
+    if (options?.promptIfDefault === false) {
+      return { permission: 'default', tokenUploaded: false };
+    }
+    try {
+      const requested = await Notification.requestPermission();
+      permission = requested === 'granted' || requested === 'denied' || requested === 'default'
+        ? requested
+        : 'unsupported';
+    } catch {
+      return { permission: getWebNotificationPermission(), tokenUploaded: false };
+    }
+  }
+
+  if (getAuthSessionGeneration() !== startGen) {
+    return { permission, tokenUploaded: false };
+  }
+
+  if (permission !== 'granted') {
+    console.warn('[FCM Web] Notification permission not granted:', permission);
+    return { permission, tokenUploaded: false };
+  }
+
   const messaging = await getWebMessaging();
-  if (!messaging || getAuthSessionGeneration() !== startGen) return;
+  if (!messaging || getAuthSessionGeneration() !== startGen) {
+    return { permission, tokenUploaded: false };
+  }
 
   try {
-    // 1. Request notification permission from the browser
-    const permission = await Notification.requestPermission();
-    if (getAuthSessionGeneration() !== startGen) return;
-    if (permission !== 'granted') {
-      console.warn('[FCM Web] Notification permission denied. Lock screen notifications will not work.');
-      return;
-    }
-
     const { getToken, onMessage } = await import('firebase/messaging');
-    if (getAuthSessionGeneration() !== startGen) return;
+    if (getAuthSessionGeneration() !== startGen) {
+      return { permission, tokenUploaded: false };
+    }
 
     // 2. Register & activate the service worker BEFORE getting the FCM token.
     //    The SW MUST be active for the FCM token to be tied to it — otherwise
@@ -310,38 +472,34 @@ async function registerWebFCM(authToken: string, onNavigate: NavigateToScreen, s
 
     // 3. Get the FCM registration token tied to this SW + VAPID key combination.
     //    This token is what the backend uses to send push notifications.
-    if (getAuthSessionGeneration() !== startGen) return;
+    if (getAuthSessionGeneration() !== startGen) {
+      return { permission, tokenUploaded: false };
+    }
     const token = await getToken(messaging, {
       vapidKey: VAPID_KEY,
       serviceWorkerRegistration: swRegistration,
     });
-    if (getAuthSessionGeneration() !== startGen) return;
+    if (getAuthSessionGeneration() !== startGen) {
+      return { permission, tokenUploaded: false };
+    }
 
+    let tokenUploaded = false;
     if (token) {
       console.log('[FCM Web] Got web push token');
-      await uploadToken(token, authToken, startGen);
+      tokenUploaded = await uploadToken(token, authToken, startGen);
     } else {
       console.warn('[FCM Web] Empty token — check VAPID key and SW registration. Notifications will not work.');
     }
-    if (getAuthSessionGeneration() !== startGen) return;
+    if (getAuthSessionGeneration() !== startGen) {
+      return { permission, tokenUploaded };
+    }
 
     // 4. Foreground message handler: when the tab is open and visible, Firebase
     //    suppresses the system notification and calls this handler instead.
-    //    We explicitly show a notification via the SW so behaviour is consistent
-    //    with background messages. A dedup set prevents double-firing.
     const shownForegroundIds = new Set<string>();
 
     if (foregroundUnsubscribe) foregroundUnsubscribe();
     foregroundUnsubscribe = onMessage(messaging, (payload: any) => {
-      // Deduplicate by message ID
-      const msgId = payload?.messageId || payload?.fcmMessageId || '';
-      console.log('[FCM Web] Foreground message received:', msgId || payload?.data?.type || 'notification');
-      if (msgId && shownForegroundIds.has(msgId)) {
-        console.log('[FCM Web] Duplicate foreground message suppressed:', msgId);
-        return;
-      }
-      if (msgId) shownForegroundIds.add(msgId);
-
       const data      = payload?.data || {};
       const type      = data.type     || 'general';
       const relatedId = data.relatedId || data.bookingId || '';
@@ -351,6 +509,36 @@ async function registerWebFCM(authToken: string, onNavigate: NavigateToScreen, s
 
       const title = payload?.notification?.title || data.title || 'GoRaahi';
       let   body  = payload?.notification?.body  || data.body  || '';
+
+      // Deduplicate by message ID or notificationId
+      const dedupKey = payload?.messageId || payload?.fcmMessageId || data.notificationId || '';
+      console.log('[FCM Web] Foreground message received:', dedupKey || type);
+      if (dedupKey && shownForegroundIds.has(dedupKey)) {
+        console.log('[FCM Web] Duplicate foreground message suppressed:', dedupKey);
+        return;
+      }
+      if (dedupKey) {
+        shownForegroundIds.add(dedupKey);
+        if (shownForegroundIds.size > MAX_FOREGROUND_DEDUP_IDS) {
+          const oldest = shownForegroundIds.values().next().value;
+          if (oldest !== undefined) shownForegroundIds.delete(oldest);
+        }
+      }
+
+      const normalizedPayload: FCMNotificationPayload = {
+        ...data,
+        type,
+        relatedId,
+        title,
+        body,
+      };
+
+      activePushReceivedCallback?.(normalizedPayload);
+
+      if (activeForegroundCallback) {
+        activeForegroundCallback(normalizedPayload);
+        return;
+      }
 
       // Build rich body for booking_request (same as SW background handler)
       if (type === 'booking_request' && pickup && dropoff) {
@@ -366,33 +554,22 @@ async function registerWebFCM(authToken: string, onNavigate: NavigateToScreen, s
             body,
             icon:               '/logo192.png',
             badge:              '/logo192.png',
-            tag:                `${type}-${relatedId}`,
+            tag:                relatedId ? `${type}-${relatedId}` : `${type}-${data.notificationId || Date.now()}`,
             renotify:           true,
             requireInteraction: type === 'booking_request' || type === 'chat',
             vibrate:            [200, 100, 200, 100, 200],
-            data:               data,
-          } as NotificationOptions);
+            data:               normalizedPayload,
+          } as NotificationOptions & Record<string, any>);
         }).catch(err => console.warn('[FCM Web] Foreground showNotification error:', err));
       }
     });
 
-    // 5. Listen for messages posted FROM the service worker (e.g. notification click).
-    //    Guard with a flag so multiple registerFCM calls don't stack duplicate listeners.
-    //    Uses mutable activeNavigateCallback so logout/re-login never invokes a stale closure.
-    if ('serviceWorker' in navigator && !swMessageListenerAttached) {
-      swMessageListenerAttached = true;
-      navigator.serviceWorker.addEventListener('message', (event) => {
-        if (event.data?.type === 'NOTIFICATION_CLICK') {
-          console.log('[FCM Web] SW notification click relayed:', event.data?.data?.type || 'tap');
-          if (activeNavigateCallback) {
-            handleNotificationNavigation(event.data.data as FCMNotificationPayload, activeNavigateCallback);
-          }
-        }
-      });
-    }
-
+    // 5. Listen for messages posted FROM the service worker (e.g. notification click / push received).
+    attachWebServiceWorkerMessageListener();
+    return { permission, tokenUploaded };
   } catch (e) {
     console.error('[FCM Web] Registration failed:', e);
+    return { permission, tokenUploaded: false };
   }
 }
 
@@ -400,7 +577,13 @@ async function registerWebFCM(authToken: string, onNavigate: NavigateToScreen, s
  * Unsubscribes foreground FCM listeners on logout and removes token from backend.
  */
 export async function unregisterFCM(authToken?: string): Promise<void> {
+  if (unregisterInFlightPromise) {
+    return unregisterInFlightPromise;
+  }
+
   activeNavigateCallback = null;
+  activeForegroundCallback = null;
+  activePushReceivedCallback = null;
 
   if (foregroundUnsubscribe) {
     foregroundUnsubscribe();
@@ -419,31 +602,45 @@ export async function unregisterFCM(authToken?: string): Promise<void> {
     nativeTokenRefreshUnsubscribe = null;
   }
 
-  const tokenToRemove =
-    currentFCMToken || (await AsyncStorage.getItem(ACTIVE_FCM_TOKEN_KEY).catch(() => null));
-
-  if (tokenToRemove && authToken) {
-    try {
-      await fetch(`${API_BASE}/api/user/fcm-token`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({ fcmToken: tokenToRemove }),
-      });
-      console.log('[FCM] Token removed from backend on logout');
-    } catch (e) {
-      console.warn('[FCM] Failed to remove token from backend on logout:', e);
-    }
-  }
-
+  const capturedCurrentToken = currentFCMToken;
+  const unregisterStartGen = getAuthSessionGeneration();
   currentFCMToken = null;
-  await AsyncStorage.removeItem(ACTIVE_FCM_TOKEN_KEY).catch(() => {});
-  await AsyncStorage.removeItem(PENDING_FCM_TOKEN_KEY).catch(() => {});
 
-  // Keep swMessageListenerAttached = true — the listener is on navigator.serviceWorker
-  // which persists across login/logout; activeNavigateCallback updates on next registerFCM.
-  console.log('[FCM] Foreground listeners unregistered');
+  const run = (async () => {
+    const tokenToRemove =
+      capturedCurrentToken || (await safeStorageGetItem(ACTIVE_FCM_TOKEN_KEY));
+
+    if (getAuthSessionGeneration() === unregisterStartGen) {
+      await safeStorageRemoveItem(ACTIVE_FCM_TOKEN_KEY);
+      await safeStorageRemoveItem(PENDING_FCM_TOKEN_KEY);
+    }
+
+    if (tokenToRemove && authToken) {
+      try {
+        await fetch(`${API_BASE}/api/user/fcm-token`, {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${authToken}`,
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({ fcmToken: tokenToRemove }),
+        });
+        console.log('[FCM] Token removed from backend on logout');
+      } catch (e) {
+        console.warn('[FCM] Failed to remove token from backend on logout:', e);
+      }
+    }
+
+    // Keep swMessageListenerAttached = true — the listener is on navigator.serviceWorker
+    // which persists across login/logout; active callbacks update on next registerFCM.
+    console.log('[FCM] Foreground listeners unregistered');
+  })().finally(() => {
+    if (unregisterInFlightPromise === run) {
+      unregisterInFlightPromise = null;
+    }
+  });
+
+  unregisterInFlightPromise = run;
+  return run;
 }
