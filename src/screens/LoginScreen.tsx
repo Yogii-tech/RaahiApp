@@ -296,7 +296,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
 
     // Force user into completing profile once on resuming an incomplete session
     useEffect(() => {
-        if (!token || !user || (user.name && user.role)) {
+        if (!token || !user || user.role === 'admin' || (user.name && user.role)) {
             hasResumedIncompleteSessionRef.current = false;
             return;
         }
@@ -400,19 +400,20 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
             const response = await fetch(`${API_BASE}/api/auth/firebase-verify`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
                 body: JSON.stringify({
                     id_token: idToken,
                     phone_number: phoneNumber.trim()
                 }),
             });
             const data = await parseJsonSafe(response);
-            if (!response.ok || !data) {
+            if (!response.ok || !data?.token) {
                 setAuthError(getApiErrorMessage(data, 'Invalid OTP code.', response));
                 return;
             }
-            setAdminTempToken(data.token || null);
+            setAdminTempToken(data.token);
             setAdminTempRefreshToken(data.refresh_token || null);
-            setAdminTempUser(data.user);
+            setAdminTempUser(data.user || { id: '', phone_number: phoneNumber.trim(), name: '', role: '' });
             setAuthError(null);
             navigateToStep('admin_secret');
         } catch (fbErr: any) {
@@ -423,14 +424,19 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
     const handleAdminPromote = async () => {
         if (loading) return;
         setAuthError(null);
-        if (!adminSecretKey.trim()) { setAuthError('Please enter the admin secret key.'); return; }
+        const trimmedKey = adminSecretKey.trim();
+        if (!trimmedKey) { setAuthError('Please enter the admin secret key.'); return; }
+        if (!adminTempToken) {
+            setAuthError('OTP verification session expired. Please verify your OTP again.');
+            return;
+        }
         setLoading(true);
         try {
             const promoteRes = await fetch(`${API_BASE}/api/auth/promote-admin`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminTempToken}` },
                 credentials: 'include',
-                body: JSON.stringify({ secret_key: adminSecretKey.trim() }),
+                body: JSON.stringify({ secret_key: trimmedKey }),
             });
             const promoteData = await parseJsonSafe(promoteRes);
             if (!promoteRes.ok) {
@@ -439,11 +445,21 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
             }
             const finalToken = promoteData?.token || adminTempToken;
             const finalRefresh = promoteData?.refresh_token ?? adminTempRefreshToken;
-            const finalUser = { ...(adminTempUser || {}), ...(promoteData?.user || {}), role: 'admin' };
+            if (!finalToken) {
+                setAuthError('Session token missing. Please verify your OTP again.');
+                return;
+            }
+            const mergedUser = { ...(adminTempUser || {}), ...(promoteData?.user || {}), role: 'admin' };
+            const finalUser = {
+                ...mergedUser,
+                name: typeof mergedUser.name === 'string' && mergedUser.name.trim()
+                    ? mergedUser.name.trim()
+                    : 'Admin',
+            };
             await setAuth(finalToken, finalRefresh, finalUser);
             onAuthenticated();
-        } catch {
-            setAuthError('Promotion failed. Please check secret key.');
+        } catch (err: any) {
+            setAuthError(err?.message || 'Promotion failed. Please check secret key.');
         } finally { setLoading(false); }
     };
 
@@ -478,6 +494,17 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
 
             if (!response.ok || !data?.user) {
                 setAuthError(getApiErrorMessage(data, 'Backend token verification failed.', response));
+                return;
+            }
+
+            if (data.user.role === 'admin') {
+                await setAuth(data.token, data.refresh_token, {
+                    ...data.user,
+                    name: typeof data.user.name === 'string' && data.user.name.trim()
+                        ? data.user.name.trim()
+                        : 'Admin',
+                });
+                onAuthenticated();
                 return;
             }
 
@@ -1109,6 +1136,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                                 return (
                                     <TextInput
                                         key={i}
+                                        testID={`otp-input-${i}`}
                                         ref={(ref) => { otpRefs.current[i] = ref; }}
                                         style={[
                                             styles.otpBox,
@@ -1420,6 +1448,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                         </View>
                         <View style={styles.spacer16} />
                         <TextInput
+                            testID="admin-phone-input"
                             style={[styles.input, { backgroundColor: colors.inputFillColor, color: colors.textColor, borderColor: authError ? '#EF4444' : '#1FAF63' }]}
                             placeholder="Admin phone number"
                             placeholderTextColor="rgba(31,175,99,0.4)"
@@ -1438,6 +1467,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                         ) : null}
                         <View style={styles.spacer24} />
                         <TouchableOpacity
+                            testID="admin-send-otp-btn"
                             style={[styles.button, { backgroundColor: '#1FAF63' }, loading && styles.buttonDisabled]}
                             onPress={() => handleSendOtp(true)}
                             disabled={loading}>
@@ -1467,6 +1497,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                                 return (
                                     <TextInput
                                         key={i}
+                                        testID={`admin-otp-input-${i}`}
                                         ref={(ref) => { otpRefs.current[i] = ref; }}
                                         style={[
                                             styles.otpBox,
@@ -1525,6 +1556,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                         </View>
                         <View style={styles.spacer24} />
                         <TouchableOpacity
+                            testID="admin-verify-otp-btn"
                             style={[styles.button, { backgroundColor: '#1FAF63' }, loading && styles.buttonDisabled]}
                             onPress={handleAdminVerifyOtp}
                             disabled={loading}>
@@ -1541,11 +1573,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                         <View style={styles.spacer16} />
                         <Text style={{ color: colors.subtextColor, fontSize: 13, marginBottom: 10 }}>Enter the admin secret key provided by your system administrator.</Text>
                         <TextInput
+                            testID="admin-secret-input"
                             style={[styles.input, { backgroundColor: colors.inputFillColor, color: colors.textColor, borderColor: authError ? '#EF4444' : '#1FAF63' }]}
                             placeholder="Secret key"
                             placeholderTextColor="rgba(31,175,99,0.4)"
                             autoCapitalize="none"
                             secureTextEntry
+                            returnKeyType="done"
+                            onSubmitEditing={handleAdminPromote}
                             value={adminSecretKey}
                             onChangeText={(text) => {
                                 if (authError) setAuthError(null);
@@ -1559,6 +1594,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                         ) : null}
                         <View style={styles.spacer24} />
                         <TouchableOpacity
+                            testID="admin-promote-submit-btn"
                             style={[styles.button, { backgroundColor: '#1FAF63' }, loading && styles.buttonDisabled]}
                             onPress={handleAdminPromote}
                             disabled={loading}>

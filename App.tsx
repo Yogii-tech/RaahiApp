@@ -682,6 +682,23 @@ const tabStyles = StyleSheet.create({
   }
 });
 
+export type RootRoute = 'loading' | 'welcome' | 'login' | 'admin' | 'main';
+
+export function resolveRootRoute(opts: {
+  isInitialLoading: boolean;
+  isAuthenticated: boolean;
+  welcomeDone: boolean;
+  user?: { name?: string | null; role?: string | null } | null;
+}): RootRoute {
+  if (opts.isInitialLoading) return 'loading';
+  if (!opts.isAuthenticated && !opts.welcomeDone) return 'welcome';
+  if (!opts.isAuthenticated) return 'login';
+  // Admins proceed directly to AdminDashboardScreen even if profile name isn't set yet
+  if (opts.user?.role === 'admin') return 'admin';
+  if (!opts.user?.name || !opts.user?.role) return 'login';
+  return 'main';
+}
+
 function RootApp() {
   const { isAuthenticated, user, isInitialLoading } = useAuth();
   const { isDark } = useTheme();
@@ -697,7 +714,8 @@ function RootApp() {
     if (isAuthenticated && Platform.OS === 'web' && typeof window !== 'undefined') {
       const subView = window.history.state?.subView;
       if (typeof subView === 'string' && subView.startsWith('login')) {
-        window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+        const pageTitle = typeof document !== 'undefined' ? document.title : '';
+        window.history.replaceState({}, pageTitle, window.location.pathname + window.location.search);
       }
     }
   }, [isAuthenticated]);
@@ -706,7 +724,9 @@ function RootApp() {
     setWelcomeDone(false);
   });
 
-  if (isInitialLoading) {
+  const route = resolveRootRoute({ isInitialLoading, isAuthenticated, welcomeDone, user });
+
+  if (route === 'loading') {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
         <WelcomeScreen onGetStarted={() => { }} />
@@ -714,14 +734,14 @@ function RootApp() {
     );
   }
 
-  if (!isAuthenticated && !welcomeDone) {
+  if (route === 'welcome') {
     return <WelcomeScreen onGetStarted={() => {
       pushSubViewHistory('login');
       setWelcomeDone(true);
     }} />;
   }
 
-  if (!isAuthenticated || (!user?.name || !user?.role)) {
+  if (route === 'login') {
     return (
       <View style={{ flex: 1 }}>
         <StatusBar barStyle="light-content" />
@@ -731,7 +751,7 @@ function RootApp() {
   }
 
   // Admin users get the dedicated admin dashboard
-  if (user?.role === 'admin') {
+  if (route === 'admin') {
     return (
       <View style={{ flex: 1 }}>
         <StatusBar barStyle="light-content" />
