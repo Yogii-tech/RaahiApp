@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, TextInput, useWindowDimensions } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
-import { confirmAction, notify } from '../../utils/notify';
+import { notify } from '../../utils/notify';
+import SignOutConfirmModal, { useSignOutConfirmation } from './SignOutConfirmModal';
 
 interface AdminUserEntry {
     id: string;
@@ -48,6 +49,13 @@ const ROLE_COLORS: Record<string, string> = {
 
 export default function AdminSettingsView({ isDark, activeTab: initialTab = 'admins' }: { isDark: boolean; activeTab?: 'admins' | 'permissions' | 'settings' }) {
     const { logout } = useAuth();
+    const {
+        visible: signOutModalVisible,
+        isSigningOut,
+        openConfirm: handleSignOutPress,
+        cancelSignOut,
+        confirmSignOut,
+    } = useSignOutConfirmation(logout);
     const [activeTab, setActiveTab] = useState<'admins' | 'permissions' | 'settings'>(initialTab);
     const [permissions, setPermissions] = useState<PermissionRow[]>(INITIAL_PERMISSIONS);
     const [platformConfig, setPlatformConfig] = useState({
@@ -254,8 +262,14 @@ export default function AdminSettingsView({ isDark, activeTab: initialTab = 'adm
                         <Text style={styles.dangerBtnText}>⚙️ Reset All Settings (Preview)</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                        onPress={() => confirmAction('Sign Out', 'Are you sure you want to sign out of the Admin Portal?', () => { logout(); }, 'Sign Out', 'Cancel')}
-                        style={[styles.dangerBtn, { backgroundColor: '#DC3545', borderColor: '#DC3545' }]}
+                        testID="admin-settings-signout-btn"
+                        onPress={handleSignOutPress}
+                        style={[
+                            styles.dangerBtn,
+                            { backgroundColor: '#DC3545', borderColor: '#DC3545' },
+                        ]}
+                        accessibilityRole="button"
+                        accessibilityLabel="Sign Out"
                     >
                         <Text style={[styles.dangerBtnText, { color: '#fff' }]}>🚪 Sign Out</Text>
                     </TouchableOpacity>
@@ -265,7 +279,8 @@ export default function AdminSettingsView({ isDark, activeTab: initialTab = 'adm
     );
 
     return (
-        <ScrollView style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: T.bg }]} contentContainerStyle={{ paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
+        <>
+            <ScrollView style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: T.bg }]} contentContainerStyle={{ paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
             {/* Page Header */}
             <View style={styles.pageHeader}>
                 <Text style={[styles.pageTitle, { color: T.text }]}>System Administration</Text>
@@ -309,7 +324,15 @@ export default function AdminSettingsView({ isDark, activeTab: initialTab = 'adm
                 {activeTab === 'permissions' && renderPermissionsTab()}
                 {activeTab === 'settings' && renderSettingsTab()}
             </View>
-        </ScrollView>
+            </ScrollView>
+            <SignOutConfirmModal
+                visible={signOutModalVisible}
+                isDark={isDark}
+                isSigningOut={isSigningOut}
+                onCancel={cancelSignOut}
+                onConfirm={confirmSignOut}
+            />
+        </>
     );
 }
 

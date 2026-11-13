@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
     View, Text, StyleSheet, TouchableOpacity,
-    Platform, ScrollView, useWindowDimensions, Alert, TextInput
+    Platform, ScrollView, useWindowDimensions, TextInput
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import AdminDashboardView from './AdminDashboardView';
@@ -18,6 +18,7 @@ import AdminAuditLogsView from './AdminAuditLogsView';
 import AdminSettingsView from './AdminSettingsView';
 import RaahiLogo from '../../components/RaahiLogo';
 import { notify } from '../../utils/notify';
+import SignOutConfirmModal, { useSignOutConfirmation } from './SignOutConfirmModal';
 
 type AdminView =
     | 'dashboard'
@@ -170,7 +171,13 @@ export default function AdminDashboardScreen() {
         notify('Raahi Admin', msg);
     };
 
-    const handleLogout = () => { logout(); };
+    const {
+        visible: signOutModalVisible,
+        isSigningOut,
+        openConfirm: handleLogoutPress,
+        cancelSignOut,
+        confirmSignOut,
+    } = useSignOutConfirmation(logout);
 
     const navigate = (view: AdminView) => {
         if (view !== activeView) {
@@ -334,7 +341,16 @@ export default function AdminDashboardScreen() {
                                     <Text style={[styles.navLabel, { color: T.sidebarText }]}>{isDark ? 'Light Mode' : 'Dark Mode'}</Text>
                                 </View>
                             </TouchableOpacity>
-                            <TouchableOpacity style={styles.navItem} onPress={handleLogout}>
+                            <TouchableOpacity
+                                testID="admin-sidebar-signout-btn"
+                                style={[
+                                    styles.navItem,
+                                    Platform.OS === 'web' ? ({ cursor: 'pointer' } as any) : undefined,
+                                ]}
+                                onPress={handleLogoutPress}
+                                accessibilityRole="button"
+                                accessibilityLabel="Sign Out"
+                            >
                                 <View style={styles.navIconRow}>
                                     <Text style={[styles.navIcon, { color: T.sidebarText }]}>🚪</Text>
                                     <Text style={[styles.navLabel, { color: T.sidebarText }]}>Sign Out</Text>
@@ -402,6 +418,14 @@ export default function AdminDashboardScreen() {
                     {renderContent()}
                 </View>
             </View>
+
+            <SignOutConfirmModal
+                visible={signOutModalVisible}
+                isDark={isDark}
+                isSigningOut={isSigningOut}
+                onCancel={cancelSignOut}
+                onConfirm={confirmSignOut}
+            />
         </View>
     );
 }
