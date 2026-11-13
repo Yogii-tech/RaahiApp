@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View,
     Text,
@@ -10,19 +10,17 @@ import {
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { API_BASE } from '../apiConfig';
 import { useLanguage } from '../context/LanguageContext';
+import { apiRequest } from '../utils/api';
 import { notify } from '../utils/notify';
 
 interface Contact {
     phone: string;
 }
 
-
-
 const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const { colors, isDark } = useTheme();
-    const { token } = useAuth();
+    const { logout } = useAuth();
     const { t } = useLanguage();
     const [contacts, setContacts] = useState<Contact[]>([
         { phone: '' },
@@ -31,34 +29,48 @@ const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
 
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [loadError, setLoadError] = useState<string | null>(null);
+    const isMountedRef = useRef(true);
 
     useEffect(() => {
         fetchContacts();
+        return () => {
+            isMountedRef.current = false;
+        };
     }, []);
 
     const fetchContacts = async () => {
+        if (!isMountedRef.current) return;
+        setLoading(true);
+        setLoadError(null);
         try {
-            const response = await fetch(`${API_BASE}/api/user/trusted-contacts`, {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
-            });
+            const response = await apiRequest('/api/user/trusted-contacts', {}, logout);
+            if (!isMountedRef.current) return;
             if (response.ok) {
                 const data = await response.json();
+                if (!isMountedRef.current) return;
                 if (data && data.length > 0) {
                     setContacts(data);
                 } else {
                     setContacts([{ phone: '' }]);
                 }
+            } else {
+                setLoadError('Failed to load trusted contacts. Please try again.');
             }
         } catch (err) {
             console.error('Failed to fetch contacts:', err);
+            if (isMountedRef.current) {
+                setLoadError(t('book.errorConnect') || 'Connection error. Please try again.');
+            }
         } finally {
-            setLoading(false);
+            if (isMountedRef.current) {
+                setLoading(false);
+            }
         }
     };
 
     const handleSave = async () => {
+        if (saving) return;
         const toSave = contacts.filter(c => c.phone.trim().length > 0);
 
         if (toSave.length === 0) {
@@ -74,14 +86,12 @@ const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
 
         setSaving(true);
         try {
-            const response = await fetch(`${API_BASE}/api/user/trusted-contacts`, {
+            const response = await apiRequest('/api/user/trusted-contacts', {
                 method: 'PUT',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
                 body: JSON.stringify(toSave),
-            });
+            }, logout);
+
+            if (!isMountedRef.current) return;
 
             if (response.ok) {
                 notify(t('requests.success'), t('trusted.successUpdate'));
@@ -90,9 +100,13 @@ const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
                 notify(t('common.error'), t('trusted.failUpdate'));
             }
         } catch (err) {
-            notify(t('common.error'), t('book.errorConnect'));
+            if (isMountedRef.current) {
+                notify(t('common.error'), t('book.errorConnect'));
+            }
         } finally {
-            setSaving(false);
+            if (isMountedRef.current) {
+                setSaving(false);
+            }
         }
     };
 
@@ -120,6 +134,28 @@ const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
         return (
             <View style={[styles.container, { backgroundColor: colors.background, justifyContent: 'center' }]}>
                 <ActivityIndicator size="large" color={colors.primary} />
+            </View>
+        );
+    }
+
+    if (loadError) {
+        return (
+            <View style={[styles.container, { backgroundColor: colors.background }]}>
+                <View style={styles.header}>
+                    <TouchableOpacity onPress={onBack} style={styles.backButton}>
+                        <Text style={[styles.backText, { color: colors.primary }]}>{t('common.back')}</Text>
+                    </TouchableOpacity>
+                    <Text style={[styles.title, { color: colors.textColor }]}>{t('trusted.title')}</Text>
+                </View>
+                <View style={styles.errorContainer}>
+                    <Text style={[styles.errorText, { color: colors.textColor }]}>{loadError}</Text>
+                    <TouchableOpacity
+                        style={[styles.saveButton, { backgroundColor: colors.primary, paddingHorizontal: 28, marginTop: 16 }]}
+                        onPress={fetchContacts}
+                    >
+                        <Text style={styles.saveButtonText}>Retry</Text>
+                    </TouchableOpacity>
+                </View>
             </View>
         );
     }
@@ -213,6 +249,17 @@ const styles = StyleSheet.create({
     description: {
         fontSize: 14,
         lineHeight: 20,
+    },
+    errorContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 24,
+    },
+    errorText: {
+        fontSize: 15,
+        textAlign: 'center',
+        lineHeight: 22,
     },
     contactCard: {
         borderRadius: 16,

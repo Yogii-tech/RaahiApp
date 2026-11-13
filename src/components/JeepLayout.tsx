@@ -7,6 +7,7 @@ import Icon from 'react-native-vector-icons/Ionicons';
 interface JeepLayoutProps {
     selectedSeats?: number[];
     takenSeats?: number[];
+    manualBlockedSeats?: number[];
     pendingSeats?: number[];
     onSeatPress?: (index: number) => void;
     onSeatDoublePress?: (index: number) => void;
@@ -25,6 +26,7 @@ interface JeepLayoutProps {
 const JeepLayout: React.FC<JeepLayoutProps> = ({
     selectedSeats = [],
     takenSeats = [],
+    manualBlockedSeats = [],
     pendingSeats = [],
     onSeatPress,
     onSeatDoublePress,
@@ -64,22 +66,44 @@ const JeepLayout: React.FC<JeepLayoutProps> = ({
     };
 
     const lastPress = React.useRef<{ [key: number]: number }>({});
+    const singleTapTimers = React.useRef<{ [key: number]: ReturnType<typeof setTimeout> }>({});
+
+    React.useEffect(() => {
+        return () => {
+            Object.values(singleTapTimers.current).forEach(clearTimeout);
+            singleTapTimers.current = {};
+        };
+    }, []);
 
     const handleDoublePress = (index: number) => {
-        if (!interactive) return;
+        if (!interactive || (takenSeats.includes(index) && !manualBlockedSeats.includes(index))) return;
         if (onSeatDoublePress) onSeatDoublePress(index);
     };
 
     const renderSeat = (index: number) => {
         const onPress = () => {
+            if (!onSeatDoublePress) {
+                handlePress(index);
+                return;
+            }
             const now = Date.now();
             if (lastPress.current[index] && (now - lastPress.current[index] < 400)) {
-                // Double tap detected
+                // Double tap detected — cancel pending single-tap callback if any
+                if (singleTapTimers.current[index]) {
+                    clearTimeout(singleTapTimers.current[index]);
+                    delete singleTapTimers.current[index];
+                }
                 delete lastPress.current[index];
                 handleDoublePress(index);
             } else {
                 lastPress.current[index] = now;
-                handlePress(index);
+                if (onSeatPress) {
+                    if (singleTapTimers.current[index]) clearTimeout(singleTapTimers.current[index]);
+                    singleTapTimers.current[index] = setTimeout(() => {
+                        delete singleTapTimers.current[index];
+                        handlePress(index);
+                    }, 280);
+                }
             }
         };
 

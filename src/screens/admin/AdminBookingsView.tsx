@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
     View, Text, StyleSheet, FlatList, ActivityIndicator,
     TouchableOpacity, ScrollView, TextInput, Modal, Image, useWindowDimensions
@@ -20,66 +20,127 @@ interface Booking {
     createdAt?: string;
 }
 
+type BookingStatusFilter = 'all' | 'pending' | 'accepted' | 'completed' | 'cancelled' | 'rejected';
+
 const STATUS_COLORS: Record<string, string> = {
-    CONFIRMED: '#1FAF63',
     ACCEPTED: '#1FAF63',
-    ASSIGNED: '#3B82F6',
     PENDING: '#F59E0B',
     COMPLETED: '#8B5CF6',
     CANCELLED: '#EF4444',
     REJECTED: '#EF4444',
-    'ON TRIP': '#3B82F6',
 };
+
+const BOOKING_FILTER_TABS: { id: BookingStatusFilter; label: string }[] = [
+    { id: 'all', label: 'All' },
+    { id: 'pending', label: 'Pending' },
+    { id: 'accepted', label: 'Accepted' },
+    { id: 'completed', label: 'Completed' },
+    { id: 'cancelled', label: 'Cancelled' },
+    { id: 'rejected', label: 'Rejected' },
+];
 
 export default function AdminBookingsView({ token, searchQuery = '' }: { token: string; searchQuery?: string }) {
     const [bookings, setBookings] = useState<Booking[]>([]);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [statusFilter, setStatusFilter] = useState<BookingStatusFilter>('all');
     const [bidSearchInput, setBidSearchInput] = useState('');
     const [selectedBookingDetails, setSelectedBookingDetails] = useState<any | null>(null);
     const [detailModalVisible, setDetailModalVisible] = useState(false);
     const [fetchingDetails, setFetchingDetails] = useState(false);
 
     const { fetchWithAuth } = useAuth();
+    const fetchWithAuthRef = useRef(fetchWithAuth);
+    fetchWithAuthRef.current = fetchWithAuth;
+    const listAbortRef = useRef<AbortController | null>(null);
+    const listReqIdRef = useRef(0);
+    const detailAbortRef = useRef<AbortController | null>(null);
+    const detailReqIdRef = useRef(0);
     const { width } = useWindowDimensions();
     const isMobile = width < 768;
 
-    useEffect(() => {
-        loadBookings();
+    const loadBookings = useCallback(async (background = false) => {
+        listAbortRef.current?.abort();
+        const controller = new AbortController();
+        listAbortRef.current = controller;
+        const reqId = ++listReqIdRef.current;
+
+        if (background) {
+            setRefreshing(true);
+        } else {
+            setLoading(true);
+        }
+        setError(null);
+        try {
+            const res = await fetchWithAuthRef.current(`${API_BASE}/api/admin/bookings`, { signal: controller.signal });
+            if (!res.ok) throw new Error(`Server error: ${res.status}`);
+            const d = await res.json();
+            if (reqId !== listReqIdRef.current) return;
+            setBookings(Array.isArray(d) ? d : []);
+        } catch (err: any) {
+            if (err?.name === 'AbortError' || reqId !== listReqIdRef.current) return;
+            setError(err?.message || 'Failed to load bookings');
+            if (!background) setBookings([]);
+        } finally {
+            if (reqId === listReqIdRef.current) {
+                setLoading(false);
+                setRefreshing(false);
+            }
+        }
     }, []);
 
-    const loadBookings = async () => {
-        setLoading(true);
-        try {
-            const res = await fetchWithAuth(`${API_BASE}/api/admin/bookings`);
-            const d = await res.json();
-            setBookings(Array.isArray(d) ? d : []);
-        } catch {
-            setBookings([]);
-        } finally {
-            setLoading(false);
-        }
+    useEffect(() => {
+        loadBookings(false);
+        return () => {
+            listReqIdRef.current += 1;
+            detailReqIdRef.current += 1;
+            listAbortRef.current?.abort();
+            detailAbortRef.current?.abort();
+        };
+    }, [loadBookings]);
+
+    const closeDetailModal = () => {
+        detailReqIdRef.current += 1;
+        detailAbortRef.current?.abort();
+        setDetailModalVisible(false);
+        setSelectedBookingDetails(null);
     };
 
     const fetchBookingDetails = async (queryVal: string) => {
-        if (!queryVal.trim()) return;
+        const trimmed = queryVal.trim();
+        if (!trimmed || fetchingDetails) return;
+
+        detailAbortRef.current?.abort();
+        const controller = new AbortController();
+        detailAbortRef.current = controller;
+        const reqId = ++detailReqIdRef.current;
+
         setFetchingDetails(true);
         try {
-            const res = await fetchWithAuth(`${API_BASE}/api/admin/bookings/detail?bid=${encodeURIComponent(queryVal.trim())}`);
+            const res = await fetchWithAuthRef.current(`${API_BASE}/api/admin/bookings/detail?bid=${encodeURIComponent(trimmed)}`, {
+                signal: controller.signal,
+            });
             const data = await res.json();
+            if (reqId !== detailReqIdRef.current) return;
             if (res.ok) {
                 setSelectedBookingDetails(data);
                 setDetailModalVisible(true);
             } else {
                 notify('Not Found', data.error || 'Booking not found with specified BID');
             }
-        } catch {
+        } catch (err: any) {
+            if (err?.name === 'AbortError' || reqId !== detailReqIdRef.current) return;
             notify('Error', 'Failed to fetch booking details');
         } finally {
-            setFetchingDetails(false);
+            if (reqId === detailReqIdRef.current) {
+                setFetchingDetails(false);
+            }
         }
     };
 
     const handleRowClick = (item: Booking) => {
+        if (fetchingDetails) return;
         const queryId = item.bookingId || item.id;
         fetchBookingDetails(queryId);
     };
@@ -131,27 +192,73 @@ export default function AdminBookingsView({ token, searchQuery = '' }: { token: 
 
     const filteredBookings = bookings.filter(b => {
         const search = searchQuery.toLowerCase();
-        return (
+        const matchesSearch = (
             b.passengerName?.toLowerCase().includes(search) ||
+            b.passengerPhone?.toLowerCase().includes(search) ||
+            b.driverName?.toLowerCase().includes(search) ||
             b.bookingId?.toLowerCase().includes(search) ||
             b.id?.toLowerCase().includes(search) ||
             b.ride?.toLowerCase().includes(search)
         );
+        const normalizedStatus = (b.status || 'pending').toLowerCase();
+        const matchesStatus = statusFilter === 'all' || normalizedStatus === statusFilter;
+        return matchesSearch && matchesStatus;
     });
 
-    if (loading) return <ActivityIndicator color="#1FAF63" size="large" style={{ marginTop: 60 }} />;
+    if (loading && bookings.length === 0) return <ActivityIndicator color="#1FAF63" size="large" style={{ marginTop: 60 }} />;
+
+    if (error && bookings.length === 0) {
+        return (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 }}>
+                <Text style={{ color: '#EF4444', fontSize: 16, fontWeight: 'bold', marginBottom: 12 }}>{error}</Text>
+                <TouchableOpacity style={styles.exportBtn} onPress={() => loadBookings(false)}>
+                    <Text style={styles.exportBtnText}>↻ Retry</Text>
+                </TouchableOpacity>
+            </View>
+        );
+    }
 
     return (
         <View style={[styles.container, isMobile && { padding: 16 }]}>
             {/* Header & Export Row */}
             <View style={[styles.headerRow, { flexWrap: 'wrap', gap: 10 }]}>
                 <Text style={styles.sectionLabel}>BOOKING MANAGEMENT HUB</Text>
-                <TouchableOpacity
-                    style={styles.exportBtn}
-                    onPress={() => downloadCSV(bookings, 'Bookings_Report')}
-                >
-                    <Text style={styles.exportBtnText}>Excel Export</Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
+                    <TouchableOpacity
+                        style={[styles.refreshBtn, refreshing && { opacity: 0.6 }]}
+                        onPress={() => loadBookings(true)}
+                        disabled={refreshing}
+                    >
+                        <Text style={styles.refreshBtnText}>{refreshing ? '↻ Refreshing...' : '↻ Refresh'}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={styles.exportBtn}
+                        onPress={() => downloadCSV(filteredBookings, 'Bookings_Report')}
+                    >
+                        <Text style={styles.exportBtnText}>Excel Export</Text>
+                    </TouchableOpacity>
+                </View>
+            </View>
+
+            {/* Status Filter Chips */}
+            <View style={styles.filterChipsRow}>
+                {BOOKING_FILTER_TABS.map(tab => {
+                    const count = tab.id === 'all'
+                        ? bookings.length
+                        : bookings.filter(b => (b.status || 'pending').toLowerCase() === tab.id).length;
+                    const active = statusFilter === tab.id;
+                    return (
+                        <TouchableOpacity
+                            key={tab.id}
+                            style={[styles.filterChip, active && styles.filterChipActive]}
+                            onPress={() => setStatusFilter(tab.id)}
+                        >
+                            <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
+                                {tab.label} ({count})
+                            </Text>
+                        </TouchableOpacity>
+                    );
+                })}
             </View>
 
             {/* BID Search Box Bar */}
@@ -164,7 +271,10 @@ export default function AdminBookingsView({ token, searchQuery = '' }: { token: 
                         placeholderTextColor="#6B7280"
                         value={bidSearchInput}
                         onChangeText={setBidSearchInput}
-                        onSubmitEditing={() => fetchBookingDetails(bidSearchInput)}
+                        editable={!fetchingDetails}
+                        onSubmitEditing={() => {
+                            if (!fetchingDetails) fetchBookingDetails(bidSearchInput);
+                        }}
                     />
                     <TouchableOpacity
                         style={[styles.searchBtn, isMobile && { paddingVertical: 12, alignItems: 'center' }]}
@@ -247,7 +357,7 @@ export default function AdminBookingsView({ token, searchQuery = '' }: { token: 
                     visible={detailModalVisible}
                     transparent={true}
                     animationType="fade"
-                    onRequestClose={() => setDetailModalVisible(false)}
+                    onRequestClose={closeDetailModal}
                 >
                     <View style={[styles.modalBackdrop, isMobile && { padding: 12 }]}>
                         <View style={styles.detailCard}>
@@ -261,7 +371,7 @@ export default function AdminBookingsView({ token, searchQuery = '' }: { token: 
                                         Type: {selectedBookingDetails.type === 'parcel' ? '📦 Parcel Delivery' : '🚗 Passenger Seat'} | Created: {new Date(selectedBookingDetails.createdAt).toLocaleString()}
                                     </Text>
                                 </View>
-                                <TouchableOpacity onPress={() => setDetailModalVisible(false)} style={styles.closeBtn}>
+                                <TouchableOpacity onPress={closeDetailModal} style={styles.closeBtn}>
                                     <Text style={{ color: '#9CA3AF', fontSize: 20, fontWeight: 'bold' }}>✕</Text>
                                 </TouchableOpacity>
                             </View>
@@ -360,7 +470,7 @@ export default function AdminBookingsView({ token, searchQuery = '' }: { token: 
 
                             {/* Footer */}
                             <View style={styles.modalFooter}>
-                                <TouchableOpacity onPress={() => setDetailModalVisible(false)} style={styles.closeFooterBtn}>
+                                <TouchableOpacity onPress={closeDetailModal} style={styles.closeFooterBtn}>
                                     <Text style={styles.closeFooterBtnText}>Close Window</Text>
                                 </TouchableOpacity>
                             </View>
@@ -376,8 +486,15 @@ const styles = StyleSheet.create({
     container: { flex: 1, padding: 24 },
     sectionLabel: { color: '#6B7280', fontSize: 12, letterSpacing: 2, fontWeight: 'bold' },
     headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+    refreshBtn: { backgroundColor: '#1F2937', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 6, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
+    refreshBtnText: { color: '#E5E7EB', fontWeight: '600', fontSize: 12 },
     exportBtn: { backgroundColor: '#3B82F6', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 6 },
     exportBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 12 },
+    filterChipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
+    filterChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: '#1F2937', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
+    filterChipActive: { backgroundColor: '#3B82F6', borderColor: '#3B82F6' },
+    filterChipText: { color: '#9CA3AF', fontSize: 12, fontWeight: '600' },
+    filterChipTextActive: { color: '#FFFFFF' },
 
     searchBarCard: {
         backgroundColor: '#1F2937', borderRadius: 12, padding: 16,

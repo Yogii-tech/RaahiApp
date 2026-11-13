@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View,
     Text,
@@ -18,6 +18,7 @@ import Icon from 'react-native-vector-icons/Ionicons';
 
 import { API_BASE } from '../apiConfig';
 import { apiRequest } from '../utils/api';
+import { notify } from '../utils/notify';
 import TrustedContactsScreen from './TrustedContactsScreen';
 import VehicleDetailsScreen from './VehicleDetailsScreen';
 import LegalScreen from './LegalScreen';
@@ -41,6 +42,8 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
     const supportNumber = '9275243642';
     const ratingColor = isDark ? '#FFC107' : '#FFB300';
     const [driverRating, setDriverRating] = useState<{ avg: number; total: number } | null>(null);
+    const userRef = useRef(user);
+    userRef.current = user;
 
     const navigateToSubView = (v: 'main' | 'trusted' | 'vehicle' | 'legal') => {
         if (v !== 'main') {
@@ -55,37 +58,46 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
 
     // Sync verification status from server whenever Account tab is focused
     useEffect(() => {
-        if (isFocused && user?.role === 'driver') {
+        let cancelled = false;
+        const currentUser = userRef.current;
+        if (isFocused && currentUser?.role === 'driver') {
             apiRequest('/api/user/profile', {}, logout)
                 .then(async res => {
-                    if (res.ok) {
-                        const fresh = await res.json();
-                        if (fresh.verification_status !== user?.verification_status ||
-                            fresh.rejection_reason !== user?.rejection_reason) {
-                            const latestToken = (await AsyncStorage.getItem('auth_token').catch(() => null)) || token;
-                            const latestRefresh = (await AsyncStorage.getItem('auth_refresh_token').catch(() => null)) || refreshToken;
-                            await setAuth(latestToken, latestRefresh, {
-                                ...user,
-                                verification_status: fresh.verification_status,
-                                rejection_reason: fresh.rejection_reason,
-                            } as any);
-                        }
+                    if (cancelled || !res.ok) return;
+                    const fresh = await res.json();
+                    if (cancelled) return;
+                    const latestUser = userRef.current;
+                    if (!latestUser) return;
+                    if (fresh.verification_status !== latestUser.verification_status ||
+                        fresh.rejection_reason !== latestUser.rejection_reason) {
+                        const latestToken = (await AsyncStorage.getItem('auth_token').catch(() => null)) || token;
+                        const latestRefresh = (await AsyncStorage.getItem('auth_refresh_token').catch(() => null)) || refreshToken;
+                        if (cancelled) return;
+                        await setAuth(latestToken, latestRefresh, {
+                            ...latestUser,
+                            verification_status: fresh.verification_status,
+                            rejection_reason: fresh.rejection_reason,
+                        } as any);
                     }
                 })
                 .catch(() => { /* silent */ });
 
             // Fetch real driver rating
-            if (user?.id) {
-                apiRequest(`/api/reviews/driver/${user.id}`, {}, logout)
+            if (currentUser?.id) {
+                apiRequest(`/api/reviews/driver/${currentUser.id}`, {}, logout)
                     .then(async res => {
-                        if (res.ok) {
-                            const d = await res.json();
+                        if (cancelled || !res.ok) return;
+                        const d = await res.json();
+                        if (!cancelled) {
                             setDriverRating({ avg: d.averageRating ?? 0, total: d.totalReviews ?? 0 });
                         }
                     })
                     .catch(() => {});
             }
         }
+        return () => {
+            cancelled = true;
+        };
     }, [isFocused]);
 
     // New functions for logout modal
@@ -99,29 +111,37 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
     const handleLanguagePress = () => setLanguageVisible(true);
 
     const handleSelectLanguage = async (lang: LanguageType) => {
-        setLanguage(lang);
+        const previousLanguage = language;
+        await setLanguage(lang);
         setLanguageVisible(false);
 
+        const activeUser = userRef.current;
         // Sync with backend if logged in
-        if (token && user) {
+        if (token && activeUser) {
             try {
                 const response = await apiRequest('/api/user/profile', {
                     method: 'PUT',
                     body: JSON.stringify({
-                        name: user.name,
-                        role: user.role,
+                        name: activeUser.name,
+                        role: activeUser.role,
                         language: lang
                     }),
                 }, logout);
 
                 if (response.ok) {
-                    // Update local user state to keep in sync while preserving active tokens
+                    // Update local user state using latest userRef to avoid clobbering concurrent profile updates
                     const latestToken = (await AsyncStorage.getItem('auth_token').catch(() => null)) || token;
                     const latestRefresh = (await AsyncStorage.getItem('auth_refresh_token').catch(() => null)) || refreshToken;
-                    await setAuth(latestToken, latestRefresh, { ...user, language: lang });
+                    const latestUser = userRef.current || activeUser;
+                    await setAuth(latestToken, latestRefresh, { ...latestUser, language: lang });
+                } else {
+                    await setLanguage(previousLanguage);
+                    notify(t('common.error'), 'Failed to update language preference.');
                 }
             } catch (err) {
                 console.error('Failed to sync language to backend:', err);
+                await setLanguage(previousLanguage);
+                notify(t('common.error'), 'Failed to update language preference.');
             }
         }
     };

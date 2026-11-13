@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
     View,
     Text,
@@ -13,6 +13,7 @@ import {
     Modal,
     useWindowDimensions,
 } from 'react-native';
+import { useIsFocused } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
@@ -26,6 +27,7 @@ import { pushSubViewHistory, popSubViewHistory, useBrowserBack } from '../utils/
 
 const { width } = Dimensions.get('window');
 
+type ParcelStep = 'search' | 'details' | 'rides' | 'calculator';
 
 interface ParcelBookingViewProps {
     onBack?: () => void;
@@ -34,14 +36,22 @@ interface ParcelBookingViewProps {
 const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
     const { colors, isDark } = useTheme();
     const { t } = useLanguage();
-    const { token } = useAuth();
+    const { token, refreshToken, setAuth, user, logout } = useAuth();
     const { width } = useWindowDimensions();
+    const isFocused = useIsFocused();
 
-    // Step state
-    const [step, setStep] = useState<'search' | 'rides' | 'details' | 'calculator'>('search');
-    const [loading, setLoading] = useState(false);
+    // Step state (explicit 4-step wizard: search -> details -> rides -> calculator)
+    const [step, setStep] = useState<ParcelStep>('search');
+    const [geocoding, setGeocoding] = useState(false);
+    const [uploadingPhoto, setUploadingPhoto] = useState(false);
+    const [fetchingRides, setFetchingRides] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
     const [availableRides, setAvailableRides] = useState<any[]>([]);
     const [selectedRide, setSelectedRide] = useState<any | null>(null);
+
+    const geocodingRef = useRef(false);
+    const fetchingRidesRef = useRef(false);
+    const submittingRef = useRef(false);
 
     // Form state - Step 1
     const [pickup, setPickup] = useState(() => loadFormDraft('parcel_pickup', ''));
@@ -90,11 +100,25 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
         clearFormDraft('parcel_notes');
     };
 
-    const navigateToStep = (newStep: 'search' | 'rides' | 'details' | 'calculator') => {
+    const navigateToStep = (newStep: ParcelStep) => {
+        if (newStep === 'calculator' && !selectedRide) return;
         if (newStep !== 'search') {
             pushSubViewHistory(`parcel_${newStep}`);
         }
         setStep(newStep);
+    };
+
+    const stepBack = () => {
+        if (step === 'calculator') {
+            setStep('rides');
+            popSubViewHistory();
+        } else if (step === 'rides') {
+            setStep('details');
+            popSubViewHistory();
+        } else if (step === 'details') {
+            setStep('search');
+            popSubViewHistory();
+        }
     };
 
     useBrowserBack(step !== 'search', () => {
@@ -105,7 +129,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
         } else if (step === 'details') {
             setStep('search');
         }
-    });
+    }, isFocused);
 
     const sizes = [
         { id: 'small', label: 'parcel.sizeSmall', desc: 'parcel.sizeSmallDesc', icon: 'mail-open-outline' }, // Mailbox-like
@@ -203,22 +227,22 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
     };
 
     const fetchAvailableRides = async () => {
+        if (fetchingRidesRef.current) return;
         if (!pickup.trim() || !dropoff.trim()) {
             notify(t('common.error'), 'Please enter pickup and dropoff locations.');
             return;
         }
 
-        setLoading(true);
+        fetchingRidesRef.current = true;
+        setFetchingRides(true);
         try {
             const dateParts = selectedDate.trim().split('/');
             const apiDate = dateParts.length === 3
                 ? `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`
                 : selectedDate.trim();
-            const url = `${API_BASE}/api/rides/available?pickup=${encodeURIComponent(pickup.trim())}&dropoff=${encodeURIComponent(dropoff.trim())}&date=${encodeURIComponent(apiDate)}`;
-            const response = await fetch(url, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            const data = await response.json();
+            const endpoint = `/api/rides/available?pickup=${encodeURIComponent(pickup.trim())}&dropoff=${encodeURIComponent(dropoff.trim())}&date=${encodeURIComponent(apiDate)}`;
+            const response = await apiRequest(endpoint, {}, logout);
+            const data = await response.json().catch(() => ({}));
             if (response.ok) {
                 setAvailableRides(Array.isArray(data) ? data : []);
                 navigateToStep('rides');
@@ -228,11 +252,13 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
         } catch (err) {
             notify(t('common.error'), 'Connection error');
         } finally {
-            setLoading(false);
+            fetchingRidesRef.current = false;
+            setFetchingRides(false);
         }
     };
 
     const handlePhotoUpload = () => {
+        if (uploadingPhoto) return;
         if (Platform.OS === 'web') {
             // @ts-ignore
             const input = document.createElement('input');
@@ -245,14 +271,19 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                         notify(t('common.error'), 'Image must be under 5MB.');
                         return;
                     }
-                    setLoading(true);
+                    setUploadingPhoto(true);
                     try {
-                        const url = await uploadDocumentFile(file, token);
+                        const url = await uploadDocumentFile(file, token, {
+                            refreshToken,
+                            onTokenRefreshed: async (newToken: string) => {
+                                await setAuth(newToken, refreshToken, user);
+                            },
+                        });
                         setParcelPhoto(url);
                     } catch (err: any) {
                         notify(t('common.error'), err?.message || 'Upload failed');
                     } finally {
-                        setLoading(false);
+                        setUploadingPhoto(false);
                     }
                 }
             };
@@ -263,6 +294,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
     };
 
     const handleConfirmDetails = async () => {
+        if (fetchingRidesRef.current || uploadingPhoto) return;
         if (!recipientName.trim() || !contactNumber.trim() || !dropLocation.trim()) {
             notify(t('common.error'), 'Please fill in all required recipient details.');
             return;
@@ -274,10 +306,12 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
 
     const handleFinalBooking = (ride: any) => {
         setSelectedRide(ride);
-        navigateToStep('calculator');
+        pushSubViewHistory('parcel_calculator');
+        setStep('calculator');
     };
 
     const confirmBooking = async () => {
+        if (submittingRef.current || submitting) return;
         if (!selectedRide) {
             console.error("No ride selected for booking");
             return;
@@ -286,20 +320,16 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
         const effectivePickup = getEffectivePickup(selectedRide);
         const effectiveDropoff = getEffectiveDropoff(selectedRide);
 
-        setLoading(true);
+        submittingRef.current = true;
+        setSubmitting(true);
         try {
             const rideId = selectedRide.id || selectedRide._id;
-            const fullUrl = `${API_BASE}/api/rides/${rideId}/book`;
             const stats = getTravelStats(effectivePickup, effectiveDropoff, selectedRide.departureTime, selectedRide);
             const distNum = parseInt(stats.distance, 10) || 0;
             const calculatedPrice = calculateParcelPrice(distNum, selectedSize);
 
-            const response = await fetch(fullUrl, {
+            const response = await apiRequest(`/api/rides/${rideId}/book`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
                 body: JSON.stringify({
                     type: 'parcel',
                     pickup: effectivePickup,
@@ -313,11 +343,12 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                     photoUrl: parcelPhoto,
                     price: calculatedPrice.toString()
                 })
-            });
+            }, logout);
 
             if (response.ok) {
-                const data = await response.json();
-                const displayId = data.bookingId ? `RA-P-${data.bookingId.slice(-4).toUpperCase()}` : 'Booked';
+                const data = await response.json().catch(() => ({}));
+                const rawId = data.bookingId || data.id || data._id;
+                const displayId = rawId ? `RA-P-${String(rawId).slice(-4).toUpperCase()}` : 'Booked';
 
                 clearParcelDrafts();
                 notify(
@@ -334,12 +365,13 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
             console.error("Booking catch error:", err);
             notify(t('common.error'), t('login.connectionError'));
         } finally {
-            setLoading(false);
+            submittingRef.current = false;
+            setSubmitting(false);
         }
     };
 
     const renderPriceCalculator = () => {
-        if (!selectedRide) return null;
+        if (!selectedRide) return renderRideSelection();
         const effectivePickup = getEffectivePickup(selectedRide);
         const effectiveDropoff = getEffectiveDropoff(selectedRide);
         const stats = getTravelStats(effectivePickup, effectiveDropoff, selectedRide.departureTime, selectedRide);
@@ -349,7 +381,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
 
         return (
             <View style={styles.content}>
-                <TouchableOpacity onPress={() => { setStep('rides'); popSubViewHistory(); }} style={styles.backButton}>
+                <TouchableOpacity onPress={stepBack} style={styles.backButton}>
                     <Text style={[styles.backText, { color: colors.primary }]}>← {t('common.back')}</Text>
                 </TouchableOpacity>
 
@@ -417,12 +449,12 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                 <View style={styles.spacer40} />
 
                 <TouchableOpacity
-                    style={[styles.scheduleButton, { backgroundColor: colors.primary, zIndex: 9999 }, loading && { opacity: 0.7 }]}
+                    style={[styles.scheduleButton, { backgroundColor: colors.primary, zIndex: 9999 }, submitting && { opacity: 0.7 }]}
                     onPress={() => {
                         confirmBooking();
                     }}
-                    disabled={loading}>
-                    {loading ? (
+                    disabled={submitting}>
+                    {submitting ? (
                         <ActivityIndicator color="#FFF" />
                     ) : (
                         <Text style={styles.scheduleButtonText}>
@@ -443,7 +475,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
 
     const renderRecipientDetails = () => (
         <View style={styles.content}>
-            <TouchableOpacity onPress={() => { setStep('search'); popSubViewHistory(); }} style={styles.backButton}>
+            <TouchableOpacity onPress={stepBack} style={styles.backButton}>
                 <Text style={[styles.backText, { color: colors.primary }]}>
                     ← {t('common.back')}
                 </Text>
@@ -541,8 +573,8 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
             <TouchableOpacity
                 style={[styles.photoBox, { borderColor: colors.primary, backgroundColor: colors.inputFillColor }]}
                 onPress={handlePhotoUpload}
-                disabled={loading}>
-                {loading ? (
+                disabled={uploadingPhoto}>
+                {uploadingPhoto ? (
                     <ActivityIndicator color={colors.primary} />
                 ) : parcelPhoto ? (
                     <Image source={{ uri: parcelPhoto.startsWith('http') ? parcelPhoto : `${API_BASE}${parcelPhoto}` }} style={styles.uploadedPhoto} />
@@ -558,10 +590,10 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
             <View style={styles.spacer40} />
 
             <TouchableOpacity
-                style={[styles.scheduleButton, { backgroundColor: colors.primary }, loading && { opacity: 0.7 }]}
+                style={[styles.scheduleButton, { backgroundColor: colors.primary }, (fetchingRides || uploadingPhoto) && { opacity: 0.7 }]}
                 onPress={handleConfirmDetails}
-                disabled={loading}>
-                {loading ? (
+                disabled={fetchingRides || uploadingPhoto}>
+                {fetchingRides ? (
                     <ActivityIndicator color="#FFF" />
                 ) : (
                     <Text style={styles.scheduleButtonText}>
@@ -586,7 +618,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
 
         return (
             <View style={styles.content}>
-                <TouchableOpacity onPress={() => { setStep('search'); popSubViewHistory(); }} style={styles.backButton}>
+                <TouchableOpacity onPress={stepBack} style={styles.backButton}>
                     <Text style={[styles.backText, { color: colors.primary }]}>
                         ← {t('common.back')}
                     </Text>
@@ -600,7 +632,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
 
                 <View style={styles.spacer24} />
 
-                {loading ? (
+                {fetchingRides ? (
                     <ActivityIndicator color={colors.primary} size="large" style={{ marginTop: 40 }} />
                 ) : orderedRides.length === 0 ? (
                     <View style={{ alignItems: 'center', marginTop: 40 }}>
@@ -608,7 +640,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                         <Text style={{ color: colors.subtextColor, marginTop: 16, fontSize: 16 }}>No vehicles available for this route.</Text>
                         <TouchableOpacity
                             style={{ marginTop: 24, padding: 12 }}
-                            onPress={() => setStep('search')}>
+                            onPress={stepBack}>
                             <Text style={{ color: colors.primary, fontWeight: 'bold' }}>GO BACK & CHANGE DETAILS</Text>
                         </TouchableOpacity>
                     </View>
@@ -769,7 +801,12 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                         <LocationInput
                             label={t('parcel.pickupLabel')}
                             value={pickup}
-                            onChangeText={setPickup}
+                            onChangeText={(text) => {
+                                setPickup(text);
+                                setPickupCoords(null);
+                                setRoadDistance(null);
+                                setRoadDuration(null);
+                            }}
                             onSelect={(res) => {
                                 setPickup(res.display_name);
                                 setPickupCoords([parseFloat(res.lat), parseFloat(res.lon)]);
@@ -783,7 +820,12 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                         <LocationInput
                             label={t('parcel.dropoffLabel')}
                             value={dropoff}
-                            onChangeText={setDropoff}
+                            onChangeText={(text) => {
+                                setDropoff(text);
+                                setDropoffCoords(null);
+                                setRoadDistance(null);
+                                setRoadDuration(null);
+                            }}
                             onSelect={(res) => {
                                 setDropoff(res.display_name);
                                 setDropoffCoords([parseFloat(res.lat), parseFloat(res.lon)]);
@@ -808,7 +850,18 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                                     justifyContent: 'space-between',
                                 },
                             ]}
-                            onPress={() => setShowCalendar(true)}>
+                            onPress={() => {
+                                const parts = selectedDate.trim().split('/');
+                                if (parts.length === 3) {
+                                    const m = parseInt(parts[1], 10) - 1;
+                                    const y = parseInt(parts[2], 10);
+                                    if (!isNaN(m) && m >= 0 && m <= 11 && !isNaN(y)) {
+                                        setCalendarMonth(m);
+                                        setCalendarYear(y);
+                                    }
+                                }
+                                setShowCalendar(true);
+                            }}>
                             <Text style={{ color: colors.textColor, fontSize: 16, fontWeight: '500' }}>
                                 {selectedDate}
                             </Text>
@@ -854,29 +907,36 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                     <View style={{ height: 40 }} />
 
                     <TouchableOpacity
-                        style={[styles.scheduleButton, { backgroundColor: colors.primary }]}
+                        style={[styles.scheduleButton, { backgroundColor: colors.primary }, geocoding && { opacity: 0.7 }]}
                         activeOpacity={0.8}
+                        disabled={geocoding}
                         onPress={async () => {
-                            if (pickup && dropoff) {
-                                setLoading(true);
+                            if (geocodingRef.current) return;
+                            if (pickup.trim() && dropoff.trim()) {
+                                geocodingRef.current = true;
+                                setGeocoding(true);
                                 let pCoords = pickupCoords;
                                 let dCoords = dropoffCoords;
 
                                 try {
                                     if (!pCoords) {
-                                        const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(pickup)}&format=json&limit=1`);
-                                        const data = await res.json();
-                                        if (data && data.length > 0) {
-                                            pCoords = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
-                                            setPickupCoords(pCoords);
+                                        const res = await apiRequest(`/api/location/search?q=${encodeURIComponent(pickup.trim() + ', Uttarakhand, India')}`, {}, logout);
+                                        if (res.ok) {
+                                            const data = await res.json();
+                                            if (data && data.length > 0) {
+                                                pCoords = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+                                                setPickupCoords(pCoords);
+                                            }
                                         }
                                     }
                                     if (!dCoords) {
-                                        const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(dropoff)}&format=json&limit=1`);
-                                        const data = await res.json();
-                                        if (data && data.length > 0) {
-                                            dCoords = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
-                                            setDropoffCoords(dCoords);
+                                        const res = await apiRequest(`/api/location/search?q=${encodeURIComponent(dropoff.trim() + ', Uttarakhand, India')}`, {}, logout);
+                                        if (res.ok) {
+                                            const data = await res.json();
+                                            if (data && data.length > 0) {
+                                                dCoords = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+                                                setDropoffCoords(dCoords);
+                                            }
                                         }
                                     }
 
@@ -891,17 +951,23 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                                     }
                                 } catch (e) {
                                     console.error('Failed to geocode or fetch route:', e);
+                                } finally {
+                                    geocodingRef.current = false;
+                                    setGeocoding(false);
                                 }
 
-                                setLoading(false);
-                                setStep('details');
+                                navigateToStep('details');
                             } else {
                                 notify(t('common.error'), 'Please enter pickup and dropoff locations.');
                             }
                         }}>
-                        <Text style={styles.scheduleButtonText}>
-                            🚀 {t('parcel.schedulePickup').toUpperCase()}
-                        </Text>
+                        {geocoding ? (
+                            <ActivityIndicator color="#FFF" />
+                        ) : (
+                            <Text style={styles.scheduleButtonText}>
+                                🚀 {t('parcel.schedulePickup').toUpperCase()}
+                            </Text>
+                        )}
                     </TouchableOpacity>
                     <View style={styles.spacer40} />
                 </View>

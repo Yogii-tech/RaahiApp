@@ -17,6 +17,11 @@ import { API_BASE } from '../apiConfig';
 
 const { width, height } = Dimensions.get('window');
 
+type WsStatus = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'error';
+
+const isValidCoordinate = (val: unknown): val is number =>
+    typeof val === 'number' && Number.isFinite(val);
+
 const MapScreen: React.FC = () => {
     const { colors, isDark } = useTheme();
     const { t } = useLanguage();
@@ -30,16 +35,50 @@ const MapScreen: React.FC = () => {
     }));
 
     const [isLive, setIsLive] = React.useState(false);
+    const [wsStatus, setWsStatus] = React.useState<WsStatus>('idle');
+    const isLiveRef = React.useRef(isLive);
+    const locateTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
     React.useEffect(() => {
-        if (!isLive) return;
+        isLiveRef.current = isLive;
+        if (!isLive && locateTimerRef.current) {
+            clearTimeout(locateTimerRef.current);
+            locateTimerRef.current = null;
+        }
+    }, [isLive]);
+
+    React.useEffect(() => {
+        return () => {
+            if (locateTimerRef.current) {
+                clearTimeout(locateTimerRef.current);
+                locateTimerRef.current = null;
+            }
+        };
+    }, []);
+
+    React.useEffect(() => {
+        if (!isLive) {
+            setWsStatus('idle');
+            return;
+        }
+
+        let cancelled = false;
+        setWsStatus('connecting');
 
         const wsUrl = API_BASE.replace('http', 'ws') + '/api/tracking/ws/live_order_123';
         const ws = new WebSocket(wsUrl);
 
+        ws.onopen = () => {
+            if (!cancelled) setWsStatus('connected');
+        };
+
         ws.onmessage = (e) => {
+            if (cancelled) return;
             try {
                 const data = JSON.parse(e.data);
+                if (!isValidCoordinate(data?.latitude) || !isValidCoordinate(data?.longitude)) {
+                    return;
+                }
                 (riderLocation as any).timing({
                     latitude: data.latitude,
                     longitude: data.longitude,
@@ -51,8 +90,21 @@ const MapScreen: React.FC = () => {
             }
         };
 
-        return () => ws.close();
-    }, [isLive]);
+        ws.onerror = () => {
+            if (!cancelled) setWsStatus('error');
+        };
+
+        ws.onclose = () => {
+            if (!cancelled) {
+                setWsStatus(prev => (prev === 'error' ? 'error' : 'disconnected'));
+            }
+        };
+
+        return () => {
+            cancelled = true;
+            ws.close();
+        };
+    }, [isLive, riderLocation]);
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -125,10 +177,19 @@ const MapScreen: React.FC = () => {
 
                     <TouchableOpacity 
                         onPress={() => {
+                            if (!isLive) {
+                                Alert.alert("Live Map Inactive", "Tap OPEN LIVE MAP to start live tracking before locating.");
+                                return;
+                            }
+                            if (locateTimerRef.current) {
+                                clearTimeout(locateTimerRef.current);
+                            }
                             // In a real native app, we would use react-native-geolocation-service
                             // For this demo, we'll simulate finding the location
                             Alert.alert("Locating...", "Fetching high-accuracy GPS coordinates...");
-                            setTimeout(() => {
+                            locateTimerRef.current = setTimeout(() => {
+                                locateTimerRef.current = null;
+                                if (!isLiveRef.current) return;
                                 // Simulate moving to a precise location in Uttarakhand
                                 (riderLocation as any).timing({
                                     latitude: 30.3165,
@@ -151,8 +212,26 @@ const MapScreen: React.FC = () => {
                             <Icon name={isLive ? "pulse" : "navigate-circle-outline"} size={32} color={isLive ? "#FF4081" : colors.primary} />
                         </View>
                         <View style={styles.infoContent}>
-                            <Text style={[styles.infoTitle, { color: colors.textColor }]}>{isLive ? "Tracking Delivery..." : "Explore Uttarakhand"}</Text>
-                            <Text style={[styles.infoSubtitle, { color: colors.subtextColor }]}>{isLive ? "Interpolated 60fps movement (5s polling)" : "Live traffic & hill routes monitoring"}</Text>
+                            <Text style={[styles.infoTitle, { color: colors.textColor }]}>
+                                {isLive
+                                    ? wsStatus === 'error'
+                                        ? "Tracking Connection Error"
+                                        : wsStatus === 'disconnected'
+                                            ? "Tracking Disconnected"
+                                            : "Tracking Delivery..."
+                                    : "Explore Uttarakhand"}
+                            </Text>
+                            <Text style={[styles.infoSubtitle, { color: colors.subtextColor }]}>
+                                {!isLive
+                                    ? "Live traffic & hill routes monitoring"
+                                    : wsStatus === 'connecting'
+                                        ? "Connecting to live tracking stream..."
+                                        : wsStatus === 'connected'
+                                            ? "Interpolated 60fps movement (5s polling)"
+                                            : wsStatus === 'error'
+                                                ? "Unable to reach tracking server"
+                                                : "Live stream closed — toggle to reconnect"}
+                            </Text>
                         </View>
                     </View>
                     <TouchableOpacity 

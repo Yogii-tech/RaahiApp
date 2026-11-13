@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { downloadCSV } from '../../utils/exportUtils';
 import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
-import { notify } from '../../utils/notify';
+import { confirmAction, notify } from '../../utils/notify';
 
 interface UserStats {
      total: number;
@@ -30,7 +30,14 @@ export default function AdminVisitorsDetailView({ isDark, searchQuery = '' }: { 
      const [userStats, setUserStats] = useState<UserStats | null>(null);
      const [users, setUsers] = useState<UserRow[]>([]);
      const [loading, setLoading] = useState(true);
+     const [refreshing, setRefreshing] = useState(false);
+     const [cleaningUp, setCleaningUp] = useState(false);
+     const [error, setError] = useState<string | null>(null);
      const { fetchWithAuth } = useAuth();
+     const fetchWithAuthRef = useRef(fetchWithAuth);
+     fetchWithAuthRef.current = fetchWithAuth;
+     const abortRef = useRef<AbortController | null>(null);
+     const reqIdRef = useRef(0);
      const { width } = useWindowDimensions();
      const isMobile = width < 768;
 
@@ -43,23 +50,65 @@ export default function AdminVisitorsDetailView({ isDark, searchQuery = '' }: { 
           accent: '#3B7DDD',
      };
 
-     const fetchData = () => {
-          setLoading(true);
-          Promise.all([
-               fetchWithAuth(`${API_BASE}/api/admin/stats`).then(r => r.json()),
-               fetchWithAuth(`${API_BASE}/api/admin/users`).then(r => r.json()),
-          ])
-               .then(([stats, usersData]) => {
-                    setUserStats(stats?.users ?? null);
-                    setUsers(Array.isArray(usersData) ? usersData : []);
-               })
-               .catch(() => { setUserStats(null); setUsers([]); })
-               .finally(() => setLoading(false));
-     };
+     const fetchData = useCallback(async (background = false) => {
+          abortRef.current?.abort();
+          const controller = new AbortController();
+          abortRef.current = controller;
+          const reqId = ++reqIdRef.current;
 
-     useEffect(() => { fetchData(); }, []);
+          if (background) {
+               setRefreshing(true);
+          } else {
+               setLoading(true);
+          }
+          setError(null);
 
-     if (loading) return <ActivityIndicator color="#3B7DDD" size="large" style={{ marginTop: 60 }} />;
+          try {
+               const [statsRes, usersRes] = await Promise.all([
+                    fetchWithAuthRef.current(`${API_BASE}/api/admin/stats`, { signal: controller.signal }),
+                    fetchWithAuthRef.current(`${API_BASE}/api/admin/users`, { signal: controller.signal }),
+               ]);
+               if (!statsRes.ok) throw new Error(`Stats error: ${statsRes.status}`);
+               if (!usersRes.ok) throw new Error(`Users error: ${usersRes.status}`);
+               const [stats, usersData] = await Promise.all([statsRes.json(), usersRes.json()]);
+               if (reqId !== reqIdRef.current) return;
+               setUserStats(stats?.users ?? null);
+               setUsers(Array.isArray(usersData) ? usersData : []);
+          } catch (err: any) {
+               if (err?.name === 'AbortError' || reqId !== reqIdRef.current) return;
+               setError(err?.message || 'Could not load users');
+               if (!background) {
+                    setUserStats(null);
+                    setUsers([]);
+               }
+          } finally {
+               if (reqId === reqIdRef.current) {
+                    setLoading(false);
+                    setRefreshing(false);
+               }
+          }
+     }, []);
+
+     useEffect(() => {
+          fetchData(false);
+          return () => {
+               reqIdRef.current += 1;
+               abortRef.current?.abort();
+          };
+     }, [fetchData]);
+
+     if (loading && users.length === 0) return <ActivityIndicator color="#3B7DDD" size="large" style={{ marginTop: 60 }} />;
+
+     if (error && users.length === 0) {
+          return (
+               <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 }}>
+                    <Text style={{ color: '#DC3545', fontSize: 16, fontWeight: 'bold', marginBottom: 12 }}>{error}</Text>
+                    <TouchableOpacity onPress={() => fetchData(false)} style={styles.primaryBtn}>
+                         <Text style={styles.primaryBtnText}>↻ Retry</Text>
+                    </TouchableOpacity>
+               </View>
+          );
+     }
 
      const filteredUsers = users.filter(u =>
           u.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -67,24 +116,36 @@ export default function AdminVisitorsDetailView({ isDark, searchQuery = '' }: { 
           u.id?.toLowerCase().includes(searchQuery.toLowerCase())
      );
 
-     const handleCleanupIncomplete = async () => {
+     const executeCleanupIncomplete = async () => {
+          if (cleaningUp) return;
+          setCleaningUp(true);
           try {
-               setLoading(true);
-               const res = await fetchWithAuth(`${API_BASE}/api/admin/users/incomplete`, {
+               const res = await fetchWithAuthRef.current(`${API_BASE}/api/admin/users/incomplete`, {
                     method: 'DELETE',
                });
                const data = await res.json();
                if (res.ok) {
                     notify('Cleanup Complete', `Cleaned up ${data.deletedCount ?? 0} abandoned incomplete user registrations (older than 24h).`);
-                    fetchData();
+                    await fetchData(true);
                } else {
                     notify('Error', data.error || 'Failed to cleanup incomplete users.');
                }
           } catch {
                notify('Error', 'Network error while cleaning up incomplete users.');
           } finally {
-               setLoading(false);
+               setCleaningUp(false);
           }
+     };
+
+     const handleCleanupIncomplete = () => {
+          if (cleaningUp) return;
+          confirmAction(
+               'Clean Incomplete Registrations',
+               'Permanently delete abandoned incomplete user registrations older than 24 hours? This cannot be undone.',
+               () => { executeCleanupIncomplete(); },
+               'Delete Incomplete',
+               'Cancel',
+          );
      };
 
      return (
@@ -92,17 +153,28 @@ export default function AdminVisitorsDetailView({ isDark, searchQuery = '' }: { 
                <View style={[styles.header, isMobile && { flexDirection: 'column', alignItems: 'flex-start', gap: 12 }]}>
                     <Text style={[styles.headerTitle, { color: T.text }]}>Visitors / Users Overview</Text>
                     <View style={[styles.headerButtons, { flexWrap: 'wrap', gap: 8 }]}>
-                         <TouchableOpacity onPress={fetchData} style={[styles.ghostBtn, { borderColor: T.border }]}>
-                              <Text style={[styles.ghostBtnText, { color: T.text }]}>↻ Refresh</Text>
+                         <TouchableOpacity
+                              onPress={() => fetchData(true)}
+                              disabled={refreshing || cleaningUp}
+                              style={[styles.ghostBtn, { borderColor: T.border }, (refreshing || cleaningUp) && { opacity: 0.6 }]}
+                         >
+                              <Text style={[styles.ghostBtnText, { color: T.text }]}>{refreshing ? '↻ Refreshing...' : '↻ Refresh'}</Text>
                          </TouchableOpacity>
-                         <TouchableOpacity onPress={handleCleanupIncomplete} style={[styles.ghostBtn, { borderColor: '#E53E3E', backgroundColor: 'rgba(229, 62, 62, 0.08)' }]}>
-                              <Text style={[styles.ghostBtnText, { color: '#E53E3E' }]}>🧹 Clean Incomplete</Text>
+                         <TouchableOpacity
+                              onPress={handleCleanupIncomplete}
+                              disabled={cleaningUp || refreshing}
+                              style={[styles.ghostBtn, { borderColor: '#E53E3E', backgroundColor: 'rgba(229, 62, 62, 0.08)' }, (cleaningUp || refreshing) && { opacity: 0.6 }]}
+                         >
+                              <Text style={[styles.ghostBtnText, { color: '#E53E3E' }]}>{cleaningUp ? '🧹 Cleaning...' : '🧹 Clean Incomplete'}</Text>
                          </TouchableOpacity>
-                         <TouchableOpacity onPress={() => downloadCSV(users, 'Users_Report')} style={styles.primaryBtn}>
+                         <TouchableOpacity onPress={() => downloadCSV(filteredUsers, 'Users_Report')} style={styles.primaryBtn}>
                               <Text style={styles.primaryBtnText}>Export CSV</Text>
                          </TouchableOpacity>
                     </View>
                </View>
+               {error && (
+                    <Text style={{ color: '#DC3545', fontSize: 12, marginBottom: 12 }}>Refresh failed: {error}</Text>
+               )}
 
                {/* KPI cards */}
                <View style={[styles.cardsRow, isMobile && { gap: 12 }]}>

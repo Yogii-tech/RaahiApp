@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useReducer, useCallback } from 'react';
 import {
     View,
     Text,
@@ -15,9 +15,70 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
 import { API_BASE } from '../apiConfig';
+import { refreshAuthToken } from '../utils/api';
 import { pickAndUploadDocument } from '../utils/documentUpload';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { pushSubViewHistory, popSubViewHistory, useBrowserBack } from '../utils/browserHistory';
+
+export type LoginStep =
+    | 'phone'
+    | 'otp'
+    | 'name'
+    | 'consent'
+    | 'role'
+    | 'driver_consent'
+    | 'vehicle'
+    | 'admin_phone'
+    | 'admin_otp'
+    | 'admin_secret';
+
+export const ALLOWED_LOGIN_TRANSITIONS: Record<LoginStep, readonly LoginStep[]> = {
+    phone: ['otp', 'admin_phone'],
+    otp: ['phone', 'name', 'consent'],
+    name: ['phone', 'consent'],
+    consent: ['name', 'phone', 'role'],
+    role: ['consent', 'driver_consent'],
+    driver_consent: ['role', 'vehicle'],
+    vehicle: ['driver_consent'],
+    admin_phone: ['phone', 'admin_otp'],
+    admin_otp: ['admin_phone', 'admin_secret'],
+    admin_secret: ['admin_phone'],
+};
+
+export const STEP_BACK_TARGET: Partial<Record<LoginStep, LoginStep>> = {
+    otp: 'phone',
+    name: 'phone',
+    consent: 'name',
+    role: 'consent',
+    driver_consent: 'role',
+    vehicle: 'driver_consent',
+    admin_phone: 'phone',
+    admin_otp: 'admin_phone',
+    admin_secret: 'admin_phone',
+};
+
+export type LoginStepAction =
+    | { type: 'TRANSITION'; to: LoginStep }
+    | { type: 'BACK' }
+    | { type: 'FORCE'; to: LoginStep };
+
+export function loginStepReducer(state: LoginStep, action: LoginStepAction): LoginStep {
+    if (action.type === 'FORCE') {
+        return action.to;
+    }
+    if (action.type === 'BACK') {
+        return STEP_BACK_TARGET[state] ?? state;
+    }
+    if (action.to === state) {
+        return state;
+    }
+    if (ALLOWED_LOGIN_TRANSITIONS[state].includes(action.to)) {
+        return action.to;
+    }
+    return state;
+}
+
+const EMPTY_OTP_DIGITS = ['', '', '', '', '', ''];
 
 interface LoginScreenProps {
     onAuthenticated: () => void;
@@ -25,9 +86,10 @@ interface LoginScreenProps {
 
 const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
     const [phoneNumber, setPhoneNumber] = useState('');
-    const [otp, setOtp] = useState('');
+    const [otpDigits, setOtpDigits] = useState<string[]>(EMPTY_OTP_DIGITS);
+    const otp = otpDigits.join('');
     const [name, setName] = useState('');
-    const [step, setStep] = useState<'phone' | 'otp' | 'name' | 'consent' | 'role' | 'driver_consent' | 'vehicle' | 'admin_phone' | 'admin_otp' | 'admin_secret'>('phone');
+    const [step, dispatchStep] = useReducer(loginStepReducer, 'phone');
     const [consentChecked, setConsentChecked] = useState(false);
     const [driverConsentChecked, setDriverConsentChecked] = useState(false);
     const [adminSecretKey, setAdminSecretKey] = useState('');
@@ -48,7 +110,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
     });
     const [loading, setLoading] = useState(false);
     const [showDocSubmittedModal, setShowDocSubmittedModal] = useState(false);
-    const { token, user, setAuth } = useAuth();
+    const [pendingDriverAuth, setPendingDriverAuth] = useState<{
+        token: string | null;
+        refreshToken: string | null;
+        user: any;
+    } | null>(null);
+    const { token, refreshToken, user, setAuth } = useAuth();
     const { colors, isDark } = useTheme();
     const { t } = useLanguage();
 
@@ -64,18 +131,43 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
     const [authError, setAuthError] = useState<string | null>(null);
 
     const handleOtpChange = (value: string, index: number) => {
-        const digit = value.replace(/[^0-9]/g, '').slice(-1);
-        const otpArr = otp.split('');
-        while (otpArr.length < 6) otpArr.push('');
-        otpArr[index] = digit;
-        setOtp(otpArr.join(''));
-        if (digit && index < 5) {
-            otpRefs.current[index + 1]?.focus();
+        const cleaned = value.replace(/[^0-9]/g, '');
+
+        if (cleaned.length === 0) {
+            const next = [...otpDigits];
+            next[index] = '';
+            setOtpDigits(next);
+            return;
         }
+
+        // Single digit typed into empty or existing box
+        if (cleaned.length <= 2 && !(cleaned.length === 2 && !otpDigits[index])) {
+            const digit =
+                cleaned.length === 2 && otpDigits[index]
+                    ? cleaned.replace(otpDigits[index], '') || cleaned.slice(-1)
+                    : cleaned;
+            const next = [...otpDigits];
+            next[index] = digit.slice(-1);
+            setOtpDigits(next);
+            if (index < 5) {
+                otpRefs.current[index + 1]?.focus();
+            }
+            return;
+        }
+
+        // Multi-digit paste: distribute across boxes without index collapse
+        const next = [...otpDigits];
+        const startIdx = cleaned.length >= 6 ? 0 : index;
+        for (let offset = 0; offset < cleaned.length && startIdx + offset < 6; offset += 1) {
+            next[startIdx + offset] = cleaned[offset];
+        }
+        setOtpDigits(next);
+        const focusIdx = Math.min(5, startIdx + cleaned.length - 1);
+        otpRefs.current[focusIdx]?.focus();
     };
 
     const handleOtpKeyPress = (e: any, index: number) => {
-        if (e.nativeEvent.key === 'Backspace' && !otp[index] && index > 0) {
+        if (e.nativeEvent.key === 'Backspace' && !otpDigits[index] && index > 0) {
             otpRefs.current[index - 1]?.focus();
         }
     };
@@ -134,37 +226,45 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
         }
     };
 
-    const navigateToStep = (newStep: typeof step) => {
+    const pushedHistoryDepthRef = useRef(0);
+    const hasResumedIncompleteSessionRef = useRef(false);
+
+    const navigateToStep = (newStep: LoginStep) => {
+        if (newStep === step) return;
+        if (!ALLOWED_LOGIN_TRANSITIONS[step].includes(newStep)) return;
         if (newStep !== 'phone') {
             pushSubViewHistory(`login_${newStep}`);
+            pushedHistoryDepthRef.current += 1;
         }
-        setStep(newStep);
+        dispatchStep({ type: 'TRANSITION', to: newStep });
     };
 
-    const handleBackStep = (fallbackStep: typeof step) => {
-        setStep(fallbackStep);
-        popSubViewHistory();
+    const resetOtpSessionOnBack = (targetStep: LoginStep) => {
+        if (targetStep === 'phone' || targetStep === 'admin_phone') {
+            setOtpDigits(EMPTY_OTP_DIGITS);
+            setConfirmationResult(null);
+            setAuthError(null);
+        }
     };
 
-    useBrowserBack(step !== 'phone', () => {
-        if (step === 'otp') {
-            setStep('phone');
-        } else if (step === 'name') {
-            setStep('otp');
-        } else if (step === 'consent') {
-            setStep('name');
-        } else if (step === 'role') {
-            setStep('consent');
-        } else if (step === 'driver_consent') {
-            setStep('role');
-        } else if (step === 'vehicle') {
-            setStep('driver_consent');
-        } else if (step === 'admin_phone') {
-            setStep('phone');
-        } else if (step === 'admin_otp') {
-            setStep('admin_phone');
-        } else if (step === 'admin_secret') {
-            setStep('admin_otp');
+    const handleBackStep = (fallbackStep?: LoginStep) => {
+        const target = fallbackStep ?? STEP_BACK_TARGET[step] ?? 'phone';
+        resetOtpSessionOnBack(target);
+        dispatchStep({ type: 'FORCE', to: target });
+        if (pushedHistoryDepthRef.current > 0) {
+            pushedHistoryDepthRef.current -= 1;
+            popSubViewHistory();
+        }
+    };
+
+    useBrowserBack(step !== 'phone' && !showDocSubmittedModal, () => {
+        const target = STEP_BACK_TARGET[step];
+        if (target) {
+            if (pushedHistoryDepthRef.current > 0) {
+                pushedHistoryDepthRef.current -= 1;
+            }
+            resetOtpSessionOnBack(target);
+            dispatchStep({ type: 'BACK' });
         }
     });
 
@@ -184,28 +284,32 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 const params = new URLSearchParams(w.window.location.search);
                 if (params.get('admin') === 'true') {
                     setPhoneNumber('');
-                    setOtp('');
-                    setStep('admin_phone');
+                    setOtpDigits(EMPTY_OTP_DIGITS);
+                    dispatchStep({ type: 'FORCE', to: 'admin_phone' });
                 }
             }
         }
-    }, [setStep]);
+    }, []);
 
-    // Force user into completing profile if authenticated but missing name or role
+    // Force user into completing profile once on resuming an incomplete session
     useEffect(() => {
-        if (token && user && (!user.name || !user.role)) {
-            setTempToken(token);
-            setTempUser(user);
+        if (!token || !user || (user.name && user.role)) {
+            hasResumedIncompleteSessionRef.current = false;
+            return;
+        }
+        setTempToken(token);
+        setTempRefreshToken(refreshToken);
+        setTempUser(user);
+        if (!hasResumedIncompleteSessionRef.current) {
+            hasResumedIncompleteSessionRef.current = true;
             if (user.name) {
                 setName(user.name);
             }
-            if (!user.name) {
-                setStep('name');
-            } else {
-                setStep('consent');
+            if ((step === 'phone' || step === 'otp') && !showDocSubmittedModal) {
+                dispatchStep({ type: 'FORCE', to: !user.name ? 'name' : 'consent' });
             }
         }
-    }, [token, user]);
+    }, [token, refreshToken, user, showDocSubmittedModal]);
 
     const handleSendOtp = async (isAdmin = false) => {
         setAuthError(null);
@@ -234,6 +338,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 setConfirmationResult(confirmation);
                 console.log('[Firebase OTP] Confirmation object received successfully!');
                 
+                setOtpDigits(EMPTY_OTP_DIGITS);
                 setResendTimer(119);
                 setAuthError(null);
                 navigateToStep(isAdmin ? 'admin_otp' : 'otp');
@@ -276,14 +381,17 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
 
     const handleAdminVerifyOtp = async () => {
         setAuthError(null);
-        if (!otp.trim()) { setAuthError('Please enter the 6-digit OTP code.'); return; }
+        if (otpDigits.some(d => !d) || otp.length !== 6) {
+            setAuthError('Please enter the 6-digit OTP code.');
+            return;
+        }
         if (!confirmationResult) {
             setAuthError('No active OTP session found. Please request a new OTP.');
             return;
         }
         setLoading(true);
         try {
-            const userCredential = await confirmationResult.confirm(otp.trim());
+            const userCredential = await confirmationResult.confirm(otp);
             const idToken = await userCredential.user.getIdToken();
 
             const response = await fetch(`${API_BASE}/api/auth/firebase-verify`, {
@@ -330,7 +438,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
 
     const handleVerifyOtp = async () => {
         setAuthError(null);
-        if (!otp.trim()) {
+        if (otpDigits.some(d => !d) || otp.length !== 6) {
             setAuthError(t('login.enterOtpError') || 'Please enter the 6-digit OTP code.');
             return;
         }
@@ -342,7 +450,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
 
         setLoading(true);
         try {
-            const userCredential = await confirmationResult.confirm(otp.trim());
+            const userCredential = await confirmationResult.confirm(otp);
             const idToken = await userCredential.user.getIdToken();
             console.log('[Firebase Verify] Successfully obtained Firebase ID Token!');
 
@@ -394,6 +502,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
     };
 
     const handleRoleSelect = (role: 'passenger' | 'driver' | 'parceller') => {
+        if (loading) return;
         if (role === 'passenger' || role === 'parceller') {
             handleCompleteRegistration(role);
         } else {
@@ -402,6 +511,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
     };
 
     const handleFileUpload = (type: keyof typeof vehicleDocs) => {
+        if (loading) return;
         const activeToken = tempToken || token;
         if (Platform.OS === 'web' || typeof document !== 'undefined') {
             pickAndUploadDocument(
@@ -419,7 +529,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
             }).catch(() => {
                 setLoading(false);
             });
-        } else {
+        } else if (typeof Alert.prompt === 'function') {
             Alert.prompt(
                 'Upload Document',
                 'Enter document image URL or tap OK to upload demo document:',
@@ -444,12 +554,20 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
     };
 
     const handleCompleteRegistration = async (role: 'passenger' | 'driver' | 'parceller') => {
+        if (loading) return;
         setAuthError(null);
-        const activeToken = tempToken || token;
+        let activeToken = tempToken || token;
+        const activeRefreshToken = tempRefreshToken || refreshToken;
 
+        let parsedSeats = 0;
         if (role === 'driver') {
             if (!vehicleDocs.name || !vehicleDocs.type || !vehicleDocs.seats || !vehicleDocs.number) {
                 setAuthError('Please fill in all vehicle details (Name, Type, Seats, Number).');
+                return;
+            }
+            parsedSeats = parseInt(vehicleDocs.seats, 10);
+            if (isNaN(parsedSeats) || parsedSeats < 1) {
+                setAuthError('Please enter a valid number of seats (at least 1).');
                 return;
             }
             if (!vehicleDocs.dl || !vehicleDocs.rc || !vehicleDocs.pollution || !vehicleDocs.image) {
@@ -469,7 +587,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 body.vehicle = {
                     vehicle_name: vehicleDocs.name,
                     vehicle_type: vehicleDocs.type,
-                    seats: parseInt(vehicleDocs.seats) || 0,
+                    seats: parsedSeats,
                     vehicle_number: vehicleDocs.number,
                     dl_url: vehicleDocs.dl,
                     rc_url: vehicleDocs.rc,
@@ -480,14 +598,26 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 };
             }
 
-            const response = await fetch(`${API_BASE}/api/user/profile`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${activeToken}`
-                },
-                body: JSON.stringify(body),
-            });
+            const sendProfileUpdate = (bearer: string | null) =>
+                fetch(`${API_BASE}/api/user/profile`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {}),
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify(body),
+                });
+
+            let response = await sendProfileUpdate(activeToken);
+            if (response.status === 401) {
+                const refreshed = await refreshAuthToken(activeRefreshToken);
+                if (refreshed) {
+                    activeToken = refreshed;
+                    setTempToken(refreshed);
+                    response = await sendProfileUpdate(refreshed);
+                }
+            }
 
             if (response.ok) {
                 const updatedUser = {
@@ -497,11 +627,17 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                     vehicle: body.vehicle,
                     ...(role === 'driver' ? { verification_status: 'pending' } : {}),
                 };
-                await setAuth(activeToken, tempRefreshToken, updatedUser);
                 if (role === 'driver') {
-                    // Show success modal — driver must wait for admin approval
+                    // Defer setAuth until the user dismisses the confirmation modal so
+                    // RootApp does not immediately unmount LoginScreen.
+                    setPendingDriverAuth({
+                        token: activeToken,
+                        refreshToken: activeRefreshToken,
+                        user: updatedUser,
+                    });
                     setShowDocSubmittedModal(true);
                 } else {
+                    await setAuth(activeToken, activeRefreshToken, updatedUser);
                     onAuthenticated();
                 }
             } else {
@@ -513,6 +649,23 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
             setLoading(false);
         }
     };
+
+    const handleDismissDocSubmitted = useCallback(async () => {
+        if (pendingDriverAuth) {
+            await setAuth(
+                pendingDriverAuth.token,
+                pendingDriverAuth.refreshToken,
+                pendingDriverAuth.user,
+            );
+            setPendingDriverAuth(null);
+        }
+        setShowDocSubmittedModal(false);
+        onAuthenticated();
+    }, [pendingDriverAuth, setAuth, onAuthenticated]);
+
+    useBrowserBack(showDocSubmittedModal, () => {
+        handleDismissDocSubmitted();
+    });
 
     // ─── Document Submitted Success Screen ─────────────────────────────
     if (showDocSubmittedModal) {
@@ -591,7 +744,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                         shadowRadius: 12,
                         elevation: 6,
                     }}
-                    onPress={onAuthenticated}
+                    onPress={handleDismissDocSubmitted}
                     activeOpacity={0.85}>
                     <Text style={{ color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: 0.5 }}>
                         Go to Dashboard
@@ -771,9 +924,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                                                 borderColor: isUploaded
                                                     ? '#22C55E'
                                                     : (isDark ? '#334155' : '#E2E8F0'),
-                                            }
+                                            },
+                                            loading && { opacity: 0.6 },
                                         ]}
                                         onPress={() => handleFileUpload(doc.key as any)}
+                                        disabled={loading}
                                         activeOpacity={0.7}
                                     >
                                         <View style={[kycStyles.docIconBox, { backgroundColor: isUploaded ? '#22C55E' : colors.primary + '20' }]}>
@@ -926,25 +1081,24 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                                                 width: boxW,
                                                 backgroundColor: colors.inputFillColor,
                                                 color: colors.textColor,
-                                                borderColor: otp[i]
+                                                borderColor: otpDigits[i]
                                                     ? colors.primary
                                                     : colors.inputBorderColor,
                                                 shadowColor: colors.primary,
-                                                shadowOpacity: otp[i] ? 0.25 : 0,
+                                                shadowOpacity: otpDigits[i] ? 0.25 : 0,
                                                 shadowRadius: 6,
                                                 shadowOffset: { width: 0, height: 2 },
-                                                elevation: otp[i] ? 3 : 0,
+                                                elevation: otpDigits[i] ? 3 : 0,
                                                 marginRight: i < 5 ? 8 : 0,
                                             }
                                         ]}
-                                        value={otp[i] || ''}
+                                        value={otpDigits[i] || ''}
                                         onChangeText={(v) => {
                                             if (authError) setAuthError(null);
                                             handleOtpChange(v, i);
                                         }}
                                         onKeyPress={(e) => handleOtpKeyPress(e, i)}
                                         keyboardType="number-pad"
-                                        maxLength={1}
                                         textAlign="center"
                                         autoFocus={i === 0}
                                         selectTextOnFocus
@@ -975,10 +1129,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                                 </Text>
                             ) : (
                                 <TouchableOpacity
-                                    onPress={() => {
-                                        setResendTimer(119);
-                                        handleSendOtp(false);
-                                    }}
+                                    onPress={() => handleSendOtp(false)}
                                     disabled={loading}
                                     style={{ paddingVertical: 2 }}>
                                     <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 14, textAlign: 'center' }}>
@@ -1047,8 +1198,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 {step === 'role' && (
                     <View style={styles.roleContainer}>
                         <TouchableOpacity
-                            style={[styles.roleCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}
-                            onPress={() => handleRoleSelect('passenger')}>
+                            style={[styles.roleCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }, loading && styles.buttonDisabled]}
+                            onPress={() => handleRoleSelect('passenger')}
+                            disabled={loading}>
                             <Text style={styles.roleEmoji}>🏠</Text>
                             <View style={styles.roleInfo}>
                                 <Text style={[styles.roleLabel, { color: colors.textColor }]}>{t('login.iAmPassenger')}</Text>
@@ -1059,8 +1211,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                         <View style={styles.spacer16} />
 
                         <TouchableOpacity
-                            style={[styles.roleCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}
-                            onPress={() => handleRoleSelect('driver')}>
+                            style={[styles.roleCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }, loading && styles.buttonDisabled]}
+                            onPress={() => handleRoleSelect('driver')}
+                            disabled={loading}>
                             <Text style={styles.roleEmoji}>🚕</Text>
                             <View style={styles.roleInfo}>
                                 <Text style={[styles.roleLabel, { color: colors.textColor }]}>{t('login.iAmDriver')}</Text>
@@ -1286,23 +1439,22 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                                                 width: boxW,
                                                 backgroundColor: colors.inputFillColor,
                                                 color: colors.textColor,
-                                                borderColor: otp[i] ? '#1FAF63' : 'rgba(31,175,99,0.35)',
+                                                borderColor: otpDigits[i] ? '#1FAF63' : 'rgba(31,175,99,0.35)',
                                                 shadowColor: '#1FAF63',
-                                                shadowOpacity: otp[i] ? 0.3 : 0,
+                                                shadowOpacity: otpDigits[i] ? 0.3 : 0,
                                                 shadowRadius: 6,
                                                 shadowOffset: { width: 0, height: 2 },
-                                                elevation: otp[i] ? 3 : 0,
+                                                elevation: otpDigits[i] ? 3 : 0,
                                                 marginRight: i < 5 ? 8 : 0,
                                             }
                                         ]}
-                                        value={otp[i] || ''}
+                                        value={otpDigits[i] || ''}
                                         onChangeText={(v) => {
                                             if (authError) setAuthError(null);
                                             handleOtpChange(v, i);
                                         }}
                                         onKeyPress={(e) => handleOtpKeyPress(e, i)}
                                         keyboardType="number-pad"
-                                        maxLength={1}
                                         textAlign="center"
                                         autoFocus={i === 0}
                                         selectTextOnFocus
@@ -1327,10 +1479,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                                 </Text>
                             ) : (
                                 <TouchableOpacity
-                                    onPress={() => {
-                                        setResendTimer(119);
-                                        handleSendOtp(true);
-                                    }}
+                                    onPress={() => handleSendOtp(true)}
                                     disabled={loading}
                                     style={{ paddingVertical: 2 }}>
                                     <Text style={{ color: '#1FAF63', fontWeight: '700', fontSize: 14, textAlign: 'center' }}>

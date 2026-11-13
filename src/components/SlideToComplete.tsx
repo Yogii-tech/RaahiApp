@@ -1,46 +1,89 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, Animated, PanResponder, Dimensions, TouchableOpacity, Platform } from 'react-native';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, Animated, PanResponder, TouchableOpacity, useWindowDimensions } from 'react-native';
 
-const SLIDER_WIDTH = Dimensions.get('window').width > 400 ? 320 : 280;
 const SLIDER_HEIGHT = 50;
 const THUMB_SIZE = 40;
 
 interface SlideToCompleteProps {
-    onComplete: () => void;
+    onComplete: () => void | Promise<boolean | void>;
     title?: string;
+    disabled?: boolean;
+    resetKey?: number;
 }
 
-const SlideToComplete: React.FC<SlideToCompleteProps> = ({ onComplete, title = "SLIDE TO COMPLETE" }) => {
+const SlideToComplete: React.FC<SlideToCompleteProps> = ({
+    onComplete,
+    title = "SLIDE TO COMPLETE",
+    disabled = false,
+    resetKey,
+}) => {
+    const { width } = useWindowDimensions();
+    const sliderWidth = width > 400 ? 320 : 280;
+
     const pan = useRef(new Animated.ValueXY()).current;
     const [triggered, setTriggered] = useState(false);
 
-    const handleTrigger = () => {
-        if (triggered) return;
+    const triggeredRef = useRef(false);
+    const disabledRef = useRef(disabled);
+    const sliderWidthRef = useRef(sliderWidth);
+    const onCompleteRef = useRef(onComplete);
+
+    disabledRef.current = disabled;
+    sliderWidthRef.current = sliderWidth;
+    onCompleteRef.current = onComplete;
+
+    const resetSlider = useCallback(() => {
+        triggeredRef.current = false;
+        setTriggered(false);
+        Animated.spring(pan, {
+            toValue: { x: 0, y: 0 },
+            useNativeDriver: false,
+        }).start();
+    }, [pan]);
+
+    useEffect(() => {
+        if (resetKey !== undefined) {
+            resetSlider();
+        }
+    }, [resetKey, resetSlider]);
+
+    const handleTrigger = useCallback(() => {
+        if (triggeredRef.current || disabledRef.current) return;
+        triggeredRef.current = true;
         setTriggered(true);
-        const maxX = SLIDER_WIDTH - THUMB_SIZE - 10;
+        const maxX = sliderWidthRef.current - THUMB_SIZE - 10;
         Animated.timing(pan, {
             toValue: { x: maxX, y: 0 },
             duration: 150,
             useNativeDriver: false,
-        }).start(() => {
-            onComplete();
+        }).start(async () => {
+            try {
+                const result = await onCompleteRef.current();
+                if (result === false) {
+                    resetSlider();
+                }
+            } catch {
+                resetSlider();
+            }
         });
-    };
+    }, [pan, resetSlider]);
 
     const panResponder = useRef(
         PanResponder.create({
-            onStartShouldSetPanResponder: () => !triggered,
-            onMoveShouldSetPanResponder: () => !triggered,
-            onPanResponderMove: (e, gesture) => {
-                const maxX = SLIDER_WIDTH - THUMB_SIZE - 10;
+            onStartShouldSetPanResponder: () => !triggeredRef.current && !disabledRef.current,
+            onMoveShouldSetPanResponder: () => !triggeredRef.current && !disabledRef.current,
+            onPanResponderMove: (_e, gesture) => {
+                if (triggeredRef.current || disabledRef.current) return;
+                const maxX = sliderWidthRef.current - THUMB_SIZE - 10;
                 if (gesture.dx > 0 && gesture.dx < maxX) {
                     pan.setValue({ x: gesture.dx, y: 0 });
                 } else if (gesture.dx >= maxX) {
                     pan.setValue({ x: maxX, y: 0 });
                 }
             },
-            onPanResponderRelease: (e, gesture) => {
-                const maxX = SLIDER_WIDTH - THUMB_SIZE - 10;
+            onPanResponderRelease: (_e, gesture) => {
+                if (triggeredRef.current || disabledRef.current) return;
+                const maxX = sliderWidthRef.current - THUMB_SIZE - 10;
                 if (gesture.dx >= maxX * 0.4 || gesture.dx >= 100) {
                     handleTrigger();
                 } else {
@@ -56,14 +99,14 @@ const SlideToComplete: React.FC<SlideToCompleteProps> = ({ onComplete, title = "
 
     return (
         <View style={styles.container}>
-            <TouchableOpacity 
+            <TouchableOpacity
                 activeOpacity={0.85}
                 onPress={handleTrigger}
-                disabled={triggered}
-                style={[styles.track, triggered && styles.trackCompleted]}
+                disabled={triggered || disabled}
+                style={[styles.track, { width: sliderWidth }, triggered && styles.trackCompleted, disabled && { opacity: 0.6 }]}
             >
                 <Text style={styles.text}>{triggered ? "COMPLETED ✓" : title}</Text>
-                
+
                 <Animated.View
                     style={[styles.thumb, { transform: [{ translateX: pan.x }] }, triggered && styles.thumbCompleted]}
                     {...panResponder.panHandlers}
@@ -82,7 +125,6 @@ const styles = StyleSheet.create({
         width: '100%',
     },
     track: {
-        width: SLIDER_WIDTH,
         height: SLIDER_HEIGHT,
         backgroundColor: '#2A3441',
         borderRadius: SLIDER_HEIGHT / 2,

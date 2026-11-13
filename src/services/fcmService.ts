@@ -14,6 +14,7 @@ import { firebaseWebConfig, VAPID_KEY } from '../config/firebaseWebConfig';
 
 export type FCMNotificationPayload = {
   type?: string;
+  action?: string;
   bookingId?: string;
   rideId?: string;
   status?: string;
@@ -54,11 +55,15 @@ async function getWebMessaging() {
 
 // ─── Token Upload ──────────────────────────────────────────────────────────────
 
+const ACTIVE_FCM_TOKEN_KEY = 'active_fcm_token';
+const PENDING_FCM_TOKEN_KEY = 'pending_fcm_token';
+
 let currentFCMToken: string | null = null;
 
 async function uploadToken(fcmToken: string, authToken: string): Promise<void> {
   try {
     currentFCMToken = fcmToken;
+    await AsyncStorage.setItem(ACTIVE_FCM_TOKEN_KEY, fcmToken).catch(() => {});
     const res = await fetch(`${API_BASE}/api/user/fcm-token`, {
       method: 'PUT',
       headers: {
@@ -69,20 +74,20 @@ async function uploadToken(fcmToken: string, authToken: string): Promise<void> {
     });
     if (res.ok) {
       console.log('[FCM] Token uploaded to backend successfully');
-      await AsyncStorage.removeItem('pending_fcm_token');
+      await AsyncStorage.removeItem(PENDING_FCM_TOKEN_KEY);
     } else {
       console.warn('[FCM] Backend token upload failed:', res.status);
-      await AsyncStorage.setItem('pending_fcm_token', fcmToken);
+      await AsyncStorage.setItem(PENDING_FCM_TOKEN_KEY, fcmToken);
     }
   } catch (e) {
     console.warn('[FCM] Failed to upload token (network error). Caching for retry:', e);
-    await AsyncStorage.setItem('pending_fcm_token', fcmToken);
+    await AsyncStorage.setItem(PENDING_FCM_TOKEN_KEY, fcmToken);
   }
 }
 
 async function syncPendingToken(authToken: string): Promise<void> {
   try {
-    const pendingToken = await AsyncStorage.getItem('pending_fcm_token');
+    const pendingToken = await AsyncStorage.getItem(PENDING_FCM_TOKEN_KEY);
     if (pendingToken) {
       console.log('[FCM] Found pending token, syncing...');
       await uploadToken(pendingToken, authToken);
@@ -101,6 +106,8 @@ function handleNotificationNavigation(data: FCMNotificationPayload, navigate: Na
 // ─── Main Registration ─────────────────────────────────────────────────────────
 
 let foregroundUnsubscribe: (() => void) | null = null;
+// Mutable callback ref so persistent SW / native listeners always call the latest MainTabs handler
+let activeNavigateCallback: NavigateToScreen | null = null;
 // Track whether SW message listener is already attached to avoid duplicates
 let swMessageListenerAttached = false;
 // Track native unsubscribe handles
@@ -109,12 +116,17 @@ let nativeOpenedAppUnsubscribe: (() => void) | null = null;
 let nativeTokenRefreshUnsubscribe: (() => void) | null = null;
 
 export async function registerFCM(authToken: string, onNavigate: NavigateToScreen): Promise<void> {
+  activeNavigateCallback = onNavigate;
+  const dispatchNavigate: NavigateToScreen = (type, data) => {
+    activeNavigateCallback?.(type, data);
+  };
+
   await syncPendingToken(authToken);
 
   if (Platform.OS === 'web') {
-    await registerWebFCM(authToken, onNavigate);
+    await registerWebFCM(authToken, dispatchNavigate);
   } else if (Platform.OS === 'android' || Platform.OS === 'ios') {
-    await registerNativeFCM(authToken, onNavigate);
+    await registerNativeFCM(authToken, dispatchNavigate);
   }
 }
 
@@ -324,12 +336,15 @@ async function registerWebFCM(authToken: string, onNavigate: NavigateToScreen): 
 
     // 5. Listen for messages posted FROM the service worker (e.g. notification click).
     //    Guard with a flag so multiple registerFCM calls don't stack duplicate listeners.
+    //    Uses mutable activeNavigateCallback so logout/re-login never invokes a stale closure.
     if ('serviceWorker' in navigator && !swMessageListenerAttached) {
       swMessageListenerAttached = true;
       navigator.serviceWorker.addEventListener('message', (event) => {
         if (event.data?.type === 'NOTIFICATION_CLICK') {
           console.log('[FCM Web] SW notification click relayed:', event.data?.data?.type || 'tap');
-          handleNotificationNavigation(event.data.data as FCMNotificationPayload, onNavigate);
+          if (activeNavigateCallback) {
+            handleNotificationNavigation(event.data.data as FCMNotificationPayload, activeNavigateCallback);
+          }
         }
       });
     }
@@ -343,6 +358,8 @@ async function registerWebFCM(authToken: string, onNavigate: NavigateToScreen): 
  * Unsubscribes foreground FCM listeners on logout and removes token from backend.
  */
 export async function unregisterFCM(authToken?: string): Promise<void> {
+  activeNavigateCallback = null;
+
   if (foregroundUnsubscribe) {
     foregroundUnsubscribe();
     foregroundUnsubscribe = null;
@@ -360,7 +377,10 @@ export async function unregisterFCM(authToken?: string): Promise<void> {
     nativeTokenRefreshUnsubscribe = null;
   }
 
-  if (currentFCMToken && authToken) {
+  const tokenToRemove =
+    currentFCMToken || (await AsyncStorage.getItem(ACTIVE_FCM_TOKEN_KEY).catch(() => null));
+
+  if (tokenToRemove && authToken) {
     try {
       await fetch(`${API_BASE}/api/user/fcm-token`, {
         method: 'DELETE',
@@ -369,16 +389,19 @@ export async function unregisterFCM(authToken?: string): Promise<void> {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
-        body: JSON.stringify({ fcmToken: currentFCMToken }),
+        body: JSON.stringify({ fcmToken: tokenToRemove }),
       });
       console.log('[FCM] Token removed from backend on logout');
     } catch (e) {
       console.warn('[FCM] Failed to remove token from backend on logout:', e);
     }
-    currentFCMToken = null;
   }
 
+  currentFCMToken = null;
+  await AsyncStorage.removeItem(ACTIVE_FCM_TOKEN_KEY).catch(() => {});
+  await AsyncStorage.removeItem(PENDING_FCM_TOKEN_KEY).catch(() => {});
+
   // Keep swMessageListenerAttached = true — the listener is on navigator.serviceWorker
-  // which persists across login/logout; removing it would break notification clicks.
+  // which persists across login/logout; activeNavigateCallback updates on next registerFCM.
   console.log('[FCM] Foreground listeners unregistered');
 }

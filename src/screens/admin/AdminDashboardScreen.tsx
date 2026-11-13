@@ -33,6 +33,7 @@ type AdminView =
     | 'routes'
     // Booking Operations
     | 'bookings'
+    | 'parcels'
     // Finance
     | 'finance'
     // Monitoring
@@ -78,6 +79,7 @@ const NAV_SECTIONS: NavSection[] = [
         group: 'BOOKING OPERATIONS',
         items: [
             { id: 'bookings', label: 'Bookings', icon: '🎫' },
+            { id: 'parcels', label: 'Parcels', icon: '📦' },
         ],
     },
     {
@@ -141,6 +143,7 @@ const PAGE_TITLES: Record<AdminView, string> = {
     cancelled_rides: 'Cancelled / Removed Rides',
     routes: 'Route Analytics',
     bookings: 'Bookings Management',
+    parcels: 'Parcels Overview',
     finance: 'Commission & Settlement',
     NOTIFICATIONS: 'System Notifications',
     reports: 'Reports & Analytics',
@@ -170,9 +173,14 @@ export default function AdminDashboardScreen() {
     const handleLogout = () => { logout(); };
 
     const navigate = (view: AdminView) => {
+        if (view !== activeView) {
+            setSearchQuery('');
+        }
         setActiveView(view);
         if (isMobile) setIsSidebarOpen(false);
     };
+
+    const safeToken = token || '';
 
     const renderContent = () => {
         // Use key={activeView} on views that need full remount when switching between same component with different filters
@@ -180,24 +188,26 @@ export default function AdminDashboardScreen() {
             <ScrollView style={styles.pageBody} showsVerticalScrollIndicator={false}>
                 {activeView === 'dashboard' && (
                     <AdminDashboardView
-                        token={token!}
+                        token={safeToken}
+                        isDark={isDark}
                         onNavigateToRides={() => navigate('active_rides')}
-                        onNavigateToParcels={() => navigate('bookings')}
+                        onNavigateToBookings={() => navigate('bookings')}
+                        onNavigateToParcels={() => navigate('parcels')}
                         onNavigateToVisitors={() => navigate('admin_users')}
                         onNavigateToRoutes={() => navigate('routes')}
                     />
                 )}
                 {activeView === 'driver_verification' && (
-                    <AdminDriversView key="driver_verification" token={token!} searchQuery={searchQuery} initialFilter="pending" />
+                    <AdminDriversView key="driver_verification" token={safeToken} searchQuery={searchQuery} initialFilter="pending" />
                 )}
                 {activeView === 'document_review' && (
-                    <AdminDriversView key="document_review" token={token!} searchQuery={searchQuery} initialFilter="all" />
+                    <AdminDriversView key="document_review" token={safeToken} searchQuery={searchQuery} initialFilter="all" />
                 )}
                 {activeView === 'drivers' && (
-                    <AdminDriversView key="drivers" token={token!} searchQuery={searchQuery} initialFilter="verified" />
+                    <AdminDriversView key="drivers" token={safeToken} searchQuery={searchQuery} initialFilter="verified" />
                 )}
                 {activeView === 'vehicles' && (
-                    <AdminVehiclesView token={token!} searchQuery={searchQuery} isDark={isDark} />
+                    <AdminVehiclesView token={safeToken} searchQuery={searchQuery} isDark={isDark} />
                 )}
                 {activeView === 'active_rides' && (
                     <AdminRidesDetailView key="active_rides" isDark={isDark} searchQuery={searchQuery} initialTab="available" />
@@ -212,10 +222,13 @@ export default function AdminDashboardScreen() {
                     <AdminRoutesDetailView isDark={isDark} searchQuery={searchQuery} />
                 )}
                 {activeView === 'bookings' && (
-                    <AdminBookingsView token={token!} searchQuery={searchQuery} />
+                    <AdminBookingsView token={safeToken} searchQuery={searchQuery} />
+                )}
+                {activeView === 'parcels' && (
+                    <AdminParcelsDetailView isDark={isDark} searchQuery={searchQuery} />
                 )}
                 {activeView === 'finance' && (
-                    <AdminFinanceView token={token!} searchQuery={searchQuery} isDark={isDark} />
+                    <AdminFinanceView token={safeToken} searchQuery={searchQuery} isDark={isDark} />
                 )}
                 {activeView === 'NOTIFICATIONS' && (
                     <AdminNotificationsView
@@ -223,11 +236,15 @@ export default function AdminDashboardScreen() {
                         onMarkRead={(id: string) => {
                             setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
                         }}
-                        onNavigate={(type: string) => { setActiveView(type as AdminView); }}
+                        onNavigate={(type: string) => {
+                            if (Object.prototype.hasOwnProperty.call(PAGE_TITLES, type)) {
+                                navigate(type as AdminView);
+                            }
+                        }}
                         isDark={isDark}
                     />
                 )}
-                {activeView === 'reports' && <AdminReportsView token={token!} />}
+                {activeView === 'reports' && <AdminReportsView token={safeToken} />}
                 {activeView === 'audit_logs' && (
                     <AdminAuditLogsView isDark={isDark} searchQuery={searchQuery} />
                 )}
@@ -364,7 +381,7 @@ export default function AdminDashboardScreen() {
                     </View>
 
                     <View style={[styles.topBarRight, isMobile && styles.topBarRightMobile]}>
-                        <TouchableOpacity onPress={() => setActiveView('NOTIFICATIONS')} style={styles.notificationWrapper}>
+                        <TouchableOpacity onPress={() => navigate('NOTIFICATIONS')} style={styles.notificationWrapper}>
                             <Text style={styles.headerIcon}>🔔</Text>
                             {unreadCount > 0 && (
                                 <View style={styles.badge}>

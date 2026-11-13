@@ -21,9 +21,11 @@ const TrackPackageView: React.FC = () => {
     const [shipments, setShipments] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     const [trackingQuery, setTrackingQuery] = useState('');
 
     const fetchShipments = useCallback(async () => {
+        setError(null);
         try {
             const response = await apiRequest('/api/rides/bookings', {}, logout);
             if (response.ok) {
@@ -31,9 +33,13 @@ const TrackPackageView: React.FC = () => {
                 // Filter for parcel types
                 const parcels = (data || []).filter((item: any) => item.type === 'parcel');
                 setShipments(parcels);
+            } else {
+                const errData = await response.json().catch(() => ({}));
+                setError(errData.error || 'Failed to load shipments.');
             }
         } catch (err) {
             console.error('Fetch shipments error:', err);
+            setError('Connection error. Please try again.');
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -49,9 +55,12 @@ const TrackPackageView: React.FC = () => {
         fetchShipments();
     };
 
+    const formatParcelId = (s: any) =>
+        String(s.bookingId || `RA-P-${String(s.id || '').slice(-4).toUpperCase()}`);
+
     const normalizedQuery = trackingQuery.trim().toLowerCase();
     const matchingShipments = normalizedQuery
-        ? shipments.filter(s => `ra-p-${String(s.id || '').slice(-6)}`.toLowerCase().includes(normalizedQuery))
+        ? shipments.filter(s => formatParcelId(s).toLowerCase().includes(normalizedQuery))
         : shipments;
     const currentShipment = matchingShipments.find(s => s.status === 'accepted' || s.status === 'pending');
 
@@ -104,6 +113,17 @@ const TrackPackageView: React.FC = () => {
 
             {loading && !refreshing ? (
                 <ActivityIndicator color={colors.primary} size="large" style={{ marginTop: 40 }} />
+            ) : error ? (
+                <View style={styles.section}>
+                    <View style={[styles.shipmentCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor, alignItems: 'center', padding: 24 }]}>
+                        <Text style={{ color: '#FF5252', marginBottom: 12, textAlign: 'center' }}>{error}</Text>
+                        <TouchableOpacity
+                            onPress={fetchShipments}
+                            style={{ backgroundColor: colors.primary, paddingHorizontal: 18, paddingVertical: 8, borderRadius: 8 }}>
+                            <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Retry</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
             ) : (
                 <>
                     {/* Current Shipment */}
@@ -123,7 +143,7 @@ const TrackPackageView: React.FC = () => {
                                     </View>
                                     <View style={styles.shipmentInfo}>
                                         <Text style={[styles.shipmentId, { color: colors.textColor }]}>
-                                            RA-P-{currentShipment.id.slice(-6).toUpperCase()}
+                                            {formatParcelId(currentShipment)}
                                         </Text>
                                         <Text style={[styles.shipmentStatus, { color: colors.subtextColor }]}>
                                             {currentShipment.status === 'pending' ? 'Waiting for Driver' : 'On the way'} • {new Date(currentShipment.createdAt).toLocaleDateString()}

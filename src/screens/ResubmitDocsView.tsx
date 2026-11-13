@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View,
     Text,
@@ -15,21 +15,33 @@ import { useAuth } from '../context/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
-import { API_BASE } from '../apiConfig';
 import { apiRequest } from '../utils/api';
 import { pickAndUploadDocument, notify } from '../utils/documentUpload';
+import { useBrowserBack } from '../utils/browserHistory';
 
 interface ResubmitDocsViewProps {
     onClose: () => void;
+    disableBrowserBack?: boolean;
 }
 
-const ResubmitDocsView: React.FC<ResubmitDocsViewProps> = ({ onClose }) => {
+const ResubmitDocsView: React.FC<ResubmitDocsViewProps> = ({ onClose, disableBrowserBack = false }) => {
     const { token, refreshToken, user, setAuth, logout } = useAuth();
     const { colors, isDark } = useTheme();
     const { t } = useLanguage();
 
     const [loading, setLoading] = useState(false);
     const [showDocSubmittedModal, setShowDocSubmittedModal] = useState(false);
+    const isMountedRef = useRef(true);
+    const userRef = useRef(user);
+    userRef.current = user;
+
+    useEffect(() => {
+        return () => {
+            isMountedRef.current = false;
+        };
+    }, []);
+
+    useBrowserBack(true, onClose, !disableBrowserBack);
 
     // Pre-fill with existing vehicle details if available
     const [vehicleDocs, setVehicleDocs] = useState({
@@ -46,27 +58,28 @@ const ResubmitDocsView: React.FC<ResubmitDocsViewProps> = ({ onClose }) => {
     });
 
     const handleFileUpload = (type: keyof typeof vehicleDocs) => {
+        if (loading) return;
         if (Platform.OS === 'web' || typeof document !== 'undefined') {
             pickAndUploadDocument(
                 token,
-                () => setLoading(true),
-                () => setLoading(false),
+                () => { if (isMountedRef.current) setLoading(true); },
+                () => { if (isMountedRef.current) setLoading(false); },
                 {
                     refreshToken,
                     onTokenRefreshed: async (newToken: string) => {
                         // Keep context + storage in sync so later requests don't reuse the stale token
                         const latestRefresh = (await AsyncStorage.getItem('auth_refresh_token')) || refreshToken;
-                        await setAuth(newToken, latestRefresh, user);
+                        await setAuth(newToken, latestRefresh, userRef.current);
                     },
                 },
             ).then(url => {
-                if (url) {
+                if (url && isMountedRef.current) {
                     setVehicleDocs(prev => ({ ...prev, [type]: url }));
                 }
             }).catch(() => {
-                setLoading(false);
+                if (isMountedRef.current) setLoading(false);
             });
-        } else {
+        } else if (typeof Alert.prompt === 'function') {
             Alert.prompt(
                 'Upload Document',
                 'Enter document image URL or tap OK to upload demo document:',
@@ -87,12 +100,20 @@ const ResubmitDocsView: React.FC<ResubmitDocsViewProps> = ({ onClose }) => {
                 'plain-text',
                 'https://via.placeholder.com/600x400.png?text=Document+Uploaded'
             );
+        } else {
+            notify(t('common.error'), 'Document upload is currently supported on web browsers.');
         }
     };
 
     const handleCompleteRegistration = async () => {
+        if (loading) return;
         if (!vehicleDocs.name || !vehicleDocs.type || !vehicleDocs.seats || !vehicleDocs.number) {
             notify(t('common.error'), 'Please fill in all vehicle details (Name, Type, Seats, Number).');
+            return;
+        }
+        const parsedSeats = parseInt(vehicleDocs.seats, 10);
+        if (isNaN(parsedSeats) || parsedSeats < 1) {
+            notify(t('common.error'), 'Please enter a valid number of seats (at least 1).');
             return;
         }
         if (!vehicleDocs.dl || !vehicleDocs.rc || !vehicleDocs.pollution || !vehicleDocs.image) {
@@ -102,13 +123,14 @@ const ResubmitDocsView: React.FC<ResubmitDocsViewProps> = ({ onClose }) => {
 
         setLoading(true);
         try {
+            const activeUser = userRef.current;
             const body: any = {
-                name: user?.name,
+                name: activeUser?.name,
                 role: 'driver',
                 vehicle: {
                     vehicle_name: vehicleDocs.name,
                     vehicle_type: vehicleDocs.type,
-                    seats: parseInt(vehicleDocs.seats) || 0,
+                    seats: parsedSeats,
                     vehicle_number: vehicleDocs.number,
                     dl_url: vehicleDocs.dl,
                     rc_url: vehicleDocs.rc,
@@ -126,22 +148,27 @@ const ResubmitDocsView: React.FC<ResubmitDocsViewProps> = ({ onClose }) => {
 
             if (response.ok) {
                 const updatedUser = {
-                    ...user,
+                    ...userRef.current,
                     vehicle: body.vehicle,
                     verification_status: 'pending',
+                    rejection_reason: '',
                 };
                 // apiRequest may have silently refreshed the token in storage; don't overwrite it with a stale one
                 const latestToken = (await AsyncStorage.getItem('auth_token')) || token;
                 const latestRefresh = (await AsyncStorage.getItem('auth_refresh_token')) || refreshToken;
                 await setAuth(latestToken, latestRefresh, updatedUser as any);
-                setShowDocSubmittedModal(true);
+                if (isMountedRef.current) {
+                    setShowDocSubmittedModal(true);
+                }
             } else {
                 notify(t('common.error'), t('login.failProfile'));
             }
         } catch {
             notify(t('common.error'), t('login.connectionError'));
         } finally {
-            setLoading(false);
+            if (isMountedRef.current) {
+                setLoading(false);
+            }
         }
     };
 
@@ -385,9 +412,11 @@ const ResubmitDocsView: React.FC<ResubmitDocsViewProps> = ({ onClose }) => {
                                             borderColor: isUploaded
                                                 ? '#22C55E'
                                                 : (isDark ? '#334155' : '#E2E8F0'),
-                                        }
+                                        },
+                                        loading && { opacity: 0.6 },
                                     ]}
                                     onPress={() => handleFileUpload(doc.key as any)}
+                                    disabled={loading}
                                     activeOpacity={0.7}
                                 >
                                     <View style={[kycStyles.docIconBox, { backgroundColor: isUploaded ? '#22C55E' : colors.primary + '20' }]}>

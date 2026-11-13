@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, TextInput, useWindowDimensions } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
-import { notify } from '../../utils/notify';
+import { confirmAction, notify } from '../../utils/notify';
 
 interface AdminUserEntry {
     id: string;
@@ -50,6 +50,17 @@ export default function AdminSettingsView({ isDark, activeTab: initialTab = 'adm
     const { logout } = useAuth();
     const [activeTab, setActiveTab] = useState<'admins' | 'permissions' | 'settings'>(initialTab);
     const [permissions, setPermissions] = useState<PermissionRow[]>(INITIAL_PERMISSIONS);
+    const [platformConfig, setPlatformConfig] = useState({
+        supportEmail: 'support@goraahi.in',
+        maxSeatsPerRide: '6',
+        bookingWindowDays: '30',
+    });
+    const [routeMultipliers, setRouteMultipliers] = useState<Record<string, string>>({
+        'Bageshwar → Almora': '1.20',
+        'Almora → Haldwani': '1.00',
+        'Haldwani → Dehradun': '1.15',
+        'Champawat → Pithoragarh': '1.30',
+    });
     const { width } = useWindowDimensions();
     const isMobile = width < 768;
 
@@ -64,9 +75,17 @@ export default function AdminSettingsView({ isDark, activeTab: initialTab = 'adm
     };
 
     const togglePermission = (moduleIdx: number, field: 'view' | 'edit' | 'delete') => {
-        setPermissions(prev => prev.map((p, i) =>
-            i === moduleIdx ? { ...p, [field]: !p[field] } : p
-        ));
+        setPermissions(prev => prev.map((p, i) => {
+            if (i !== moduleIdx) return p;
+            const nextVal = !p[field];
+            if (field === 'view' && !nextVal) {
+                return { ...p, view: false, edit: false, delete: false };
+            }
+            if ((field === 'edit' || field === 'delete') && nextVal) {
+                return { ...p, [field]: true, view: true };
+            }
+            return { ...p, [field]: nextVal };
+        }));
     };
 
     const showPreviewNotice = (actionName: string) => {
@@ -179,18 +198,19 @@ export default function AdminSettingsView({ isDark, activeTab: initialTab = 'adm
                 <Text style={[styles.tabCardSubtitle, { color: T.subtext, marginBottom: 20 }]}>Core system settings for the GoRaahi platform.</Text>
 
                 {[
-                    { label: 'Platform Name', value: 'GoRaahi', editable: false },
-                    { label: 'Support Email', value: 'support@goraahi.in', editable: true },
-                    { label: 'Max Seats Per Ride', value: '6', editable: true },
-                    { label: 'Booking Window (days)', value: '30', editable: true },
-                    { label: 'Default Driver Verification Mode', value: 'Manual Review', editable: false },
+                    { key: 'platformName', label: 'Platform Name', value: 'GoRaahi', editable: false },
+                    { key: 'supportEmail', label: 'Support Email', value: platformConfig.supportEmail, editable: true },
+                    { key: 'maxSeatsPerRide', label: 'Max Seats Per Ride', value: platformConfig.maxSeatsPerRide, editable: true },
+                    { key: 'bookingWindowDays', label: 'Booking Window (days)', value: platformConfig.bookingWindowDays, editable: true },
+                    { key: 'verificationMode', label: 'Default Driver Verification Mode', value: 'Manual Review', editable: false },
                 ].map(setting => (
-                    <View key={setting.label} style={[styles.settingRow, isMobile && { flexDirection: 'column', alignItems: 'stretch', gap: 8 }, { borderBottomColor: T.border }]}>
+                    <View key={setting.key} style={[styles.settingRow, isMobile && { flexDirection: 'column', alignItems: 'stretch', gap: 8 }, { borderBottomColor: T.border }]}>
                         <Text style={[styles.settingLabel, { color: T.subtext }]}>{setting.label}</Text>
                         {setting.editable ? (
                             <TextInput
                                 style={[styles.settingInput, isMobile && { width: '100%' }, { color: T.text, borderColor: T.border, backgroundColor: T.input }]}
-                                defaultValue={setting.value}
+                                value={setting.value}
+                                onChangeText={val => setPlatformConfig(prev => ({ ...prev, [setting.key]: val }))}
                             />
                         ) : (
                             <Text style={[styles.settingValue, { color: T.text }]}>{setting.value}</Text>
@@ -204,18 +224,14 @@ export default function AdminSettingsView({ isDark, activeTab: initialTab = 'adm
                 <Text style={[styles.tabCardTitle, { color: T.text, marginBottom: 4 }]}>Route Pricing Multipliers</Text>
                 <Text style={[styles.tabCardSubtitle, { color: T.subtext, marginBottom: 20 }]}>Adjust the fare multiplier per corridor to account for seasonality or demand surges.</Text>
 
-                {[
-                    { route: 'Bageshwar → Almora', multiplier: '1.20' },
-                    { route: 'Almora → Haldwani', multiplier: '1.00' },
-                    { route: 'Haldwani → Dehradun', multiplier: '1.15' },
-                    { route: 'Champawat → Pithoragarh', multiplier: '1.30' },
-                ].map(row => (
-                    <View key={row.route} style={[styles.settingRow, isMobile && { flexWrap: 'wrap', gap: 8 }, { borderBottomColor: T.border }]}>
-                        <Text style={[styles.settingLabel, { color: T.text, minWidth: 140 }]}>{row.route}</Text>
+                {Object.entries(routeMultipliers).map(([route, multiplier]) => (
+                    <View key={route} style={[styles.settingRow, isMobile && { flexWrap: 'wrap', gap: 8 }, { borderBottomColor: T.border }]}>
+                        <Text style={[styles.settingLabel, { color: T.text, minWidth: 140 }]}>{route}</Text>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                             <TextInput
                                 style={[styles.settingInput, { color: T.text, borderColor: T.border, backgroundColor: T.input, width: 72 }]}
-                                defaultValue={row.multiplier}
+                                value={multiplier}
+                                onChangeText={val => setRouteMultipliers(prev => ({ ...prev, [route]: val }))}
                                 keyboardType="numeric"
                             />
                             <Text style={{ color: T.subtext, fontSize: 12 }}>× base</Text>
@@ -237,7 +253,10 @@ export default function AdminSettingsView({ isDark, activeTab: initialTab = 'adm
                     <TouchableOpacity style={styles.dangerBtn} onPress={() => showPreviewNotice('Reset All Settings')}>
                         <Text style={styles.dangerBtnText}>⚙️ Reset All Settings (Preview)</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={logout} style={[styles.dangerBtn, { backgroundColor: '#DC3545', borderColor: '#DC3545' }]}>
+                    <TouchableOpacity
+                        onPress={() => confirmAction('Sign Out', 'Are you sure you want to sign out of the Admin Portal?', () => { logout(); }, 'Sign Out', 'Cancel')}
+                        style={[styles.dangerBtn, { backgroundColor: '#DC3545', borderColor: '#DC3545' }]}
+                    >
                         <Text style={[styles.dangerBtnText, { color: '#fff' }]}>🚪 Sign Out</Text>
                     </TouchableOpacity>
                 </View>

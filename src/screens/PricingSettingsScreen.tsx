@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
      View,
      Text,
@@ -7,13 +7,13 @@ import {
      ScrollView,
      TextInput,
      ActivityIndicator,
-     Alert,
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLanguage } from '../context/LanguageContext';
 import { apiRequest } from '../utils/api';
+import { notify } from '../utils/notify';
 import Icon from 'react-native-vector-icons/Ionicons';
 
 const PricingSettingsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
@@ -22,18 +22,34 @@ const PricingSettingsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
      const { t } = useLanguage();
      const [rate, setRate] = useState<string>(user?.vehicle?.rate_per_km?.toString() || '5');
      const [loading, setLoading] = useState(false);
+     const savingRef = useRef(false);
+
+     useEffect(() => {
+          if (user?.vehicle?.rate_per_km !== undefined && user?.vehicle?.rate_per_km !== null) {
+               setRate(user.vehicle.rate_per_km.toString());
+          }
+     }, [user?.vehicle?.rate_per_km]);
 
      const handleSave = async () => {
-          if (!rate.trim() || !user?.vehicle) {
-               Alert.alert(t('common.error'), 'Please enter a valid rate');
+          if (loading || savingRef.current) return;
+          if (!user?.vehicle) {
+               notify(t('common.error'), 'Vehicle details not found.');
                return;
           }
 
+          const trimmedRate = rate.trim();
+          const parsedRate = Number(trimmedRate);
+          if (!trimmedRate || !Number.isFinite(parsedRate) || parsedRate <= 0) {
+               notify(t('common.error'), 'Please enter a valid positive rate per km.');
+               return;
+          }
+
+          savingRef.current = true;
           setLoading(true);
           try {
                const updatedVehicle = {
                     ...user.vehicle,
-                    rate_per_km: parseFloat(rate)
+                    rate_per_km: parsedRate
                };
 
                const response = await apiRequest('/api/user/profile', {
@@ -49,16 +65,17 @@ const PricingSettingsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
                     const latestToken = (await AsyncStorage.getItem('auth_token').catch(() => null)) || token;
                     const latestRefresh = (await AsyncStorage.getItem('auth_refresh_token').catch(() => null)) || refreshToken;
                     await setAuth(latestToken, latestRefresh, { ...user!, vehicle: updatedVehicle });
-                    Alert.alert('Success', 'Pricing rate updated successfully');
+                    notify('Success', 'Pricing rate updated successfully');
                     onBack();
                } else {
-                    const data = await response.json();
-                    Alert.alert(t('common.error'), data.error || 'Failed to update rate');
+                    const data = await response.json().catch(() => ({}));
+                    notify(t('common.error'), data.error || 'Failed to update rate');
                }
           } catch (err) {
                console.error('Update rate error:', err);
-               Alert.alert(t('common.error'), 'Connection error. Please try again.');
+               notify(t('common.error'), 'Connection error. Please try again.');
           } finally {
+               savingRef.current = false;
                setLoading(false);
           }
      };

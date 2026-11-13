@@ -7,6 +7,9 @@ import {
     ScrollView,
     Modal,
     Image,
+    Platform,
+    Linking,
+    ActivityIndicator,
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
@@ -15,12 +18,19 @@ import { notify } from '../utils/notify';
 
 import { API_BASE } from '../apiConfig';
 
+const isPdfUrl = (url: string): boolean => {
+    const lower = url.toLowerCase();
+    return /\.pdf(\?.*)?(#.*)?$/i.test(lower) || lower.includes('application/pdf');
+};
+
 const VehicleDetailsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const { colors } = useTheme();
     const { user } = useAuth();
     const { t } = useLanguage();
     const [previewVisible, setPreviewVisible] = useState(false);
     const [currentDoc, setCurrentDoc] = useState<{ label: string, url: string } | null>(null);
+    const [imageLoading, setImageLoading] = useState(false);
+    const [imageError, setImageError] = useState(false);
 
     const vehicle = user?.vehicle;
 
@@ -32,8 +42,16 @@ const VehicleDetailsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
         // Prepend API_BASE if it's a relative path from the server
         const fullUrl = url.startsWith('http') ? url : `${API_BASE}${url}`;
+        setImageError(false);
+        setImageLoading(!isPdfUrl(fullUrl));
         setCurrentDoc({ label, url: fullUrl });
         setPreviewVisible(true);
+    };
+
+    const handleClosePreview = () => {
+        setPreviewVisible(false);
+        setImageLoading(false);
+        setImageError(false);
     };
 
     if (!vehicle) {
@@ -54,6 +72,8 @@ const VehicleDetailsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         { label: t('login.uploadVehicleImg'), key: 'vehicle_image_url', url: vehicle.vehicle_image_url },
         { label: t('login.uploadOwnership'), key: 'ownership_url', url: vehicle.ownership_url },
     ];
+
+    const isCurrentPdf = currentDoc?.url ? isPdfUrl(currentDoc.url) : false;
 
     return (
         <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -98,23 +118,84 @@ const VehicleDetailsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 visible={previewVisible}
                 transparent={true}
                 animationType="fade"
-                onRequestClose={() => setPreviewVisible(false)}>
+                onRequestClose={handleClosePreview}>
                 <View style={styles.modalOverlay}>
                     <View style={[styles.modalContent, { backgroundColor: colors.cardColor }]}>
                         <View style={styles.modalHeader}>
                             <Text style={[styles.modalTitle, { color: colors.textColor }]}>{currentDoc?.label}</Text>
-                            <TouchableOpacity onPress={() => setPreviewVisible(false)}>
+                            <TouchableOpacity onPress={handleClosePreview}>
                                 <Text style={{ color: colors.primary, fontSize: 18, fontWeight: 'bold' }}>✕</Text>
                             </TouchableOpacity>
                         </View>
 
                         <View style={styles.imageContainer}>
                             {currentDoc?.url ? (
-                                <Image
-                                    source={{ uri: currentDoc.url }}
-                                    style={styles.previewImage}
-                                    resizeMode="contain"
-                                />
+                                isCurrentPdf ? (
+                                    Platform.OS === 'web' ? (
+                                        <View style={{ width: '100%', height: '100%' }}>
+                                            {React.createElement('iframe', {
+                                                src: currentDoc.url,
+                                                title: currentDoc.label,
+                                                style: {
+                                                    width: '100%',
+                                                    height: '100%',
+                                                    border: 'none',
+                                                    borderRadius: 8,
+                                                    flex: 1,
+                                                },
+                                            })}
+                                            <TouchableOpacity
+                                                style={[styles.openDocBtn, { backgroundColor: colors.primary }]}
+                                                onPress={() => Linking.openURL(currentDoc.url)}>
+                                                <Text style={styles.openDocBtnText}>Open PDF in New Tab</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    ) : (
+                                        <View style={styles.pdfFallback}>
+                                            <Text style={{ fontSize: 42, marginBottom: 12 }}>📄</Text>
+                                            <Text style={[styles.pdfTitle, { color: colors.textColor }]}>PDF Document</Text>
+                                            <Text style={[styles.pdfFilename, { color: colors.subtextColor }]} numberOfLines={2}>
+                                                {currentDoc.url.split('/').pop()}
+                                            </Text>
+                                            <TouchableOpacity
+                                                style={[styles.openDocBtn, { backgroundColor: colors.primary }]}
+                                                onPress={() => Linking.openURL(currentDoc.url)}>
+                                                <Text style={styles.openDocBtnText}>Open PDF</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    )
+                                ) : imageError ? (
+                                    <View style={styles.pdfFallback}>
+                                        <Text style={{ fontSize: 36, marginBottom: 10 }}>⚠️</Text>
+                                        <Text style={[styles.pdfTitle, { color: colors.textColor }]}>Unable to load preview</Text>
+                                        <TouchableOpacity
+                                            style={[styles.openDocBtn, { backgroundColor: colors.primary }]}
+                                            onPress={() => Linking.openURL(currentDoc.url)}>
+                                            <Text style={styles.openDocBtnText}>Open Document</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                ) : (
+                                    <>
+                                        {imageLoading && (
+                                            <ActivityIndicator
+                                                size="large"
+                                                color={colors.primary}
+                                                style={{ position: 'absolute', zIndex: 1 }}
+                                            />
+                                        )}
+                                        <Image
+                                            source={{ uri: currentDoc.url }}
+                                            style={styles.previewImage}
+                                            resizeMode="contain"
+                                            onLoadStart={() => setImageLoading(true)}
+                                            onLoadEnd={() => setImageLoading(false)}
+                                            onError={() => {
+                                                setImageLoading(false);
+                                                setImageError(true);
+                                            }}
+                                        />
+                                    </>
+                                )
                             ) : (
                                 <Text style={{ color: colors.subtextColor }}>Loading...</Text>
                             )}
@@ -239,10 +320,38 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         backgroundColor: 'rgba(0,0,0,0.05)',
         borderRadius: 12,
+        overflow: 'hidden',
     },
     previewImage: {
         width: '100%',
         height: '100%',
+    },
+    pdfFallback: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 24,
+    },
+    pdfTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        marginBottom: 6,
+    },
+    pdfFilename: {
+        fontSize: 13,
+        textAlign: 'center',
+        marginBottom: 16,
+    },
+    openDocBtn: {
+        marginTop: 12,
+        paddingVertical: 10,
+        paddingHorizontal: 18,
+        borderRadius: 10,
+        alignItems: 'center',
+    },
+    openDocBtnText: {
+        color: '#FFFFFF',
+        fontWeight: '700',
+        fontSize: 14,
     },
 });
 

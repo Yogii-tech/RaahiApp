@@ -31,6 +31,7 @@ const compressImage = (file: File): Promise<File> =>
                 canvas.height = Math.round(img.height * scale);
                 const ctx = canvas.getContext('2d');
                 if (!ctx) {
+                    URL.revokeObjectURL(url);
                     resolve(file);
                     return;
                 }
@@ -167,33 +168,72 @@ export const pickAndUploadDocument = (
         input.style.opacity = '0';
         document.body.appendChild(input);
 
-        const cleanup = () => {
-            if (input.parentNode) input.parentNode.removeChild(input);
+        let settled = false;
+        let uploadStarted = false;
+        let focusCancelTimer: ReturnType<typeof setTimeout> | null = null;
+
+        const finish = (result: string | null) => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            resolve(result);
         };
 
-        input.addEventListener('change', async () => {
+        const onChange = async () => {
+            uploadStarted = true;
+            if (focusCancelTimer) {
+                clearTimeout(focusCancelTimer);
+                focusCancelTimer = null;
+            }
             const file = input.files && input.files[0];
             if (!file) {
-                cleanup();
-                resolve(null);
+                finish(null);
                 return;
             }
             onUploadStart?.();
             try {
                 const url = await uploadDocumentFile(file, authToken, authOptions);
-                resolve(url);
+                finish(url);
             } catch (err: any) {
                 notify('Upload failed', err?.message || 'Upload failed. Please try again.');
-                resolve(null);
+                finish(null);
             } finally {
                 onUploadEnd?.();
-                cleanup();
             }
-        });
-        input.addEventListener('cancel', () => {
-            cleanup();
-            resolve(null);
-        });
+        };
+
+        const onCancel = () => {
+            finish(null);
+        };
+
+        const onWindowFocus = () => {
+            // Fallback for browsers/WebViews that don't emit input 'cancel'
+            if (focusCancelTimer) clearTimeout(focusCancelTimer);
+            focusCancelTimer = setTimeout(() => {
+                if (!uploadStarted && !settled) {
+                    finish(null);
+                }
+            }, 800);
+        };
+
+        const cleanup = () => {
+            if (focusCancelTimer) {
+                clearTimeout(focusCancelTimer);
+                focusCancelTimer = null;
+            }
+            input.removeEventListener('change', onChange);
+            input.removeEventListener('cancel', onCancel);
+            if (typeof window !== 'undefined') {
+                window.removeEventListener('focus', onWindowFocus);
+            }
+            if (input.parentNode) input.parentNode.removeChild(input);
+        };
+
+        input.addEventListener('change', onChange);
+        input.addEventListener('cancel', onCancel);
+        if (typeof window !== 'undefined') {
+            window.addEventListener('focus', onWindowFocus);
+        }
 
         input.click();
     });

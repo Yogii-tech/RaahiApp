@@ -76,34 +76,63 @@ const LocationInput: React.FC<LocationInputProps> = ({
     const [showDropdown, setShowDropdown] = useState(false);
     const [isFocused, setIsFocused] = useState(false);
     const timerRef = useRef<NodeJS.Timeout | null>(null);
+    const blurTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const suggestAbortRef = useRef<AbortController | null>(null);
+    const popularAbortRef = useRef<AbortController | null>(null);
+    const suggestSeqRef = useRef(0);
+    const inputFocusedRef = useRef(false);
     // On web, a click on a dropdown item fires: mousedown → input blur → mouseup → click.
     // If we close the dropdown on blur, the item's click never fires.
     // We track mousedown-on-dropdown so the blur handler knows to keep the dropdown open.
     const mouseDownOnDropdown = useRef(false);
 
-    // Fetch popular locations on mount or focus
+    useEffect(() => {
+        return () => {
+            if (timerRef.current) clearTimeout(timerRef.current);
+            if (blurTimerRef.current) clearTimeout(blurTimerRef.current);
+            suggestAbortRef.current?.abort();
+            popularAbortRef.current?.abort();
+        };
+    }, []);
+
+    // Fetch popular locations on focus when input is short
     useEffect(() => {
         if (isFocused && value.length < 3) {
-            fetchPopular();
+            if (popular.length === 0) {
+                fetchPopular();
+            }
         } else {
+            popularAbortRef.current?.abort();
             setPopular([]);
         }
     }, [isFocused, value]);
 
     const fetchPopular = async () => {
+        popularAbortRef.current?.abort();
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        popularAbortRef.current = controller;
+
         try {
-            const res = await fetch(`${API_BASE}/api/locations/suggestions`);
+            const res = await fetch(
+                `${API_BASE}/api/locations/suggestions`,
+                controller ? { signal: controller.signal } : undefined
+            );
+            if (controller?.signal.aborted) return;
             if (res.ok) {
                 const data = await res.json();
-                setPopular(data.map((item: any) => ({
-                    place_id: item.id,
-                    display_name: item.displayName,
-                    lat: item.lat,
-                    lon: item.lon,
-                    type: item.type,
-                })));
+                if (controller?.signal.aborted) return;
+                if (Array.isArray(data)) {
+                    setPopular(data.map((item: any) => ({
+                        place_id: item.id,
+                        display_name: item.displayName,
+                        lat: item.lat,
+                        lon: item.lon,
+                        type: item.type,
+                    })));
+                }
             }
-        } catch (err) {
+        } catch (err: any) {
+            if (err?.name === 'AbortError' || controller?.signal.aborted) return;
             console.error('Failed to fetch popular locations:', err);
             setPopular([
                 { place_id: 'p1', display_name: 'Rishikesh, Uttarakhand', lat: '30.0869', lon: '78.2676', type: 'popular' },
@@ -115,8 +144,12 @@ const LocationInput: React.FC<LocationInputProps> = ({
     };
 
     const fetchSuggestions = async (query: string) => {
+        suggestAbortRef.current?.abort();
+        const seq = ++suggestSeqRef.current;
+
         if (query.length < 1) {
             setSuggestions([]);
+            setLoading(false);
             return;
         }
 
@@ -129,16 +162,25 @@ const LocationInput: React.FC<LocationInputProps> = ({
 
         if (localMatches.length > 0) {
             setSuggestions(localMatches);
+            setLoading(false);
             return; // Return immediately with local results for instant feedback
         }
 
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        suggestAbortRef.current = controller;
         setLoading(true);
         try {
             // Use our new backend proxy to bypass CORS and User-Agent issues
-            const res = await apiRequest(`/api/location/search?q=${encodeURIComponent(query + ', Uttarakhand, India')}`, {}, logout);
+            const res = await apiRequest(
+                `/api/location/search?q=${encodeURIComponent(query + ', Uttarakhand, India')}`,
+                controller ? { signal: controller.signal } : {},
+                logout
+            );
+            if (seq !== suggestSeqRef.current || controller?.signal.aborted) return;
 
             if (res.ok) {
                 const data = await res.json();
+                if (seq !== suggestSeqRef.current || controller?.signal.aborted) return;
                 if (data && data.length > 0) {
                     setSuggestions(data.map((d: any) => ({
                         place_id: d.place_id,
@@ -166,22 +208,38 @@ const LocationInput: React.FC<LocationInputProps> = ({
                     type: "custom"
                 }]);
             }
-        } catch (err) {
+        } catch (err: any) {
+            if (err?.name === 'AbortError' || controller?.signal.aborted) return;
             console.error('Geocoding search error:', err);
-            setSuggestions([{
-                place_id: "custom",
-                display_name: `${query}, Uttarakhand (Custom)`,
-                lat: "30.0869",
-                lon: "78.2676",
-                type: "custom"
-            }]);
+            if (seq === suggestSeqRef.current) {
+                setSuggestions([{
+                    place_id: "custom",
+                    display_name: `${query}, Uttarakhand (Custom)`,
+                    lat: "30.0869",
+                    lon: "78.2676",
+                    type: "custom"
+                }]);
+            }
         } finally {
-            setLoading(false);
+            if (seq === suggestSeqRef.current && !controller?.signal.aborted) {
+                setLoading(false);
+            }
         }
+    };
+
+    const scheduleBlurClose = (delayMs: number) => {
+        if (blurTimerRef.current) clearTimeout(blurTimerRef.current);
+        blurTimerRef.current = setTimeout(() => {
+            if (!inputFocusedRef.current && !mouseDownOnDropdown.current) {
+                setIsFocused(false);
+                setShowDropdown(false);
+            }
+        }, delayMs);
     };
 
     const handleTextChange = (text: string) => {
         onChangeText(text);
+        setShowDropdown(true);
         if (timerRef.current) clearTimeout(timerRef.current);
 
         if (text.length >= 1) {
@@ -189,11 +247,20 @@ const LocationInput: React.FC<LocationInputProps> = ({
                 fetchSuggestions(text);
             }, 300);
         } else {
+            suggestSeqRef.current++;
+            suggestAbortRef.current?.abort();
+            setLoading(false);
             setSuggestions([]);
         }
     };
 
     const handleSelect = async (item: GeoResult) => {
+        if (timerRef.current) clearTimeout(timerRef.current);
+        if (blurTimerRef.current) clearTimeout(blurTimerRef.current);
+        suggestSeqRef.current++;
+        suggestAbortRef.current?.abort();
+        setLoading(false);
+
         // Commit the FULL selected name (e.g. "Bageshwar") to both the parent's
         // value state AND the displayed input — this is the core fix for the
         // "typed partial text is submitted instead of selected full name" bug.
@@ -205,6 +272,7 @@ const LocationInput: React.FC<LocationInputProps> = ({
         setSuggestions([]);
         setShowDropdown(false);
         setIsFocused(false);
+        inputFocusedRef.current = false;
         mouseDownOnDropdown.current = false;
 
         // Record the selection (best-effort)
@@ -251,21 +319,19 @@ const LocationInput: React.FC<LocationInputProps> = ({
                     value={value}
                     onChangeText={handleTextChange}
                     onFocus={() => {
+                        if (blurTimerRef.current) clearTimeout(blurTimerRef.current);
+                        inputFocusedRef.current = true;
                         setIsFocused(true);
                         setShowDropdown(true);
                     }}
                     onBlur={() => {
+                        inputFocusedRef.current = false;
                         // On web: if the user is pressing a dropdown item (mousedown fired on
                         // the dropdown container), keep the dropdown open so the click completes.
-                        // The dropdown will be closed inside handleSelect instead.
+                        // The dropdown will be closed inside handleSelect or onMouseUp/Leave.
                         if (mouseDownOnDropdown.current) return;
                         // Small delay for native touch — gives time for onPress to register
-                        setTimeout(() => {
-                            if (!mouseDownOnDropdown.current) {
-                                setIsFocused(false);
-                                setShowDropdown(false);
-                            }
-                        }, 200);
+                        scheduleBlurClose(200);
                     }}
                     placeholder={placeholder}
                     placeholderTextColor={colors.subtextColor}
@@ -286,9 +352,24 @@ const LocationInput: React.FC<LocationInputProps> = ({
                     ]}
                     // Web-only: track mousedown so blur doesn't close dropdown before click fires
                     {...(Platform.OS === 'web' ? {
-                        onMouseDown: () => { mouseDownOnDropdown.current = true; },
-                        onMouseUp:   () => { mouseDownOnDropdown.current = false; },
-                        onMouseLeave:() => { mouseDownOnDropdown.current = false; },
+                        onMouseDown: () => {
+                            if (blurTimerRef.current) clearTimeout(blurTimerRef.current);
+                            mouseDownOnDropdown.current = true;
+                        },
+                        onMouseUp: () => {
+                            mouseDownOnDropdown.current = false;
+                            if (!inputFocusedRef.current) {
+                                scheduleBlurClose(150);
+                            }
+                        },
+                        onMouseLeave: () => {
+                            if (mouseDownOnDropdown.current) {
+                                mouseDownOnDropdown.current = false;
+                                if (!inputFocusedRef.current) {
+                                    scheduleBlurClose(150);
+                                }
+                            }
+                        },
                     } as any : {})}
                 >
                     {popular.length > 0 && suggestions.length === 0 && (

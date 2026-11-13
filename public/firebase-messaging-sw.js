@@ -21,15 +21,33 @@ const messaging = firebase.messaging();
 // FCM can deliver the same push multiple times in edge cases. We track the last
 // 20 message IDs and suppress any duplicate within the same SW lifetime.
 const shownMessageIds = new Set();
+const recentFallbackKeys = new Map();
+const FALLBACK_DEDUP_WINDOW_MS = 10000;
 
-function isDuplicate(msgId) {
-  if (!msgId) return false;
-  if (shownMessageIds.has(msgId)) return true;
-  shownMessageIds.add(msgId);
-  // Keep set bounded: remove oldest entries beyond 20
-  if (shownMessageIds.size > 20) {
-    shownMessageIds.delete(shownMessageIds.values().next().value);
+function isDuplicate(msgId, fallbackKey) {
+  if (msgId) {
+    if (shownMessageIds.has(msgId)) return true;
+    shownMessageIds.add(msgId);
+    // Keep set bounded: remove oldest entries beyond 20
+    if (shownMessageIds.size > 20) {
+      shownMessageIds.delete(shownMessageIds.values().next().value);
+    }
+    return false;
   }
+
+  if (!fallbackKey) return false;
+  const now = Date.now();
+  // Prune expired fallback keys
+  for (const [key, ts] of recentFallbackKeys.entries()) {
+    if (now - ts > FALLBACK_DEDUP_WINDOW_MS) {
+      recentFallbackKeys.delete(key);
+    }
+  }
+  const prevTs = recentFallbackKeys.get(fallbackKey);
+  if (prevTs !== undefined && now - prevTs <= FALLBACK_DEDUP_WINDOW_MS) {
+    return true;
+  }
+  recentFallbackKeys.set(fallbackKey, now);
   return false;
 }
 
@@ -102,21 +120,22 @@ self.addEventListener('push', (event) => {
   const msgId = payload.messageId || payload.fcmMessageId ||
                 dataBlock.google?.c_id || '';
 
-  // Deduplicate — use the raw message ID (no prefix) so both this handler and
-  // onBackgroundMessage reference the same dedup set.
-  if (isDuplicate(msgId)) {
-    console.log('[SW] push: duplicate suppressed:', msgId);
-    return;
-  }
-
   const data  = dataBlock;
   const type  = data.type || 'general';
+  const relatedId = data.relatedId || data.bookingId || '';
   const title = notifBlock.title || data.title || 'GoRaahi';
   const opts  = buildNotificationOptions(data, type);
 
   let body = notifBlock.body || data.body || 'You have a new update.';
   if (opts.data?._extraLines) {
     body = body + opts.data._extraLines;
+  }
+
+  // Deduplicate — use messageId when present, otherwise a time-windowed fallback key
+  const fallbackKey = `${type}:${relatedId}:${data.action || ''}:${title}:${body}`;
+  if (isDuplicate(msgId, fallbackKey)) {
+    console.log('[SW] push: duplicate suppressed:', msgId || fallbackKey);
+    return;
   }
 
   console.log('[SW] push: showing notification — type:', type, 'title:', title);
@@ -135,8 +154,8 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
   const rawData = event.notification.data || {};
-  // Firebase Web SDK may nest the real payload under FCM_MSG
-  const payloadData = rawData.FCM_MSG?.data || rawData;
+  // Clone so we never mutate event.notification.data in-place
+  const payloadData = { ...(rawData.FCM_MSG?.data || rawData) };
   // Clean up internal helpers
   delete payloadData._extraLines;
 
@@ -147,12 +166,14 @@ self.addEventListener('notificationclick', (event) => {
   console.log('[SW] Notification clicked, type:', type, 'bookingId:', bookingId);
 
   // Determine the deep-link URL.
-  // Priority: explicit url field → type-based path → root
+  // Priority: explicit url field → type/action-based path → root
   let path = payloadData.url || '/';
 
   // Override for well-known types if url wasn't set in data
   if (!payloadData.url) {
-    if (type === 'booking_request') {
+    if (payloadData.action === 'rekyc') {
+      path = '/?rekyc=true';
+    } else if (type === 'booking_request') {
       path = '/?openRequests=true';
     } else if (type === 'booking_status' || type === 'ride_started' || type === 'ride_completed') {
       path = '/?openTrips=true';
@@ -185,3 +206,8 @@ self.addEventListener('notificationclick', (event) => {
 // Skip waiting so the new SW activates immediately without requiring a page reload.
 self.addEventListener('install',  () => self.skipWaiting());
 self.addEventListener('activate', (event) => event.waitUntil(clients.claim()));
+self.addEventListener('message',  (event) => {
+  if (event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});

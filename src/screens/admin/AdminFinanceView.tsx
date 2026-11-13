@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, ScrollView, TouchableOpacity, TextInput, useWindowDimensions } from 'react-native';
 import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
@@ -17,13 +17,18 @@ interface FinancialTransaction {
 }
 
 export default function AdminFinanceView({ token: _token, searchQuery = '', isDark }: { token: string; searchQuery?: string; isDark: boolean }) {
-    const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
+    const [rawRides, setRawRides] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     const [commissionRate, setCommissionRate] = useState('10.0');
+    const [selectedSchedule, setSelectedSchedule] = useState<'Daily' | 'Weekly (Fri)' | 'Monthly'>('Weekly (Fri)');
     const [activeTab, setActiveTab] = useState<'all' | 'settled' | 'pending'>('all');
     const { fetchWithAuth } = useAuth();
     const fetchWithAuthRef = useRef(fetchWithAuth);
     fetchWithAuthRef.current = fetchWithAuth;
+    const abortRef = useRef<AbortController | null>(null);
+    const reqIdRef = useRef(0);
     const { width } = useWindowDimensions();
     const isMobile = width < 768;
 
@@ -36,38 +41,75 @@ export default function AdminFinanceView({ token: _token, searchQuery = '', isDa
         accent: '#3B7DDD',
     };
 
-    useEffect(() => {
-        // Fetch rides list to build mock financial ledger
-        fetchWithAuthRef.current(`${API_BASE}/api/admin/rides`)
-            .then(res => res.json())
-            .then(rides => {
-                if (Array.isArray(rides)) {
-                    const mockTx: FinancialTransaction[] = rides.map((r, i) => {
-                        const totalAmount = (r.pricePerSeat || 150) * (r.seatsBooked || 2);
-                        const rate = parseFloat(commissionRate) / 100;
-                        const commission = Math.round(totalAmount * rate * 100) / 100;
-                        const netPayout = totalAmount - commission;
-                        const isSettled = r.status === 'completed';
+    const loadRides = useCallback((background = false) => {
+        abortRef.current?.abort();
+        const controller = new AbortController();
+        abortRef.current = controller;
+        const reqId = ++reqIdRef.current;
 
-                        return {
-                            id: `TXN-${10000 + i}`,
-                            rideId: r.id || `RIDE-${i}`,
-                            driverName: r.driver || 'Driver Partner',
-                            amount: totalAmount,
-                            commission: commission,
-                            netPayout: netPayout,
-                            status: isSettled ? 'settled' : 'pending',
-                            date: r.date || 'Today',
-                        };
-                    });
-                    setTransactions(mockTx);
-                } else {
-                    setTransactions([]);
-                }
+        if (background) {
+            setRefreshing(true);
+        } else {
+            setLoading(true);
+        }
+        setError(null);
+
+        fetchWithAuthRef.current(`${API_BASE}/api/admin/rides`, { signal: controller.signal })
+            .then(res => {
+                if (!res.ok) throw new Error(`Server error: ${res.status}`);
+                return res.json();
             })
-            .catch(() => setTransactions([]))
-            .finally(() => setLoading(false));
-    }, [commissionRate]);
+            .then(rides => {
+                if (reqId !== reqIdRef.current) return;
+                setRawRides(Array.isArray(rides) ? rides : []);
+            })
+            .catch((err: any) => {
+                if (err?.name === 'AbortError' || reqId !== reqIdRef.current) return;
+                setError(err?.message || 'Failed to load financial rides ledger');
+                if (!background) setRawRides([]);
+            })
+            .finally(() => {
+                if (reqId === reqIdRef.current) {
+                    setLoading(false);
+                    setRefreshing(false);
+                }
+            });
+    }, []);
+
+    useEffect(() => {
+        loadRides(false);
+        return () => {
+            reqIdRef.current += 1;
+            abortRef.current?.abort();
+        };
+    }, [loadRides]);
+
+    const parsedRate = parseFloat(commissionRate);
+    const isValidRate = commissionRate.trim() !== '' && Number.isFinite(parsedRate) && parsedRate >= 0 && parsedRate <= 100;
+    const effectiveRatePct = isValidRate ? parsedRate : 0;
+
+    const transactions = useMemo<FinancialTransaction[]>(() => {
+        const rate = effectiveRatePct / 100;
+        return rawRides.map((r, i) => {
+            const price = typeof r.pricePerSeat === 'number' && Number.isFinite(r.pricePerSeat) ? r.pricePerSeat : 0;
+            const seats = typeof r.seatsBooked === 'number' && Number.isFinite(r.seatsBooked) ? r.seatsBooked : 0;
+            const totalAmount = price * seats;
+            const commission = Math.round(totalAmount * rate * 100) / 100;
+            const netPayout = Math.round((totalAmount - commission) * 100) / 100;
+            const isSettled = r.status === 'completed';
+
+            return {
+                id: `TXN-${10000 + i}`,
+                rideId: r.id || `RIDE-${i}`,
+                driverName: r.driver || 'Driver Partner',
+                amount: totalAmount,
+                commission,
+                netPayout,
+                status: isSettled ? 'settled' : 'pending',
+                date: r.date || 'Today',
+            };
+        });
+    }, [rawRides, effectiveRatePct]);
 
     const totalRevenue = transactions.reduce((acc, curr) => acc + curr.amount, 0);
     const totalCommission = transactions.reduce((acc, curr) => acc + curr.commission, 0);
@@ -86,13 +128,18 @@ export default function AdminFinanceView({ token: _token, searchQuery = '', isDa
     });
 
     const handleSaveCommission = () => {
+        if (!isValidRate) {
+            notify('Invalid Rate', 'Enter a commission percentage between 0 and 100.');
+            return;
+        }
         notify(
             'Preview / Demo Mode',
-            `Commission rate preview updated locally to ${commissionRate}%. Changes are not persisted to the backend.`
+            `Commission rate preview updated locally to ${effectiveRatePct}%. Changes are not persisted to the backend.`
         );
     };
 
-    const handleSchedulePreview = (schedule: string) => {
+    const handleSchedulePreview = (schedule: 'Daily' | 'Weekly (Fri)' | 'Monthly') => {
+        setSelectedSchedule(schedule);
         notify(
             'Preview / Demo Mode',
             `Settlement schedule "${schedule}" is a demo control and does not persist to the backend.`
@@ -110,7 +157,18 @@ export default function AdminFinanceView({ token: _token, searchQuery = '', isDa
         Date: t.date
     }));
 
-    if (loading) return <ActivityIndicator color="#3B7DDD" size="large" style={{ marginTop: 60 }} />;
+    if (loading && rawRides.length === 0) return <ActivityIndicator color="#3B7DDD" size="large" style={{ marginTop: 60 }} />;
+
+    if (error && rawRides.length === 0) {
+        return (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 }}>
+                <Text style={{ color: '#DC3545', fontSize: 16, fontWeight: 'bold', marginBottom: 12 }}>{error}</Text>
+                <TouchableOpacity style={styles.exportBtn} onPress={() => loadRides(false)}>
+                    <Text style={styles.exportBtnText}>↻ Retry</Text>
+                </TouchableOpacity>
+            </View>
+        );
+    }
 
     return (
         <ScrollView style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: T.bg }]} contentContainerStyle={{ paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
@@ -121,12 +179,21 @@ export default function AdminFinanceView({ token: _token, searchQuery = '', isDa
                         Manage booking commissions, driver payment settlements, and revenue splits.
                     </Text>
                 </View>
-                <TouchableOpacity
-                    style={styles.exportBtn}
-                    onPress={() => downloadCSV(exportData, 'Finance_Transactions_Ledger')}
-                >
-                    <Text style={styles.exportBtnText}>Export Ledger CSV</Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
+                    <TouchableOpacity
+                        style={[styles.optBtn, { backgroundColor: T.card, borderColor: T.border }, refreshing && { opacity: 0.6 }]}
+                        onPress={() => loadRides(true)}
+                        disabled={refreshing}
+                    >
+                        <Text style={{ color: T.text, fontSize: 13, fontWeight: '500' }}>{refreshing ? '↻ Refreshing...' : '↻ Refresh'}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={styles.exportBtn}
+                        onPress={() => downloadCSV(exportData, 'Finance_Transactions_Ledger')}
+                    >
+                        <Text style={styles.exportBtnText}>Export Ledger CSV</Text>
+                    </TouchableOpacity>
+                </View>
             </View>
 
             <View style={[styles.previewBanner, { borderColor: '#FCB92C66', backgroundColor: isDark ? 'rgba(252, 185, 44, 0.12)' : '#FFFBEB' }]}>
@@ -175,6 +242,11 @@ export default function AdminFinanceView({ token: _token, searchQuery = '', isDa
                             <Text style={styles.saveBtnText}>Preview Rate (Demo)</Text>
                         </TouchableOpacity>
                     </View>
+                    {!isValidRate && (
+                        <Text style={{ color: '#DC3545', fontSize: 12, marginTop: 8 }}>
+                            Enter a valid percentage (0–100). Using 0% for preview calculation.
+                        </Text>
+                    )}
                 </View>
 
                 {/* Auto Settlement Config */}
@@ -184,17 +256,17 @@ export default function AdminFinanceView({ token: _token, searchQuery = '', isDa
                         Demo UI only — automated bank settlement triggers are not connected to a backend payout service.
                     </Text>
                     <View style={{ flexDirection: 'row', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
-                        {['Daily', 'Weekly (Fri)', 'Monthly'].map(opt => (
+                        {(['Daily', 'Weekly (Fri)', 'Monthly'] as const).map(opt => (
                             <TouchableOpacity
                                 key={opt}
                                 onPress={() => handleSchedulePreview(opt)}
                                 style={[
                                     styles.optBtn,
                                     { borderColor: T.border },
-                                    opt === 'Weekly (Fri)' && { backgroundColor: T.accent, borderColor: T.accent }
+                                    selectedSchedule === opt && { backgroundColor: T.accent, borderColor: T.accent }
                                 ]}
                             >
-                                <Text style={{ color: opt === 'Weekly (Fri)' ? '#fff' : T.text, fontSize: 13, fontWeight: '500' }}>
+                                <Text style={{ color: selectedSchedule === opt ? '#fff' : T.text, fontSize: 13, fontWeight: '500' }}>
                                     {opt}
                                 </Text>
                             </TouchableOpacity>

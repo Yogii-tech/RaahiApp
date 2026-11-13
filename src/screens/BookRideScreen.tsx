@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View,
     Text,
@@ -57,6 +57,8 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
     const [loading, setLoading] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [bookingId, setBookingId] = useState('');
+    const submittingRef = useRef(false);
+    const pollAbortRef = useRef<AbortController | null>(null);
     const [isAppActive, setIsAppActive] = useState<boolean>(() => {
         if (Platform.OS === 'web') {
             return typeof document === 'undefined' || document.visibilityState === 'visible';
@@ -101,18 +103,11 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
                 : ride.pricePerSeat || initialRide.pricePerSeat || 0;
     const totalPrice = Math.round(unitPrice * selectedSeats.length);
 
-    useEffect(() => {
-        if (!isFocused || !isAppActive) return;
-        fetchRideDetails();
-        const interval = setInterval(() => {
-            if (Platform.OS === 'web' && typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
-            if (Platform.OS !== 'web' && AppState.currentState !== 'active') return;
-            fetchRideDetails();
-        }, 5000); // Poll every 5 seconds while focused and active
-        return () => clearInterval(interval);
-    }, [initialRide.id, isFocused, isAppActive]);
-
     const fetchRideDetails = async () => {
+        pollAbortRef.current?.abort();
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        pollAbortRef.current = controller;
+
         try {
             const rideId = initialRide.id || (initialRide as any)._id;
             let url = `/api/rides/${rideId}`;
@@ -123,9 +118,11 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
                 url += `?${queryParams.join('&')}`;
             }
 
-            const response = await apiRequest(url, {}, logout);
+            const response = await apiRequest(url, controller ? { signal: controller.signal } : {}, logout);
+            if (controller?.signal.aborted) return;
             if (response.ok) {
                 const data = await response.json();
+                if (controller?.signal.aborted) return;
                 setRide(prev => ({
                     ...prev,
                     ...data,
@@ -140,10 +137,31 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
                     setSelectedSeats(prev => prev.filter(s => !data.takenSeats.includes(s)));
                 }
             }
-        } catch (err) {
+        } catch (err: any) {
+            if (err?.name === 'AbortError' || controller?.signal.aborted) return;
             console.error('Fetch ride details error:', err);
         }
     };
+
+    const fetchRideDetailsRef = useRef(fetchRideDetails);
+    fetchRideDetailsRef.current = fetchRideDetails;
+
+    useEffect(() => {
+        if (!isFocused || !isAppActive || loading || showSuccessModal) {
+            pollAbortRef.current?.abort();
+            return;
+        }
+        fetchRideDetailsRef.current();
+        const interval = setInterval(() => {
+            if (Platform.OS === 'web' && typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+            if (Platform.OS !== 'web' && AppState.currentState !== 'active') return;
+            fetchRideDetailsRef.current();
+        }, 5000); // Poll every 5 seconds while focused, active, and idle
+        return () => {
+            clearInterval(interval);
+            pollAbortRef.current?.abort();
+        };
+    }, [initialRide.id, isFocused, isAppActive, loading, showSuccessModal]);
 
     const toggleSeat = (index: number) => {
         if (selectedSeats.includes(index)) {
@@ -157,12 +175,15 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
     };
 
     const handleBook = async () => {
+        if (loading || submittingRef.current) return;
         if (selectedSeats.length === 0) {
             notify(t('book.wait'), t('book.selectAtLeastOne'));
             return;
         }
 
+        submittingRef.current = true;
         setLoading(true);
+        pollAbortRef.current?.abort();
         try {
             const rideId = ride.id || (ride as any)._id || initialRide.id;
             const response = await apiRequest(`/api/rides/${rideId}/book`, {
@@ -178,8 +199,14 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
             }, logout);
 
             if (response.ok) {
-                const randomId = Math.floor(1000 + Math.random() * 9000);
-                setBookingId(`RA-${randomId}`);
+                const data = await response.json().catch(() => ({}));
+                const rawServerId = data?.bookingId || data?.id || data?._id;
+                const formattedId = rawServerId
+                    ? (/^(RA|GO)-/i.test(String(rawServerId))
+                        ? String(rawServerId).toUpperCase()
+                        : `RA-${String(rawServerId).slice(-4).toUpperCase()}`)
+                    : `RA-${Math.floor(1000 + Math.random() * 9000)}`;
+                setBookingId(formattedId);
                 setShowSuccessModal(true);
             } else {
                 const errorData = await response.json().catch(() => ({}));
@@ -191,6 +218,7 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
             const errStr = t('book.errorConnect') || 'Error connecting to server';
             notify(t('common.error'), errStr);
         } finally {
+            submittingRef.current = false;
             setLoading(false);
         }
     };
@@ -301,6 +329,19 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
                         <Text style={[styles.modalSubtitle, { color: colors.subtextColor }]}>
                             {t('book.awaitingApproval')}
                         </Text>
+
+                        {bookingId ? (
+                            <View style={styles.bookingIdCard}>
+                                <View style={styles.bookingIdHeader}>
+                                    <Text style={styles.bookingIdLabel}>BOOKING REFERENCE</Text>
+                                    <View style={styles.verifiedTag}>
+                                        <Text style={styles.verifiedTagText}>REQUEST SENT</Text>
+                                    </View>
+                                </View>
+                                <Text style={styles.bookingIdText}>{bookingId}</Text>
+                                <Text style={styles.bookingIdFooter}>SHOW THIS ID WHEN BOARDING</Text>
+                            </View>
+                        ) : null}
 
                         <TouchableOpacity
                             style={styles.returnHomeBtn}

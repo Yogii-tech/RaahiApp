@@ -13,6 +13,22 @@ export type AuthTokenListener = (newToken: string | null, newRefreshToken?: stri
 
 const authTokenListeners = new Set<AuthTokenListener>();
 let refreshPromise: Promise<string | null> | null = null;
+let authSessionGeneration = 0;
+
+/**
+ * Returns the current auth session generation. Incremented on logout/session reset
+ * so an in-flight refresh can never resurrect tokens for a terminated session.
+ */
+export const getAuthSessionGeneration = (): number => authSessionGeneration;
+
+/**
+ * Bumps the auth session generation and drops any shared in-flight refresh promise.
+ */
+export const bumpAuthSessionGeneration = (): number => {
+    authSessionGeneration += 1;
+    refreshPromise = null;
+    return authSessionGeneration;
+};
 
 export const registerAuthTokenListener = (listener: AuthTokenListener): (() => void) => {
     authTokenListeners.add(listener);
@@ -57,7 +73,8 @@ export const refreshAuthToken = async (explicitRefreshToken?: string | null): Pr
         return refreshPromise;
     }
 
-    refreshPromise = (async (): Promise<string | null> => {
+    const startGeneration = authSessionGeneration;
+    const currentRefreshPromise = (async (): Promise<string | null> => {
         let refreshToken = explicitRefreshToken ?? null;
         if (!refreshToken) {
             try {
@@ -65,6 +82,10 @@ export const refreshAuthToken = async (explicitRefreshToken?: string | null): Pr
             } catch {
                 refreshToken = null;
             }
+        }
+
+        if (authSessionGeneration !== startGeneration) {
+            return null;
         }
 
         try {
@@ -77,11 +98,15 @@ export const refreshAuthToken = async (explicitRefreshToken?: string | null): Pr
                 credentials: 'include',
             });
 
-            if (!refreshResponse.ok) {
+            if (authSessionGeneration !== startGeneration || !refreshResponse.ok) {
                 return null;
             }
 
             const data = await refreshResponse.json();
+            if (authSessionGeneration !== startGeneration) {
+                return null;
+            }
+
             const newToken: string | null = data?.token || null;
             const rotatedRefresh: string | null = data?.refresh_token || null;
 
@@ -94,6 +119,14 @@ export const refreshAuthToken = async (explicitRefreshToken?: string | null): Pr
                 } catch {
                     // Ignore storage write failures; listeners still receive the new token
                 }
+                if (authSessionGeneration !== startGeneration) {
+                    // Session was logged out while writing storage; clean up before returning
+                    try {
+                        await AsyncStorage.removeItem('auth_token');
+                        await AsyncStorage.removeItem('auth_refresh_token');
+                    } catch { /* ignore */ }
+                    return null;
+                }
                 notifyAuthTokenListeners(newToken, rotatedRefresh ?? refreshToken);
             }
 
@@ -103,10 +136,13 @@ export const refreshAuthToken = async (explicitRefreshToken?: string | null): Pr
             return null;
         }
     })().finally(() => {
-        refreshPromise = null;
+        if (refreshPromise === currentRefreshPromise) {
+            refreshPromise = null;
+        }
     });
 
-    return refreshPromise;
+    refreshPromise = currentRefreshPromise;
+    return currentRefreshPromise;
 };
 
 export const apiRequest = async (
@@ -135,12 +171,13 @@ export const apiRequest = async (
 
     // Handle 401 Unauthorized (Token expired)
     if (response.status === 401) {
+        const requestGeneration = authSessionGeneration;
         const latestToken = await AsyncStorage.getItem('auth_token').catch(() => null);
-        const newToken = (latestToken && latestToken !== token)
+        const newToken = (authSessionGeneration === requestGeneration && latestToken && latestToken !== token)
             ? latestToken
             : await refreshAuthToken();
 
-        if (newToken) {
+        if (newToken && authSessionGeneration === requestGeneration) {
             // Retry original request with NEW token
             const retryHeaders = {
                 ...headers,
@@ -152,7 +189,11 @@ export const apiRequest = async (
                 headers: retryHeaders,
                 credentials: 'include',
             });
-        } else {
+
+            if (response.status === 401 && logoutCallback) {
+                logoutCallback();
+            }
+        } else if (authSessionGeneration === requestGeneration) {
             // Refresh token also expired or revoked
             if (logoutCallback) logoutCallback();
         }

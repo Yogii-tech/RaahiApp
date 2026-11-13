@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { downloadCSV } from '../../utils/exportUtils';
 import { API_BASE } from '../../apiConfig';
@@ -31,7 +31,13 @@ const STATUS_COLORS: Record<string, string> = {
 export default function AdminRoutesDetailView({ isDark, searchQuery = '' }: { isDark: boolean; searchQuery?: string }) {
      const [routes, setRoutes] = useState<RouteRow[]>([]);
      const [loading, setLoading] = useState(true);
+     const [refreshing, setRefreshing] = useState(false);
+     const [error, setError] = useState<string | null>(null);
      const { fetchWithAuth } = useAuth();
+     const fetchWithAuthRef = useRef(fetchWithAuth);
+     fetchWithAuthRef.current = fetchWithAuth;
+     const abortRef = useRef<AbortController | null>(null);
+     const reqIdRef = useRef(0);
      const { width } = useWindowDimensions();
      const isMobile = width < 768;
 
@@ -44,16 +50,48 @@ export default function AdminRoutesDetailView({ isDark, searchQuery = '' }: { is
           accent: '#3B7DDD',
      };
 
-     const fetchData = () => {
-          setLoading(true);
-          fetchWithAuth(`${API_BASE}/api/admin/routes`)
-               .then(r => r.json())
-               .then(d => setRoutes(Array.isArray(d) ? d : []))
-               .catch(() => setRoutes([]))
-               .finally(() => setLoading(false));
-     };
+     const fetchData = useCallback((background = false) => {
+          abortRef.current?.abort();
+          const controller = new AbortController();
+          abortRef.current = controller;
+          const reqId = ++reqIdRef.current;
 
-     useEffect(() => { fetchData(); }, []);
+          if (background) {
+               setRefreshing(true);
+          } else {
+               setLoading(true);
+          }
+          setError(null);
+
+          fetchWithAuthRef.current(`${API_BASE}/api/admin/routes`, { signal: controller.signal })
+               .then(r => {
+                    if (!r.ok) throw new Error(`Server error: ${r.status}`);
+                    return r.json();
+               })
+               .then(d => {
+                    if (reqId !== reqIdRef.current) return;
+                    setRoutes(Array.isArray(d) ? d : []);
+               })
+               .catch((err: any) => {
+                    if (err?.name === 'AbortError' || reqId !== reqIdRef.current) return;
+                    setError(err?.message || 'Could not load routes');
+                    if (!background) setRoutes([]);
+               })
+               .finally(() => {
+                    if (reqId === reqIdRef.current) {
+                         setLoading(false);
+                         setRefreshing(false);
+                    }
+               });
+     }, []);
+
+     useEffect(() => {
+          fetchData(false);
+          return () => {
+               reqIdRef.current += 1;
+               abortRef.current?.abort();
+          };
+     }, [fetchData]);
 
      const filteredRoutes = routes.filter(r =>
           (r.route || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -61,11 +99,11 @@ export default function AdminRoutesDetailView({ isDark, searchQuery = '' }: { is
           (r.id || '').toLowerCase().includes(searchQuery.toLowerCase())
      );
 
-     // Derived stats from real data
-     const totalBookings = routes.reduce((s, r) => s + r.bookings, 0);
-     const totalCancels = routes.reduce((s, r) => s + r.cancellations, 0);
-     const uniqueRoutes = routes.length;
-     const avgPrice = routes.length > 0 ? Math.round(routes.reduce((s, r) => s + r.avgPrice, 0) / routes.length) : 0;
+     // Derived stats matching filtered routes
+     const totalBookings = filteredRoutes.reduce((s, r) => s + r.bookings, 0);
+     const totalCancels = filteredRoutes.reduce((s, r) => s + r.cancellations, 0);
+     const uniqueRoutes = filteredRoutes.length;
+     const avgPrice = filteredRoutes.length > 0 ? Math.round(filteredRoutes.reduce((s, r) => s + r.avgPrice, 0) / filteredRoutes.length) : 0;
 
      const statCards: StatsRow[] = [
           { id: 'bookings', label: 'Total Bookings', count: totalBookings.toLocaleString(), icon: '📈', color: '#3B7DDD' },
@@ -74,21 +112,39 @@ export default function AdminRoutesDetailView({ isDark, searchQuery = '' }: { is
           { id: 'price', label: 'Avg. Price', count: `₹${avgPrice}`, icon: '💰', color: '#FCB92C' },
      ];
 
-     if (loading) return <ActivityIndicator color="#3B7DDD" size="large" style={{ marginTop: 60 }} />;
+     if (loading && routes.length === 0) return <ActivityIndicator color="#3B7DDD" size="large" style={{ marginTop: 60 }} />;
+
+     if (error && routes.length === 0) {
+          return (
+               <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 }}>
+                    <Text style={{ color: '#DC3545', fontSize: 16, fontWeight: 'bold', marginBottom: 12 }}>{error}</Text>
+                    <TouchableOpacity onPress={() => fetchData(false)} style={styles.primaryBtn}>
+                         <Text style={styles.primaryBtnText}>↻ Retry</Text>
+                    </TouchableOpacity>
+               </View>
+          );
+     }
 
      return (
           <ScrollView style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: T.bg }]} showsVerticalScrollIndicator={false}>
                <View style={[styles.header, isMobile && { flexDirection: 'column', alignItems: 'flex-start', gap: 12 }]}>
                     <Text style={[styles.headerTitle, { color: T.text }]}>Route Analytics</Text>
                     <View style={[styles.headerButtons, { flexWrap: 'wrap', gap: 10 }]}>
-                         <TouchableOpacity onPress={fetchData} style={[styles.ghostBtn, { borderColor: T.border }]}>
-                              <Text style={[styles.ghostBtnText, { color: T.text }]}>↻ Refresh</Text>
+                         <TouchableOpacity
+                              onPress={() => fetchData(true)}
+                              disabled={refreshing}
+                              style={[styles.ghostBtn, { borderColor: T.border }, refreshing && { opacity: 0.6 }]}
+                         >
+                              <Text style={[styles.ghostBtnText, { color: T.text }]}>{refreshing ? '↻ Refreshing...' : '↻ Refresh'}</Text>
                          </TouchableOpacity>
-                         <TouchableOpacity onPress={() => downloadCSV(routes, 'Routes_Report')} style={styles.primaryBtn}>
+                         <TouchableOpacity onPress={() => downloadCSV(filteredRoutes, 'Routes_Report')} style={styles.primaryBtn}>
                               <Text style={styles.primaryBtnText}>Export Analysis</Text>
                          </TouchableOpacity>
                     </View>
                </View>
+               {error && (
+                    <Text style={{ color: '#DC3545', fontSize: 12, marginBottom: 12 }}>Refresh failed: {error}</Text>
+               )}
 
                {/* KPI Cards */}
                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 10 }}>

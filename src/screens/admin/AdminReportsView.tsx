@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView, useWindowDimensions } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView, ActivityIndicator, useWindowDimensions } from 'react-native';
 import { API_BASE } from '../../apiConfig';
 import { notify } from '../../utils/notify';
 
@@ -10,29 +10,42 @@ const REPORTS = [
 ];
 
 export default function AdminReportsView({ token }: { token: string }) {
+    const [downloadingReport, setDownloadingReport] = useState<string | null>(null);
     const { width } = useWindowDimensions();
     const isMobile = width < 768;
 
-    const handleDownload = (type: string, label: string) => {
-        if (Platform.OS === 'web') {
+    const handleDownload = async (type: string, label: string) => {
+        if (downloadingReport) return;
+        if (Platform.OS !== 'web') {
+            notify('Download', `${label} CSV will be available on web.`);
+            return;
+        }
+        setDownloadingReport(type);
+        try {
             const url = `${API_BASE}/api/admin/reports/${type}`;
-            // Create invisible anchor and trigger download
+            const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+            if (!res.ok) {
+                let errMsg = `Download failed (${res.status})`;
+                try {
+                    const errBody = await res.json();
+                    if (errBody?.error) errMsg = errBody.error;
+                } catch {}
+                throw new Error(errMsg);
+            }
+            const blob = await res.blob();
+            const blobUrl = URL.createObjectURL(blob);
             // @ts-ignore
             const anchor = document.createElement('a');
-            anchor.href = url;
+            anchor.href = blobUrl;
             anchor.setAttribute('download', `${type}.csv`);
-            // We need auth, so we fetch it as blob
-            fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-                .then(res => res.blob())
-                .then(blob => {
-                    const blobUrl = URL.createObjectURL(blob);
-                    anchor.href = blobUrl;
-                    anchor.click();
-                    URL.revokeObjectURL(blobUrl);
-                })
-                .catch(() => notify('Error', 'Download failed'));
-        } else {
-            notify('Download', `${label} CSV will be available on web.`);
+            document.body.appendChild(anchor);
+            anchor.click();
+            document.body.removeChild(anchor);
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+        } catch (err: any) {
+            notify('Error', err?.message || 'Download failed');
+        } finally {
+            setDownloadingReport(null);
         }
     };
 
@@ -41,18 +54,27 @@ export default function AdminReportsView({ token }: { token: string }) {
             <Text style={styles.sectionLabel}>MANAGEMENT HUB</Text>
             <Text style={[styles.pageTitle, isMobile && { fontSize: 24, marginBottom: 20 }]}>Reports</Text>
             <View style={styles.cardsRow}>
-                {REPORTS.map(report => (
-                    <View key={report.type} style={[styles.card, isMobile && { minWidth: '100%', padding: 20 }]}>
-                        <Text style={styles.cardIcon}>{report.icon}</Text>
-                        <Text style={styles.cardLabel}>{report.label}</Text>
-                        <TouchableOpacity
-                            style={styles.downloadBtn}
-                            onPress={() => handleDownload(report.type, report.label)}
-                            activeOpacity={0.8}>
-                            <Text style={styles.downloadText}>DOWNLOAD CSV</Text>
-                        </TouchableOpacity>
-                    </View>
-                ))}
+                {REPORTS.map(report => {
+                    const isDownloading = downloadingReport === report.type;
+                    const isBusy = downloadingReport !== null;
+                    return (
+                        <View key={report.type} style={[styles.card, isMobile && { minWidth: '100%', padding: 20 }]}>
+                            <Text style={styles.cardIcon}>{report.icon}</Text>
+                            <Text style={styles.cardLabel}>{report.label}</Text>
+                            <TouchableOpacity
+                                style={[styles.downloadBtn, isBusy && { opacity: 0.65 }]}
+                                onPress={() => handleDownload(report.type, report.label)}
+                                disabled={isBusy}
+                                activeOpacity={0.8}>
+                                {isDownloading ? (
+                                    <ActivityIndicator color="#FFFFFF" size="small" />
+                                ) : (
+                                    <Text style={styles.downloadText}>DOWNLOAD CSV</Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    );
+                })}
             </View>
         </ScrollView>
     );

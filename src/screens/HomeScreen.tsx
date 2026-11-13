@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View,
     Text,
@@ -47,6 +47,8 @@ interface Ride {
 
 
 
+type HomeView = 'home' | 'available' | 'book' | 'parcel' | 'resubmit_kyc';
+
 const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) => {
     const { isDark, colors } = useTheme();
     const { token, refreshToken, user, logout, setAuth } = useAuth();
@@ -57,7 +59,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
     const isDriver = user?.role === 'driver';
     const isParceller = user?.role === 'parceller';
 
-    const [view, setView] = useState<string>('home');
+    const [view, setView] = useState<HomeView>('home');
     const [selectedRide, setSelectedRide] = useState<Ride | null>(null);
     const [pickup, setPickup] = useState(() => loadFormDraft('home_pickup', ''));
     const [dropoff, setDropoff] = useState(() => loadFormDraft('home_dropoff', ''));
@@ -97,9 +99,16 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
     const [previewAttempted, setPreviewAttempted] = useState(false);
     const [totalDistanceKm, setTotalDistanceKm] = useState<number | null>(null);
     const [postingRide, setPostingRide] = useState(false);
+    const [findingRides, setFindingRides] = useState(false);
     const [pricePerSeat, setPricePerSeat] = useState(() => loadFormDraft('home_pricePerSeat', ''));
     const [hideVerificationBanner, setHideVerificationBanner] = useState(false);
-    const [showResubmitKYC, setShowResubmitKYC] = useState(false);
+
+    const findingRidesRef = useRef(false);
+    const postingRideRef = useRef(false);
+    const routePreviewAbortRef = useRef<AbortController | null>(null);
+    const landmarksAbortRef = useRef<AbortController | null>(null);
+    const authStateRef = useRef({ token, refreshToken, user, logout, setAuth });
+    authStateRef.current = { token, refreshToken, user, logout, setAuth };
 
     // Save draft state to sessionStorage
     useEffect(() => { saveFormDraft('home_pickup', pickup); }, [pickup]);
@@ -109,7 +118,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
     useEffect(() => { saveFormDraft('home_timePeriod', timePeriod); }, [timePeriod]);
     useEffect(() => { saveFormDraft('home_pricePerSeat', pricePerSeat); }, [pricePerSeat]);
 
-    const navigateToView = (newView: string) => {
+    const navigateToView = (newView: HomeView) => {
+        if (newView === 'book' && !selectedRide) return;
         if (newView !== 'home') {
             pushSubViewHistory(newView);
         }
@@ -119,7 +129,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
     useBrowserBack(view !== 'home', () => {
         if (view === 'book') {
             setView('available');
-        } else if (view === 'available' || view === 'parcel') {
+        } else if (view === 'available' || view === 'parcel' || view === 'resubmit_kyc') {
             setView('home');
             if (setParcelMode) setParcelMode(false);
         }
@@ -129,24 +139,29 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
     useEffect(() => {
         fetchRecentRides();
         if (isDriver) refreshDriverProfile();
+        return () => {
+            routePreviewAbortRef.current?.abort();
+            landmarksAbortRef.current?.abort();
+        };
     }, []);
 
     // Re-sync verification status whenever screen comes into focus
     useEffect(() => {
         if (isFocused && isDriver) refreshDriverProfile();
-    }, [isFocused]);
+    }, [isFocused, isDriver]);
 
     const refreshDriverProfile = async () => {
         try {
-            const response = await apiRequest('/api/user/profile', {}, logout);
+            const { token: curToken, refreshToken: curRefresh, user: curUser, logout: curLogout, setAuth: curSetAuth } = authStateRef.current;
+            const response = await apiRequest('/api/user/profile', {}, curLogout);
             if (response.ok) {
                 const fresh = await response.json();
-                if (fresh.verification_status !== user?.verification_status ||
-                    fresh.rejection_reason !== user?.rejection_reason) {
-                    const latestToken = (await AsyncStorage.getItem('auth_token').catch(() => null)) || token;
-                    const latestRefresh = (await AsyncStorage.getItem('auth_refresh_token').catch(() => null)) || refreshToken;
-                    await setAuth(latestToken, latestRefresh, {
-                        ...user,
+                if (fresh.verification_status !== curUser?.verification_status ||
+                    fresh.rejection_reason !== curUser?.rejection_reason) {
+                    const latestToken = (await AsyncStorage.getItem('auth_token').catch(() => null)) || curToken;
+                    const latestRefresh = (await AsyncStorage.getItem('auth_refresh_token').catch(() => null)) || curRefresh;
+                    await curSetAuth(latestToken, latestRefresh, {
+                        ...curUser,
                         verification_status: fresh.verification_status,
                         rejection_reason: fresh.rejection_reason,
                     } as any);
@@ -166,9 +181,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                 setRecentRides(Array.isArray(data) ? data : []);
             } else {
                 setRecentRides([]);
+                setError(true);
             }
         } catch {
             setRecentRides([]);
+            setError(true);
         } finally {
             setLoading(false);
         }
@@ -176,25 +193,39 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
 
     const fetchRoutePreview = async (p: string, d: string) => {
         if (!p.trim() || !d.trim() || !isDriver) return;
+        routePreviewAbortRef.current?.abort();
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        routePreviewAbortRef.current = controller;
+
         setPreviewLoading(true);
         setPreviewAttempted(false);
         try {
-            const response = await apiRequest(`/api/rides/route-preview?pickup=${encodeURIComponent(p.trim())}&dropoff=${encodeURIComponent(d.trim())}`, {}, logout);
+            const response = await apiRequest(
+                `/api/rides/route-preview?pickup=${encodeURIComponent(p.trim())}&dropoff=${encodeURIComponent(d.trim())}`,
+                controller ? { signal: controller.signal } : {},
+                logout
+            );
+            if (controller?.signal.aborted) return;
             if (response.ok) {
                 const data = await response.json();
+                if (controller?.signal.aborted) return;
                 setDiscoveredStops(data.stops || []);
                 setTotalDistanceKm(data.totalDistanceKm || null);
             } else {
                 setDiscoveredStops([]);
                 setTotalDistanceKm(null);
             }
-        } catch (err) {
+            setPreviewAttempted(true);
+        } catch (err: any) {
+            if (err?.name === 'AbortError' || controller?.signal.aborted) return;
             console.error('Route preview error:', err);
             setDiscoveredStops([]);
             setTotalDistanceKm(null);
-        } finally {
-            setPreviewLoading(false);
             setPreviewAttempted(true);
+        } finally {
+            if (!controller?.signal.aborted) {
+                setPreviewLoading(false);
+            }
         }
     };
 
@@ -204,37 +235,55 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
             const timer = setTimeout(() => {
                 fetchRoutePreview(pickup, dropoff);
             }, 2000); // 2s debounce — wait for user to finish typing
-            return () => clearTimeout(timer);
+            return () => {
+                clearTimeout(timer);
+                routePreviewAbortRef.current?.abort();
+            };
         } else {
+            routePreviewAbortRef.current?.abort();
             setDiscoveredStops([]);
             setTotalDistanceKm(null);
+            setPreviewLoading(false);
             setPreviewAttempted(false);
         }
     }, [pickup, dropoff, isDriver]);
 
     const handleTimeChange = (text: string) => {
         // Remove non-numeric characters
-        let cleaned = text.replace(/[^0-9]/g, '');
+        const cleaned = text.replace(/[^0-9]/g, '').slice(0, 4);
 
         if (cleaned.length === 0) {
             setDepartureTime('');
             return;
         }
 
-        // Extract hours and minutes
+        // Extract hours and minutes, clamping to 23:59 max before 12h AM/PM conversion
         let hrs = cleaned.slice(0, 2);
         let mins = cleaned.slice(2, 4);
 
-        if (hrs.length >= 1) {
+        if (hrs.length === 2) {
             let h = parseInt(hrs, 10);
+            if (h > 23) h = 23;
             if (h > 12) {
                 h = h - 12;
                 hrs = h.toString().padStart(2, '0');
                 setTimePeriod('PM');
-            } else if (h === 0 && hrs.length === 2) {
+            } else if (h === 12) {
+                hrs = '12';
+                setTimePeriod('PM');
+            } else if (h === 0) {
                 hrs = '12';
                 setTimePeriod('AM');
+            } else {
+                hrs = h.toString().padStart(2, '0');
             }
+        }
+
+        if (mins.length === 1 && parseInt(mins, 10) > 5) {
+            mins = '5';
+        } else if (mins.length === 2) {
+            const m = Math.min(59, parseInt(mins, 10));
+            mins = m.toString().padStart(2, '0');
         }
 
         let result = hrs;
@@ -248,30 +297,41 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
     };
 
     const handleFindRides = async () => {
+        if (findingRidesRef.current) return;
         if (!pickup.trim() || !dropoff.trim()) {
             return;
         }
 
+        findingRidesRef.current = true;
+        setFindingRides(true);
         try {
-            await apiRequest('/api/rides/recent', {
+            const response = await apiRequest('/api/rides/recent', {
                 method: 'POST',
                 body: JSON.stringify({
                     pickup: pickup.trim(),
                     dropoff: dropoff.trim(),
                     rideType: view === 'parcel' ? 'parcel' : 'seat',
                 }),
-            });
+            }, logout);
 
-            navigateToView('available');
+            if (response.ok) {
+                navigateToView('available');
+            } else {
+                const data = await response.json().catch(() => ({}));
+                notify(t('common.error'), data.error || 'Failed to search rides.');
+            }
         } catch (err) {
             console.error('Failed to save recent ride:', err);
-            navigateToView('available');
+            notify(t('common.error'), t('login.connectionError'));
+        } finally {
+            findingRidesRef.current = false;
+            setFindingRides(false);
         }
     };
 
 
     const handlePostRide = async () => {
-        if (postingRide) return;
+        if (postingRideRef.current || postingRide) return;
 
         // Guard: driver must be verified before posting
         if (isDriver && user?.verification_status !== 'verified') {
@@ -299,12 +359,23 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
             return;
         }
 
+        const finalTime = departureTime.trim().toUpperCase().includes('AM') || departureTime.trim().toUpperCase().includes('PM')
+            ? departureTime.trim()
+            : `${departureTime.trim()} ${timePeriod}`;
+
+        // Parse & validate time (1..12 and 0..59)
+        const timeParts = finalTime.split(' ');
+        const timePart = timeParts[0];
+        const period = timeParts[1] || timePeriod;
+        const [rawHours, rawMinutes] = timePart.split(':').map(Number);
+        if (isNaN(rawHours) || rawHours < 1 || rawHours > 12 || (timePart.includes(':') && (isNaN(rawMinutes) || rawMinutes < 0 || rawMinutes > 59))) {
+            notify(t('common.error'), 'Please enter a valid departure time (HH:MM).');
+            return;
+        }
+
+        postingRideRef.current = true;
         setPostingRide(true);
         try {
-            const finalTime = departureTime.trim().toUpperCase().includes('AM') || departureTime.trim().toUpperCase().includes('PM')
-                ? departureTime.trim()
-                : `${departureTime.trim()} ${timePeriod}`;
-
             // Time Validation
             const today = new Date();
             const dd = String(today.getDate()).padStart(2, '0');
@@ -313,16 +384,12 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
             const currentDateStr = `${dd}/${mm}/${yyyy}`;
 
             if (date.trim() === currentDateStr) {
-                // Parse time
-                const timeParts = finalTime.split(' ');
-                const timePart = timeParts[0];
-                const period = timeParts[1] || timePeriod;
-
-                let [hours, minutes] = timePart.split(':').map(Number);
+                let hours = rawHours;
+                const minutes = rawMinutes || 0;
                 if (period.toUpperCase() === 'PM' && hours !== 12) hours += 12;
                 if (period.toUpperCase() === 'AM' && hours === 12) hours = 0;
 
-                const selectedTotalMinutes = hours * 60 + (minutes || 0);
+                const selectedTotalMinutes = hours * 60 + minutes;
                 const currentTotalMinutes = today.getHours() * 60 + today.getMinutes();
 
                 if (selectedTotalMinutes < currentTotalMinutes) {
@@ -350,7 +417,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                     seatingLayout: user?.vehicle?.seating_layout || "sedan",
                     pricePerSeat: priceNum,
                 }),
-            });
+            }, logout);
 
             if (response.ok) {
                 setPickup('');
@@ -379,12 +446,16 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
             console.error('Post ride error:', err);
             notify(t('common.error'), t('login.connectionError'));
         } finally {
+            postingRideRef.current = false;
             setPostingRide(false);
         }
     };
 
-    if (showResubmitKYC) {
-        return <ResubmitDocsView onClose={() => setShowResubmitKYC(false)} />;
+    if (view === 'resubmit_kyc') {
+        return <ResubmitDocsView disableBrowserBack onClose={() => {
+            setView('home');
+            popSubViewHistory();
+        }} />;
     }
 
     if (isParceller || view === 'parcel') {
@@ -407,7 +478,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                 }}
                 onSelectRide={(ride) => {
                     setSelectedRide(ride);
-                    navigateToView('book');
+                    pushSubViewHistory('book');
+                    setView('book');
                 }}
             />
         );
@@ -427,7 +499,9 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                     clearFormDraft('home_pickup');
                     clearFormDraft('home_dropoff');
                     clearFormDraft('home_departureTime');
+                    setSelectedRide(null);
                     setView('home');
+                    popSubViewHistory();
                 }}
             />
         );
@@ -492,7 +566,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                             {user?.verification_status === 'rejected' && (
                                 <TouchableOpacity 
                                     style={{ marginTop: 12, backgroundColor: '#F44336', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8, alignSelf: 'flex-start' }}
-                                    onPress={() => setShowResubmitKYC(true)}>
+                                    onPress={() => navigateToView('resubmit_kyc')}>
                                     <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 13 }}>Resubmit Documents</Text>
                                 </TouchableOpacity>
                             )}
@@ -519,18 +593,33 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                 <LocationInput
                     label={t('home.pickupLabel')}
                     value={pickup}
-                    onChangeText={setPickup}
+                    onChangeText={(text) => {
+                        setPickup(text);
+                        setPickupLandmarks([]);
+                        landmarksAbortRef.current?.abort();
+                    }}
                     onSelect={async (res) => {
                         setPickup(res.display_name.split(',')[0].trim());
                         // Fetch the 3km local landmarks using our new Overpass API!
                         if (!isDriver && res.lat && res.lon) {
+                            landmarksAbortRef.current?.abort();
+                            const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+                            landmarksAbortRef.current = controller;
                             try {
-                                const response = await apiRequest(`/api/location/landmarks?lat=${res.lat}&lon=${res.lon}`);
-                                if (response.ok) {
+                                const response = await apiRequest(
+                                    `/api/location/landmarks?lat=${res.lat}&lon=${res.lon}`,
+                                    controller ? { signal: controller.signal } : {},
+                                    logout
+                                );
+                                if (!controller?.signal.aborted && response.ok) {
                                     const data = await response.json();
-                                    setPickupLandmarks(data);
+                                    if (!controller?.signal.aborted) {
+                                        setPickupLandmarks(Array.isArray(data) ? data : []);
+                                    }
                                 }
-                            } catch (e) { }
+                            } catch (e: any) {
+                                if (e?.name !== 'AbortError') { /* silent */ }
+                            }
                         }
                     }}
                     labelColor={pickupLabelColor}
@@ -612,7 +701,18 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                         </Text>
                         <View style={styles.spacer6} />
                         <TouchableOpacity
-                            onPress={() => setShowCalendar(true)}
+                            onPress={() => {
+                                const parts = date.trim().split('/');
+                                if (parts.length === 3) {
+                                    const m = parseInt(parts[1], 10) - 1;
+                                    const y = parseInt(parts[2], 10);
+                                    if (!isNaN(m) && m >= 0 && m <= 11 && !isNaN(y)) {
+                                        setCalendarMonth(m);
+                                        setCalendarYear(y);
+                                    }
+                                }
+                                setShowCalendar(true);
+                            }}
                             activeOpacity={0.8}
                             style={[styles.textInput, styles.datePickerButton, { backgroundColor: colors.inputFillColor, borderColor: date ? colors.primary : colors.inputBorderColor }]}>
                             <Text style={[styles.datePickerText, { color: date ? colors.textColor : (isDark ? 'rgba(255,255,255,0.3)' : 'rgba(34,34,96,0.35)') }]}>
@@ -727,11 +827,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                 <View style={styles.spacer18} />
 
                 <TouchableOpacity
-                    style={[styles.findButton, { backgroundColor: colors.primary }, (isDriver && postingRide) && { opacity: 0.6 }]}
+                    style={[styles.findButton, { backgroundColor: colors.primary }, ((isDriver && postingRide) || (!isDriver && findingRides)) && { opacity: 0.6 }]}
                     onPress={isDriver ? handlePostRide : handleFindRides}
                     activeOpacity={0.85}
-                    disabled={isDriver && postingRide}>
-                    {isDriver && postingRide ? (
+                    disabled={(isDriver && postingRide) || (!isDriver && findingRides)}>
+                    {(isDriver && postingRide) || (!isDriver && findingRides) ? (
                         <ActivityIndicator color="#FFF" size="small" />
                     ) : (
                         <Text style={styles.findButtonText}>
@@ -753,7 +853,9 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
             {loading ? (
                 <ActivityIndicator color={colors.primary} size="large" />
             ) : error ? (
-                <Text style={styles.errorText}>{t('home.errorRecent')}</Text>
+                <TouchableOpacity onPress={fetchRecentRides} activeOpacity={0.7}>
+                    <Text style={styles.errorText}>{t('home.errorRecent')} (Tap to retry)</Text>
+                </TouchableOpacity>
             ) : (recentRides || []).length === 0 ? (
                 <Text style={{ color: colors.textColor }}>{t('home.noRecentRides')}</Text>
             ) : (

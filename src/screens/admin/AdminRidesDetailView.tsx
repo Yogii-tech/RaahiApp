@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, useWindowDimensions } from 'react-native';
 import AdminChart from '../../components/AdminChart';
 import { downloadCSV } from '../../utils/exportUtils';
@@ -19,26 +19,32 @@ interface RideRow {
 }
 
 interface StatsData {
-     rides: { total: number; available: number; completed: number; cancelled: number };
+     rides: { total: number; available: number; ongoing?: number; completed: number; cancelled: number };
      monthlyTrend: { month: string; rides: number }[];
      trends?: { month: string; count: number }[];
 }
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
 const STATUS_COLORS: Record<string, string> = {
      available: '#28A745',
+     ongoing: '#F59E0B',
      completed: '#3B7DDD',
      cancelled: '#DC3545',
 };
 
-export default function AdminRidesDetailView({ isDark, searchQuery = '', initialTab = 'all' }: { isDark: boolean; searchQuery?: string; initialTab?: 'available' | 'completed' | 'cancelled' | 'all' }) {
+type RideTab = 'available' | 'ongoing' | 'completed' | 'cancelled' | 'all';
+
+export default function AdminRidesDetailView({ isDark, searchQuery = '', initialTab = 'all' }: { isDark: boolean; searchQuery?: string; initialTab?: RideTab }) {
      const [rides, setRides] = useState<RideRow[]>([]);
      const [statsData, setStatsData] = useState<StatsData | null>(null);
      const [loading, setLoading] = useState(true);
-     const [selectedTab, setSelectedTab] = useState<'available' | 'completed' | 'cancelled' | 'all'>(initialTab);
-     const [timeFrame, setTimeFrame] = useState<'Monthly' | 'Daily'>('Monthly');
+     const [refreshing, setRefreshing] = useState(false);
+     const [error, setError] = useState<string | null>(null);
+     const [selectedTab, setSelectedTab] = useState<RideTab>(initialTab);
      const { fetchWithAuth } = useAuth();
+     const fetchWithAuthRef = useRef(fetchWithAuth);
+     fetchWithAuthRef.current = fetchWithAuth;
+     const abortRef = useRef<AbortController | null>(null);
+     const reqIdRef = useRef(0);
      const { width } = useWindowDimensions();
      const isMobile = width < 768;
 
@@ -51,21 +57,57 @@ export default function AdminRidesDetailView({ isDark, searchQuery = '', initial
           accent: '#3B7DDD',
      };
 
-     const fetchData = () => {
-          setLoading(true);
+     const fetchData = useCallback((background = false) => {
+          abortRef.current?.abort();
+          const controller = new AbortController();
+          abortRef.current = controller;
+          const reqId = ++reqIdRef.current;
+
+          if (background) {
+               setRefreshing(true);
+          } else {
+               setLoading(true);
+          }
+          setError(null);
+
           Promise.all([
-               fetchWithAuth(`${API_BASE}/api/admin/rides`).then(r => r.json()),
-               fetchWithAuth(`${API_BASE}/api/admin/stats`).then(r => r.json()),
+               fetchWithAuthRef.current(`${API_BASE}/api/admin/rides`, { signal: controller.signal }).then(r => {
+                    if (!r.ok) throw new Error(`Rides error: ${r.status}`);
+                    return r.json();
+               }),
+               fetchWithAuthRef.current(`${API_BASE}/api/admin/stats`, { signal: controller.signal }).then(r => {
+                    if (!r.ok) throw new Error(`Stats error: ${r.status}`);
+                    return r.json();
+               }),
           ])
                .then(([ridesData, stats]) => {
+                    if (reqId !== reqIdRef.current) return;
                     setRides(Array.isArray(ridesData) ? ridesData : []);
                     setStatsData(stats);
                })
-               .catch(() => { setRides([]); })
-               .finally(() => setLoading(false));
-     };
+               .catch((err: any) => {
+                    if (err?.name === 'AbortError' || reqId !== reqIdRef.current) return;
+                    setError(err?.message || 'Could not load ride data');
+                    if (!background) {
+                         setRides([]);
+                         setStatsData(null);
+                    }
+               })
+               .finally(() => {
+                    if (reqId === reqIdRef.current) {
+                         setLoading(false);
+                         setRefreshing(false);
+                    }
+               });
+     }, []);
 
-     useEffect(() => { fetchData(); }, []);
+     useEffect(() => {
+          fetchData(false);
+          return () => {
+               reqIdRef.current += 1;
+               abortRef.current?.abort();
+          };
+     }, [fetchData]);
 
      const filteredRides = rides.filter(r => {
           const matchesSearch = (r.id || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -77,6 +119,7 @@ export default function AdminRidesDetailView({ isDark, searchQuery = '', initial
 
      const totalRides = statsData?.rides?.total ?? rides.length;
      const available = statsData?.rides?.available ?? rides.filter(r => r.status === 'available').length;
+     const ongoing = statsData?.rides?.ongoing ?? rides.filter(r => r.status === 'ongoing').length;
      const completed = statsData?.rides?.completed ?? rides.filter(r => r.status === 'completed').length;
      const cancelled = statsData?.rides?.cancelled ?? rides.filter(r => r.status === 'cancelled').length;
 
@@ -86,25 +129,44 @@ export default function AdminRidesDetailView({ isDark, searchQuery = '', initial
      const tabs = [
           { id: 'all', label: 'All Rides', count: totalRides, color: '#3B7DDD', icon: '🚙' },
           { id: 'available', label: 'Available', count: available, color: '#28A745', icon: '✅' },
+          { id: 'ongoing', label: 'Ongoing', count: ongoing, color: '#F59E0B', icon: '🚗' },
           { id: 'completed', label: 'Completed', count: completed, color: '#6C757D', icon: '🏁' },
           { id: 'cancelled', label: 'Cancelled', count: cancelled, color: '#DC3545', icon: '❌' },
      ] as const;
 
-     if (loading) return <ActivityIndicator color="#3B7DDD" size="large" style={{ marginTop: 60 }} />;
+     if (loading && rides.length === 0) return <ActivityIndicator color="#3B7DDD" size="large" style={{ marginTop: 60 }} />;
+
+     if (error && rides.length === 0) {
+          return (
+               <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 }}>
+                    <Text style={{ color: '#DC3545', fontSize: 16, fontWeight: 'bold', marginBottom: 12 }}>{error}</Text>
+                    <TouchableOpacity onPress={() => fetchData(false)} style={styles.primaryBtn}>
+                         <Text style={styles.primaryBtnText}>↻ Retry</Text>
+                    </TouchableOpacity>
+               </View>
+          );
+     }
 
      return (
           <ScrollView style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: T.bg }]} showsVerticalScrollIndicator={false}>
                <View style={[styles.header, isMobile && { flexDirection: 'column', alignItems: 'flex-start', gap: 12 }]}>
                     <Text style={[styles.headerTitle, { color: T.text }]}>Rides Overview</Text>
                     <View style={[styles.headerButtons, { flexWrap: 'wrap', gap: 10 }]}>
-                         <TouchableOpacity onPress={fetchData} style={[styles.ghostBtn, { borderColor: T.border }]}>
-                              <Text style={[styles.ghostBtnText, { color: T.text }]}>↻ Refresh</Text>
+                         <TouchableOpacity
+                              onPress={() => fetchData(true)}
+                              disabled={refreshing}
+                              style={[styles.ghostBtn, { borderColor: T.border }, refreshing && { opacity: 0.6 }]}
+                         >
+                              <Text style={[styles.ghostBtnText, { color: T.text }]}>{refreshing ? '↻ Refreshing...' : '↻ Refresh'}</Text>
                          </TouchableOpacity>
-                         <TouchableOpacity onPress={() => downloadCSV(rides, 'Rides_Report')} style={styles.primaryBtn}>
+                         <TouchableOpacity onPress={() => downloadCSV(filteredRides, 'Rides_Report')} style={styles.primaryBtn}>
                               <Text style={styles.primaryBtnText}>Export Report</Text>
                          </TouchableOpacity>
                     </View>
                </View>
+               {error && (
+                    <Text style={{ color: '#DC3545', fontSize: 12, marginBottom: 12 }}>Refresh failed: {error}</Text>
+               )}
 
                {/* Stat Cards */}
                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statsScroll}>

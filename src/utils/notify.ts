@@ -4,15 +4,27 @@ import { Alert, Platform } from 'react-native';
  * Displays a non-intrusive floating toast on web or Alert on native.
  * Eliminates disruptive browser alert modals and 'Suppress dialogues' triggers.
  */
-let toastTimeout: any = null;
+let toastTimeout: ReturnType<typeof setTimeout> | null = null;
+let fadeOutTimeout: ReturnType<typeof setTimeout> | null = null;
+
+const clearToastTimers = () => {
+    if (toastTimeout) {
+        clearTimeout(toastTimeout);
+        toastTimeout = null;
+    }
+    if (fadeOutTimeout) {
+        clearTimeout(fadeOutTimeout);
+        fadeOutTimeout = null;
+    }
+};
 
 const showWebToast = (title: string, message?: string, onOk?: () => void) => {
     if (typeof document === 'undefined') return;
 
-    // Remove any existing toast
+    // Remove any existing toast and cancel pending timers
+    clearToastTimers();
     const existing = document.getElementById('raahi-web-toast');
     if (existing) {
-        if (toastTimeout) clearTimeout(toastTimeout);
         existing.remove();
     }
 
@@ -76,9 +88,13 @@ const showWebToast = (title: string, message?: string, onOk?: () => void) => {
     closeBtn.style.display = 'flex';
     closeBtn.style.alignItems = 'center';
     closeBtn.onclick = () => {
+        clearToastTimers();
         container.style.opacity = '0';
         container.style.transform = 'translateX(-50%) translateY(-10px)';
-        setTimeout(() => { if (container.parentNode) container.remove(); }, 200);
+        fadeOutTimeout = setTimeout(() => {
+            fadeOutTimeout = null;
+            if (container.parentNode) container.remove();
+        }, 200);
     };
     container.appendChild(closeBtn);
 
@@ -94,9 +110,11 @@ const showWebToast = (title: string, message?: string, onOk?: () => void) => {
 
     // Auto fade out after 3.2 seconds
     toastTimeout = setTimeout(() => {
+        toastTimeout = null;
         container.style.opacity = '0';
         container.style.transform = 'translateX(-50%) translateY(-10px)';
-        setTimeout(() => {
+        fadeOutTimeout = setTimeout(() => {
+            fadeOutTimeout = null;
             if (container.parentNode) container.remove();
         }, 200);
     }, 3200);

@@ -1,5 +1,6 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import * as Sentry from '@sentry/react-native';
 
 interface Props {
      children: ReactNode;
@@ -8,6 +9,7 @@ interface Props {
 interface State {
      hasError: boolean;
      error: Error | null;
+     resetKey: number;
 }
 
 /**
@@ -17,23 +19,32 @@ interface State {
 export class ErrorBoundary extends Component<Props, State> {
      constructor(props: Props) {
           super(props);
-          this.state = { hasError: false, error: null };
+          this.state = { hasError: false, error: null, resetKey: 0 };
      }
 
-     static getDerivedStateFromError(error: Error): State {
+     static getDerivedStateFromError(error: Error): Partial<State> {
           return { hasError: true, error };
      }
 
      componentDidCatch(error: Error, info: ErrorInfo) {
-          // In production this would go to Sentry.
-          // In dev we log to console for debugging.
+          try {
+               Sentry.captureException?.(error, {
+                    extra: { componentStack: info?.componentStack },
+               });
+          } catch {
+               // Sentry may not be initialized in all environments
+          }
           if (__DEV__) {
                console.error('[ErrorBoundary] Caught error:', error, info);
           }
      }
 
      handleReset = () => {
-          this.setState({ hasError: false, error: null });
+          this.setState(prev => ({
+               hasError: false,
+               error: null,
+               resetKey: prev.resetKey + 1,
+          }));
      };
 
      render() {
@@ -54,7 +65,7 @@ export class ErrorBoundary extends Component<Props, State> {
                );
           }
 
-          return this.props.children;
+          return <React.Fragment key={this.state.resetKey}>{this.props.children}</React.Fragment>;
      }
 }
 

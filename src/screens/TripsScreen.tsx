@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, AppState, Platform } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
@@ -92,6 +92,10 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
     const [loading, setLoading] = useState(true);
     const [expandedRideId, setExpandedRideId] = useState<string | null>(null);
     const [viewMode, setViewMode] = useState<'list' | 'detailed'>('detailed');
+    const [startingRideId, setStartingRideId] = useState<string | null>(null);
+    const startingRideRef = useRef<string | null>(null);
+    const completingRideRef = useRef<Set<string>>(new Set());
+    const togglingSeatRef = useRef<Set<string>>(new Set());
     const [isAppActive, setIsAppActive] = useState<boolean>(() => {
         if (Platform.OS === 'web') {
             return typeof document === 'undefined' || document.visibilityState === 'visible';
@@ -137,7 +141,7 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
                         data = data.filter((b: any) =>
                             b.type !== 'parcel' && 
                             b.ride?.type !== 'parcel' && 
-                            (b.status === 'completed' || b.status === 'rejected' || b.ride?.status === 'completed' || b.ride?.status === 'cancelled')
+                            (b.status === 'completed' || b.status === 'rejected' || b.status === 'cancelled' || b.ride?.status === 'completed' || b.ride?.status === 'cancelled')
                         );
                     }
                 }
@@ -184,19 +188,22 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
         }
     }, [isDriver, bookings, expandedRideId, viewMode]);
 
-    // Start GPS tracking for driver
-    useEffect(() => {
-        if (isDriver && user?.id && bookings && bookings.length > 0) {
-            // Find the most relevant active ride (available/ongoing and has bookings)
-            const activeRide = bookings.find(b => b.status === 'available' || b.status === 'ongoing');
-            if (activeRide) {
-                const stopTracking = startDriverTracking(activeRide.id, user.id);
-                return () => stopTracking();
-            }
-        }
-    }, [isDriver, bookings, user?.id]);
+    // Start GPS tracking for driver (depend on active ride ID, not bookings array reference)
+    const activeTrackedRide = isDriver
+        ? (bookings.find(b => b.status === 'ongoing') || bookings.find(b => b.status === 'available'))
+        : undefined;
+    const activeTrackedRideId = activeTrackedRide?.id || null;
 
-    const handleCompleteTrip = async (rideId: string) => {
+    useEffect(() => {
+        if (isDriver && user?.id && activeTrackedRideId) {
+            const stopTracking = startDriverTracking(activeTrackedRideId, user.id);
+            return () => stopTracking();
+        }
+    }, [isDriver, activeTrackedRideId, user?.id]);
+
+    const handleCompleteTrip = async (rideId: string): Promise<boolean> => {
+        if (completingRideRef.current.has(rideId)) return false;
+        completingRideRef.current.add(rideId);
         try {
             const response = await apiRequest(`/api/rides/${rideId}/complete`, {
                 method: 'PUT',
@@ -205,17 +212,26 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
                 const msg = t('trips.tripCompleted') || 'Trip marked successfully';
                 notify(t('common.success') || 'Success', msg);
                 fetchData();
+                return true;
             } else {
-                const data = await response.json();
+                const data = await response.json().catch(() => ({}));
                 const errorMsg = data.error || 'Failed to complete trip';
                 notify(t('common.error') || 'Error', errorMsg);
+                return false;
             }
         } catch (err) {
             console.error('Error completing trip:', err);
+            notify(t('common.error') || 'Error', 'Failed to complete trip. Please try again.');
+            return false;
+        } finally {
+            completingRideRef.current.delete(rideId);
         }
     };
 
     const handleStartTrip = async (rideId: string) => {
+        if (startingRideRef.current === rideId) return;
+        startingRideRef.current = rideId;
+        setStartingRideId(rideId);
         try {
             const response = await apiRequest(`/api/rides/${rideId}/start`, {
                 method: 'PUT',
@@ -225,16 +241,23 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
                 notify(t('common.success') || 'Success', msg);
                 fetchData();
             } else {
-                const data = await response.json();
+                const data = await response.json().catch(() => ({}));
                 const errorMsg = data.error || 'Failed to start trip';
                 notify(t('common.error') || 'Error', errorMsg);
             }
         } catch (err) {
             console.error('Error starting trip:', err);
+            notify(t('common.error') || 'Error', 'Failed to start trip. Please try again.');
+        } finally {
+            startingRideRef.current = null;
+            setStartingRideId(prev => (prev === rideId ? null : prev));
         }
     };
 
     const handleToggleBlockSeat = async (rideId: string, seatIndex: number) => {
+        const key = `${rideId}:${seatIndex}`;
+        if (togglingSeatRef.current.has(key)) return;
+        togglingSeatRef.current.add(key);
         try {
             const response = await apiRequest(`/api/rides/${rideId}/block-seat`, {
                 method: 'POST',
@@ -244,20 +267,24 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
             if (response.ok) {
                 fetchData(); // Refresh to show new state
             } else {
-                const data = await response.json();
+                const data = await response.json().catch(() => ({}));
                 notify(t('common.error'), data.error || 'Failed to toggle seat');
             }
         } catch (err) {
             console.error('Toggle block error:', err);
+        } finally {
+            togglingSeatRef.current.delete(key);
         }
     };
 
     const renderRequestItem = ({ item }: { item: any }) => {
         const isExpanded = expandedRideId === item.id;
         const isParcel = item.type === 'parcel';
-        const isCompleted = (isDriver && item.status === 'completed') || item.status === 'completed';
-        const cardBgColor = isCompleted ? (isDark ? '#1C2939' : '#F5F5F5') : colors.cardColor;
-        const cardOpacity = isCompleted ? 0.7 : 1;
+        const isCompleted = item.status === 'completed';
+        const isCancelled = item.status === 'cancelled';
+        const isTerminal = isCompleted || isCancelled;
+        const cardBgColor = isTerminal ? (isDark ? '#1C2939' : '#F5F5F5') : colors.cardColor;
+        const cardOpacity = isTerminal ? 0.7 : 1;
 
         const rawCompletedAt = item.completedAt || item.ride?.completedAt;
         let finishedTimeStr = '';
@@ -285,8 +312,8 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
                                 : (isDriver ? `${t('trips.rideTo')} ${item.dropoff}` : `${t('trips.bookingFor')} ${item.ride?.vehicleModel || 'SUV'}`)}
                         </Text>
                     </View>
-                    <Text style={[styles.statusTag, { color: isCompleted ? '#4CAF50' : colors.primary, backgroundColor: isCompleted ? 'rgba(76, 175, 80, 0.1)' : 'rgba(91, 79, 255, 0.1)' }]}>
-                        {isCompleted ? 'COMPLETED' : t(`requests.${item.status || 'pending'}`).toUpperCase()}
+                    <Text style={[styles.statusTag, { color: isCompleted ? '#4CAF50' : (isCancelled ? '#9E9E9E' : colors.primary), backgroundColor: isCompleted ? 'rgba(76, 175, 80, 0.1)' : (isCancelled ? 'rgba(158, 158, 158, 0.14)' : 'rgba(91, 79, 255, 0.1)') }]}>
+                        {isCompleted ? 'COMPLETED' : (isCancelled ? 'CANCELLED' : t(`requests.${item.status || 'pending'}`).toUpperCase())}
                     </Text>
                 </View>
 
@@ -517,13 +544,14 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
                 {isDriver && (viewMode === 'detailed' || isExpanded) && (
                     <View style={{ marginTop: 20 }}>
                         <JeepLayout
-                            interactive={!isCompleted}
+                            interactive={!isTerminal && item.status === 'available'}
                             onSeatDoublePress={(seatIdx) => {
-                                if (!isCompleted) {
+                                if (!isTerminal && item.status === 'available') {
                                     handleToggleBlockSeat(item.id, seatIdx);
                                 }
                             }}
                             takenSeats={item.takenSeats || []}
+                            manualBlockedSeats={item.manualBlockedSeats || []}
                             completedSeats={item.completedSeats || []}
                             pendingSeats={item.pendingSeats || []}
                             totalSeats={item.seatsTotal}
@@ -535,18 +563,18 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
                         />
 
                         {/* Tip for Driver */}
-                        {!isCompleted && (
+                        {!isTerminal && item.status === 'available' && (
                             <Text style={{ color: colors.subtextColor, fontSize: 10, textAlign: 'center', marginTop: 10, fontStyle: 'italic' }}>
                                 Tip: Double tap a free seat to block it for offline passengers
                             </Text>
                         )}
 
                         {/* List of active bookings for completion */}
-                        {!isCompleted && item.bookings && item.bookings.length > 0 && (
+                        {!isTerminal && item.bookings && item.bookings.length > 0 && (
                             <View style={{ marginTop: 20 }}>
                                 {(() => {
                                     const hasParcels = item.bookings.some((b: any) => b.type === 'parcel');
-                                    const hasPassengers = item.bookings.some((b: any) => b.type === 'passenger' || !b.type);
+                                    const hasPassengers = item.bookings.some((b: any) => b.type === 'seat' || b.type === 'passenger' || !b.type);
                                     const heading = hasParcels && !hasPassengers ? 'MANAGE PARCELS' : (hasPassengers && !hasParcels ? 'MANAGE PASSENGERS' : 'MANAGE PASSENGERS & PARCELS');
                                     return <Text style={{ color: colors.textColor, fontSize: 14, fontWeight: 'bold', marginBottom: 12 }}>{heading}</Text>;
                                 })()}
@@ -576,6 +604,18 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
                                                 <View style={{ backgroundColor: 'rgba(91, 79, 255, 0.12)', borderWidth: 1, borderColor: colors.primary, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6 }}>
                                                     <Text style={{ color: colors.primary, fontSize: 10, fontWeight: 'bold' }}>CONFIRMED</Text>
                                                 </View>
+                                            ) : booking.status === 'pending' ? (
+                                                <View style={{ backgroundColor: 'rgba(245, 158, 11, 0.12)', borderWidth: 1, borderColor: '#F59E0B', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6 }}>
+                                                    <Text style={{ color: '#F59E0B', fontSize: 10, fontWeight: 'bold' }}>PENDING</Text>
+                                                </View>
+                                            ) : booking.status === 'rejected' ? (
+                                                <View style={{ backgroundColor: 'rgba(244, 67, 54, 0.12)', borderWidth: 1, borderColor: '#F44336', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6 }}>
+                                                    <Text style={{ color: '#F44336', fontSize: 10, fontWeight: 'bold' }}>REJECTED</Text>
+                                                </View>
+                                            ) : booking.status === 'cancelled' ? (
+                                                <View style={{ backgroundColor: 'rgba(158, 158, 158, 0.12)', borderWidth: 1, borderColor: '#9E9E9E', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6 }}>
+                                                    <Text style={{ color: '#9E9E9E', fontSize: 10, fontWeight: 'bold' }}>CANCELLED</Text>
+                                                </View>
                                             ) : booking.status === 'completed' ? (
                                                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                                     <Icon name="checkmark-circle" size={16} color="#4CAF50" />
@@ -591,13 +631,15 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
                             </View>
                         )}
 
-                        {!isCompleted && (
+                        {!isTerminal && (
                             <View style={{ marginTop: 20 }}>
                                 {item.status !== 'ongoing' && (
                                     <TouchableOpacity
                                         onPress={() => handleStartTrip(item.id)}
+                                        disabled={startingRideId === item.id}
                                         style={{
                                             backgroundColor: '#4CAF50',
+                                            opacity: startingRideId === item.id ? 0.65 : 1,
                                             paddingVertical: 8,
                                             paddingHorizontal: 20,
                                             borderRadius: 8,
@@ -613,10 +655,16 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
                                             elevation: 2,
                                         }}
                                     >
-                                        <Icon name="play-outline" size={16} color="#FFF" style={{ marginRight: 6 }} />
-                                        <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 13 }}>
-                                            {(t('trips.startRide') || 'Start Ride').toUpperCase()}
-                                        </Text>
+                                        {startingRideId === item.id ? (
+                                            <ActivityIndicator color="#FFF" size="small" />
+                                        ) : (
+                                            <>
+                                                <Icon name="play-outline" size={16} color="#FFF" style={{ marginRight: 6 }} />
+                                                <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 13 }}>
+                                                    {(t('trips.startRide') || 'Start Ride').toUpperCase()}
+                                                </Text>
+                                            </>
+                                        )}
                                     </TouchableOpacity>
                                 )}
                                 <SlideToComplete

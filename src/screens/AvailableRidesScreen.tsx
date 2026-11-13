@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View,
     Text,
@@ -117,9 +117,18 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ searchPicku
     const { t } = useLanguage();
     const [rides, setRides] = useState<Ride[]>([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const fetchSeqRef = useRef(0);
+    const abortRef = useRef<AbortController | null>(null);
 
     const fetchRides = async () => {
+        abortRef.current?.abort();
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        abortRef.current = controller;
+        const seq = ++fetchSeqRef.current;
+
         setLoading(true);
+        setError(null);
         try {
             let url = `${API_BASE}/api/rides/available`;
             const queryParams: string[] = [];
@@ -137,15 +146,33 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ searchPicku
                 url += `?${queryParams.join('&')}`;
             }
 
-            const response = await apiRequest(url.replace(API_BASE, ''), {}, logout);
+            const response = await apiRequest(
+                url.replace(API_BASE, ''),
+                controller ? { signal: controller.signal } : {},
+                logout
+            );
+            if (seq !== fetchSeqRef.current || controller?.signal.aborted) return;
             if (response.ok) {
                 const data = await response.json();
+                if (seq !== fetchSeqRef.current || controller?.signal.aborted) return;
                 setRides(Array.isArray(data) ? data : []);
+            } else {
+                const errData = await response.json().catch(() => ({}));
+                if (seq !== fetchSeqRef.current || controller?.signal.aborted) return;
+                setRides([]);
+                setError(errData.error || 'Failed to load available rides.');
             }
-        } catch (err) {
+        } catch (err: any) {
+            if (err?.name === 'AbortError' || controller?.signal.aborted) return;
             console.error('Failed to fetch rides:', err);
+            if (seq === fetchSeqRef.current) {
+                setRides([]);
+                setError('Connection error. Please try again.');
+            }
         } finally {
-            setLoading(false);
+            if (seq === fetchSeqRef.current && !controller?.signal.aborted) {
+                setLoading(false);
+            }
         }
     };
 
@@ -154,6 +181,9 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ searchPicku
     // on mount before props were reliably set, returning empty results.
     useEffect(() => {
         fetchRides();
+        return () => {
+            abortRef.current?.abort();
+        };
     }, [searchPickup, searchDropoff, searchDate]);
 
     const getEffectivePrice = (r: Ride): number =>
@@ -317,6 +347,18 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ searchPicku
 
             {loading ? (
                 <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
+            ) : error ? (
+                <View style={{ alignItems: 'center', marginTop: 40, paddingHorizontal: 20 }}>
+                    <Text style={{ color: '#FF5252', textAlign: 'center', fontSize: 15, marginBottom: 16 }}>
+                        {error}
+                    </Text>
+                    <TouchableOpacity
+                        style={{ backgroundColor: colors.primary, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 }}
+                        onPress={fetchRides}
+                        activeOpacity={0.8}>
+                        <Text style={{ color: '#FFFFFF', fontWeight: 'bold' }}>Retry</Text>
+                    </TouchableOpacity>
+                </View>
             ) : (
                 <FlatList
                     data={orderedRides}

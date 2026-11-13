@@ -3,8 +3,8 @@
  * Shows the tracking status card — driver ETA, route info,
  * trip status, and driver simulation controls (for demo/testing).
  */
-import { useState, useEffect } from 'react';
-import { trackOrder, startDriverTracking, DriverLocation } from '../services/socket';
+import { useState, useEffect, useRef } from 'react';
+import { getSocket, trackOrder, startDriverTracking, DriverLocation } from '../services/socket';
 import { formatDistance, formatDuration } from '../services/geocoding';
 import styles from './LiveTrackingPanel.module.css';
 
@@ -24,22 +24,58 @@ export default function LiveTrackingPanel({
   const [tripStatus, setTripStatus] = useState<string>('waiting');
   const [connected, setConnected]   = useState(false);
   const [isTracking, setIsTracking] = useState(false);
+  const driverStopRef = useRef<(() => void) | null>(null);
 
-  // ── Passenger mode: subscribe to driver updates ──
+  // ── Reset & manage subscription / cleanup on role or orderId change ──
   useEffect(() => {
-    if (role !== 'passenger') return;
-    setConnected(true);
+    driverStopRef.current?.();
+    driverStopRef.current = null;
+    setIsTracking(false);
+    setTripStatus('waiting');
+
+    if (role !== 'passenger') {
+      setConnected(false);
+      return () => {
+        driverStopRef.current?.();
+        driverStopRef.current = null;
+      };
+    }
+
+    const socket = getSocket() as { connected?: boolean } | null;
+    setConnected(Boolean(socket && socket.connected !== false));
     const unsub = trackOrder(orderId, onDriverMoved, setTripStatus);
-    return unsub;
+    return () => {
+      unsub();
+      setConnected(false);
+    };
   }, [orderId, role, onDriverMoved]);
 
-  // ── Driver mode: start sending GPS location ──
+  // ── Driver mode: start or stop sending GPS location ──
   const handleStartDriver = () => {
+    if (isTracking) return;
+    driverStopRef.current?.();
+    driverStopRef.current = null;
+
+    const socket = getSocket() as { connected?: boolean } | null;
+    if (!socket) {
+      setConnected(false);
+      setIsTracking(false);
+      setTripStatus('driver_offline');
+      return;
+    }
+
+    driverStopRef.current = startDriverTracking(orderId, driverId);
     setIsTracking(true);
-    const stop = startDriverTracking(orderId, driverId);
-    setConnected(true);
+    setConnected(socket.connected !== false);
     setTripStatus('en_route');
-    return () => { stop(); setIsTracking(false); };
+  };
+
+  const handleStopDriver = () => {
+    driverStopRef.current?.();
+    driverStopRef.current = null;
+    setIsTracking(false);
+    setConnected(false);
+    setTripStatus('waiting');
   };
 
   const statusLabel: Record<string, { text: string; color: string }> = {
@@ -66,15 +102,15 @@ export default function LiveTrackingPanel({
       </div>
 
       {/* Route summary */}
-      {(distance || duration) && (
+      {(distance != null || duration != null) && (
         <div className={styles.routeRow}>
-          {distance && (
+          {distance != null && (
             <div className={styles.stat}>
               <span className={styles.statLabel}>Distance</span>
               <span className={styles.statValue}>{formatDistance(distance)}</span>
             </div>
           )}
-          {duration && (
+          {duration != null && (
             <div className={styles.stat}>
               <span className={styles.statLabel}>ETA</span>
               <span className={styles.statValue}>{formatDuration(duration)}</span>
@@ -91,15 +127,18 @@ export default function LiveTrackingPanel({
       {role === 'driver' && (
         <button
           className={`${styles.btn} ${isTracking ? styles.btnDanger : styles.btnPrimary}`}
-          onClick={handleStartDriver}
-          disabled={isTracking}
+          onClick={isTracking ? handleStopDriver : handleStartDriver}
         >
-          {isTracking ? '📡 Transmitting Location...' : '🚗 Start Driver Tracking'}
+          {isTracking ? '🛑 Stop Driver Tracking' : '🚗 Start Driver Tracking'}
         </button>
       )}
 
-      {role === 'passenger' && !connected && (
-        <p className={styles.hint}>Connecting to live tracking...</p>
+      {!connected && (
+        <p className={styles.hint}>
+          {role === 'passenger'
+            ? 'Live tracking is currently offline.'
+            : 'Live socket transport is disabled.'}
+        </p>
       )}
     </div>
   );

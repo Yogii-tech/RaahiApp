@@ -6,19 +6,24 @@ import { Platform } from 'react-native';
  *
  * Architecture:
  *  - Each active overlay/sub-view registers a handler via useBrowserBack().
- *  - Handlers are stored in a stack. Browser back fires the TOP handler only.
- *  - In-app back buttons ALWAYS change state directly (no gating on history).
- *    They call popHistoryEntry() as a side-effect to keep URL history in sync.
- *  - No global interceptor — nothing fights popstate events.
+ *  - Handlers are stored in a LIFO stack. User browser-back fires the TOP handler only.
+ *  - In-app back buttons ALWAYS change state directly (no gating on history) and call
+ *    popSubViewHistory() to keep URL history in sync.
+ *  - pendingProgrammaticPops tracks in-flight window.history.back() calls triggered by
+ *    popSubViewHistory() so the resulting asynchronous `popstate` event never double-pops
+ *    or triggers a parent handler on `handlerStack`.
+ *  - isHandlingPopState prevents re-entrant popSubViewHistory() calls from inside a
+ *    `popstate` callback.
  */
-
-// ─── Handler Registry ────────────────────────────────────────────────────────
 
 type BackHandler = () => void;
 const handlerStack: BackHandler[] = [];
+let pendingProgrammaticPops = 0;
+let programmaticPopDecayTimer: ReturnType<typeof setTimeout> | null = null;
+let isHandlingPopState = false;
+let listenerAttached = false;
 
 const registerHandler = (handler: BackHandler) => {
-  // Avoid duplicate registrations
   if (!handlerStack.includes(handler)) {
     handlerStack.push(handler);
   }
@@ -29,27 +34,50 @@ const unregisterHandler = (handler: BackHandler) => {
   if (idx !== -1) handlerStack.splice(idx, 1);
 };
 
-// ─── Global popstate listener (single, non-capturing) ────────────────────────
+const clearDecayTimer = () => {
+  if (programmaticPopDecayTimer !== null) {
+    clearTimeout(programmaticPopDecayTimer);
+    programmaticPopDecayTimer = null;
+  }
+};
 
-if (Platform.OS === 'web' && typeof window !== 'undefined') {
-  window.addEventListener('popstate', (_e: PopStateEvent) => {
-    // Fire the top-most registered handler (LIFO)
-    if (handlerStack.length > 0) {
-      const topHandler = handlerStack.pop();
-      if (topHandler) {
+const onPopState = (_e: PopStateEvent) => {
+  if (pendingProgrammaticPops > 0) {
+    pendingProgrammaticPops -= 1;
+    if (pendingProgrammaticPops === 0) {
+      clearDecayTimer();
+    }
+    return;
+  }
+
+  if (handlerStack.length > 0) {
+    const topHandler = handlerStack.pop();
+    if (topHandler) {
+      isHandlingPopState = true;
+      try {
         topHandler();
+      } finally {
+        isHandlingPopState = false;
       }
     }
-  });
-}
+  }
+};
 
-// ─── Public API ──────────────────────────────────────────────────────────────
+const ensurePopstateListener = () => {
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && !listenerAttached) {
+    window.addEventListener('popstate', onPopState);
+    listenerAttached = true;
+  }
+};
+
+ensurePopstateListener();
 
 /**
  * Push a history entry when navigating INTO a sub-view.
  * This ensures the browser back button has something to pop.
  */
 export const pushSubViewHistory = (viewName: string) => {
+  ensurePopstateListener();
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
     window.history.pushState(
       { subView: viewName, timestamp: Date.now() },
@@ -60,17 +88,45 @@ export const pushSubViewHistory = (viewName: string) => {
 };
 
 /**
+ * Replace the current sub-view history entry (or push if none is active).
+ * Used when transitioning directly between sibling overlays (e.g. notifications -> chat)
+ * so the browser history stack keeps a 1:1 depth with the active overlay.
+ */
+export const replaceSubViewHistory = (viewName: string) => {
+  ensurePopstateListener();
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    if (window.history.state?.subView) {
+      window.history.replaceState(
+        { subView: viewName, timestamp: Date.now() },
+        '',
+        window.location.href
+      );
+    } else {
+      pushSubViewHistory(viewName);
+    }
+  }
+};
+
+/**
  * Call this as a SIDE-EFFECT after you have already changed state.
- * On web it goes back one entry to keep the URL tidy.
- * On native it's a no-op.
- *
- * DO NOT use this to gate whether the state change happens — always
- * change state unconditionally, then call this.
+ * On web it goes back one entry to keep the URL tidy without firing parent handlers.
+ * On native, or while already handling a browser `popstate`, it's a no-op.
  */
 export const popSubViewHistory = () => {
+  ensurePopstateListener();
+  if (isHandlingPopState) {
+    return;
+  }
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    // Only go back if there is a sub-view entry to consume
     if (window.history.state?.subView) {
+      pendingProgrammaticPops += 1;
+      clearDecayTimer();
+      // Safety decay in case the browser suppresses popstate (e.g. no prior entry)
+      programmaticPopDecayTimer = setTimeout(() => {
+        pendingProgrammaticPops = 0;
+        programmaticPopDecayTimer = null;
+      }, 500);
+      (programmaticPopDecayTimer as any)?.unref?.();
       window.history.back();
     }
   }
@@ -98,6 +154,7 @@ export const useBrowserBack = (
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
+    ensurePopstateListener();
     if (!isActive || !isEnabled) {
       unregisterHandler(stableHandler.current);
       return;
@@ -108,6 +165,27 @@ export const useBrowserBack = (
     };
   }, [isActive, isEnabled]);
 };
+
+/**
+ * Test helpers — used only in unit tests to inspect/reset module state.
+ */
+export const _resetBrowserHistoryForTests = () => {
+  handlerStack.length = 0;
+  pendingProgrammaticPops = 0;
+  isHandlingPopState = false;
+  clearDecayTimer();
+  if (listenerAttached && typeof window !== 'undefined') {
+    window.removeEventListener('popstate', onPopState);
+  }
+  listenerAttached = false;
+};
+
+export const _getBrowserHistoryDebugState = () => ({
+  stackLength: handlerStack.length,
+  pendingProgrammaticPops,
+  isHandlingPopState,
+  listenerAttached,
+});
 
 /**
  * Legacy: kept for compatibility — previously set a global authenticated flag.

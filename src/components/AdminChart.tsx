@@ -17,6 +17,7 @@ export default function AdminChart({ data, labels, accentColor, isDark, height: 
      const isMobile = windowWidth < 768;
 
      const maxVal = Math.max(...data, 1);
+     const yTicks = [maxVal, Math.floor(maxVal / 2), 0];
      const T = {
           grid: isDark ? 'rgba(255,255,255,0.05)' : '#eee',
           text: isDark ? '#9CA3AF' : '#6C757D',
@@ -25,13 +26,18 @@ export default function AdminChart({ data, labels, accentColor, isDark, height: 
           referenceLine: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)',
      };
 
-     const totalChartWidth = activeWidth * zoom;
+     const hasMeasuredWidth = activeWidth > 0;
+     const totalChartWidth = hasMeasuredWidth ? activeWidth * zoom : 0;
+
+     if (!data || data.length === 0) {
+          return null;
+     }
 
      return (
           <View style={[styles.container, { height: chartHeight + 60 }]}>
                <View style={styles.chartYAxis}>
-                    {[maxVal, Math.floor(maxVal / 2), 0].map(v => (
-                         <Text key={v} style={[styles.yLabel, { color: T.text }]}>{v}</Text>
+                    {yTicks.map((v, idx) => (
+                         <Text key={`y-${idx}-${v}`} style={[styles.yLabel, { color: T.text }]}>{v}</Text>
                     ))}
                     <View style={styles.zoomControls}>
                          <TouchableOpacity onPress={() => setZoom(Math.min(zoom + 0.5, 4))} style={[styles.zoomBtn, { backgroundColor: T.grid }]}>
@@ -47,6 +53,7 @@ export default function AdminChart({ data, labels, accentColor, isDark, height: 
                     style={[styles.chartMain, { height: chartHeight }]}
                     onLayout={(e) => setActiveWidth(e.nativeEvent.layout.width)}
                >
+                    {hasMeasuredWidth && (
                     <ScrollView
                          horizontal
                          showsHorizontalScrollIndicator={zoom > 1}
@@ -65,7 +72,7 @@ export default function AdminChart({ data, labels, accentColor, isDark, height: 
                                    const nextV = i < data.length - 1 ? data[i + 1] : v;
                                    const nextH = (nextV / maxVal) * chartHeight;
 
-                                   const stepWidth = (totalChartWidth - 40) / (data.length - 1 || 1);
+                                   const stepWidth = Math.max((totalChartWidth - 40) / (data.length - 1 || 1), 1);
 
                                    return (
                                         <View
@@ -137,6 +144,7 @@ export default function AdminChart({ data, labels, accentColor, isDark, height: 
                               ))}
                          </View>
                     </ScrollView>
+                    )}
                </View>
           </View>
      );

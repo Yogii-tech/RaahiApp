@@ -15,10 +15,14 @@ interface TripTrackingMapProps {
 const DEMO_PICKUP_COORDS: [number, number] = [30.3165, 78.0322];
 const DEMO_DROPOFF_COORDS: [number, number] = [30.4599, 78.0664]; // Mussoorie
 
+const isValidLatLng = (lat: unknown, lng: unknown): boolean =>
+    typeof lat === 'number' && typeof lng === 'number' && Number.isFinite(lat) && Number.isFinite(lng);
+
 const TripTrackingMap: React.FC<TripTrackingMapProps> = ({ bookingId, pickup, dropoff, onClose }) => {
     const { colors, isDark } = useTheme();
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<maplibregl.Map | null>(null);
+    const [isMapLoaded, setIsMapLoaded] = useState(false);
     const [driverLoc, setDriverLoc] = useState<{ lat: number, lng: number } | null>(null);
     const [passengerLoc, setPassengerLoc] = useState<{ lat: number, lng: number } | null>(null);
     const driverMarkerRef = useRef<maplibregl.Marker | null>(null);
@@ -26,6 +30,9 @@ const TripTrackingMap: React.FC<TripTrackingMapProps> = ({ bookingId, pickup, dr
 
     useEffect(() => {
         if (Platform.OS !== 'web' || !mapContainerRef.current) return;
+
+        let disposed = false;
+        setIsMapLoaded(false);
 
         const mapStyle = {
             version: 8 as const,
@@ -53,33 +60,39 @@ const TripTrackingMap: React.FC<TripTrackingMapProps> = ({ bookingId, pickup, dr
         });
 
         map.on('load', () => {
-            // Add Route Layer
-            map.addSource('route', {
-                type: 'geojson',
-                data: {
-                    type: 'Feature',
-                    properties: {},
-                    geometry: {
-                        type: 'LineString',
-                        coordinates: [
-                            [DEMO_PICKUP_COORDS[1], DEMO_PICKUP_COORDS[0]],
-                            [DEMO_DROPOFF_COORDS[1], DEMO_DROPOFF_COORDS[0]]
-                        ]
-                    }
-                }
-            });
+            if (disposed) return;
 
-            map.addLayer({
-                id: 'route-line',
-                type: 'line',
-                source: 'route',
-                layout: { 'line-join': 'round', 'line-cap': 'round' },
-                paint: {
-                    'line-color': '#ff0000', // RED as requested
-                    'line-width': 5,
-                    'line-opacity': 0.8
-                }
-            });
+            // Add Route Layer
+            if (!map.getSource('route')) {
+                map.addSource('route', {
+                    type: 'geojson',
+                    data: {
+                        type: 'Feature',
+                        properties: {},
+                        geometry: {
+                            type: 'LineString',
+                            coordinates: [
+                                [DEMO_PICKUP_COORDS[1], DEMO_PICKUP_COORDS[0]],
+                                [DEMO_DROPOFF_COORDS[1], DEMO_DROPOFF_COORDS[0]]
+                            ]
+                        }
+                    }
+                });
+            }
+
+            if (!map.getLayer('route-line')) {
+                map.addLayer({
+                    id: 'route-line',
+                    type: 'line',
+                    source: 'route',
+                    layout: { 'line-join': 'round', 'line-cap': 'round' },
+                    paint: {
+                        'line-color': '#ff0000', // RED as requested
+                        'line-width': 5,
+                        'line-opacity': 0.8
+                    }
+                });
+            }
 
             // Markers
             // Destination (Dropoff)
@@ -97,12 +110,15 @@ const TripTrackingMap: React.FC<TripTrackingMapProps> = ({ bookingId, pickup, dr
                 [Math.min(DEMO_PICKUP_COORDS[1], DEMO_DROPOFF_COORDS[1]), Math.min(DEMO_PICKUP_COORDS[0], DEMO_DROPOFF_COORDS[0])],
                 [Math.max(DEMO_PICKUP_COORDS[1], DEMO_DROPOFF_COORDS[1]), Math.max(DEMO_PICKUP_COORDS[0], DEMO_DROPOFF_COORDS[0])]
             ], { padding: 50 });
+
+            setIsMapLoaded(true);
         });
 
         mapRef.current = map;
 
         // Simulate live tracking
         const interval = setInterval(() => {
+            if (disposed) return;
             // Mock driver moving from pickup to dropoff
             const progress = (Date.now() % 30000) / 30000;
             const currentLat = DEMO_PICKUP_COORDS[0] + (DEMO_DROPOFF_COORDS[0] - DEMO_PICKUP_COORDS[0]) * progress;
@@ -115,16 +131,20 @@ const TripTrackingMap: React.FC<TripTrackingMapProps> = ({ bookingId, pickup, dr
         setPassengerLoc({ lat: DEMO_PICKUP_COORDS[0], lng: DEMO_PICKUP_COORDS[1] });
 
         return () => {
+            disposed = true;
             clearInterval(interval);
+            driverMarkerRef.current?.remove();
             driverMarkerRef.current = null;
+            passengerMarkerRef.current?.remove();
             passengerMarkerRef.current = null;
             mapRef.current = null;
+            setIsMapLoaded(false);
             map.remove();
         };
     }, [isDark]);
 
     useEffect(() => {
-        if (!mapRef.current || !driverLoc) return;
+        if (!mapRef.current || !isMapLoaded || !driverLoc || !isValidLatLng(driverLoc.lat, driverLoc.lng)) return;
 
         if (!driverMarkerRef.current) {
             const el = document.createElement('div');
@@ -135,10 +155,10 @@ const TripTrackingMap: React.FC<TripTrackingMapProps> = ({ bookingId, pickup, dr
         } else {
             driverMarkerRef.current.setLngLat([driverLoc.lng, driverLoc.lat]);
         }
-    }, [driverLoc]);
+    }, [driverLoc, isMapLoaded]);
 
     useEffect(() => {
-        if (!mapRef.current || !passengerLoc) return;
+        if (!mapRef.current || !isMapLoaded || !passengerLoc || !isValidLatLng(passengerLoc.lat, passengerLoc.lng)) return;
 
         if (!passengerMarkerRef.current) {
             const el = document.createElement('div');
@@ -149,7 +169,7 @@ const TripTrackingMap: React.FC<TripTrackingMapProps> = ({ bookingId, pickup, dr
         } else {
             passengerMarkerRef.current.setLngLat([passengerLoc.lng, passengerLoc.lat]);
         }
-    }, [passengerLoc]);
+    }, [passengerLoc, isMapLoaded]);
 
     if (Platform.OS !== 'web') {
         return <View style={styles.container}><Text>Map tracking only available on Web</Text></View>;

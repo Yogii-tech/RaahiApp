@@ -33,9 +33,15 @@ import RequestsOverlay from './src/screens/RequestsOverlay';
 import AccountScreen from './src/screens/AccountScreen';
 import MapScreen from './src/screens/MapScreen';
 import ChatScreen from './src/screens/ChatScreen';
+import ResubmitDocsView from './src/screens/ResubmitDocsView';
 import Icon from 'react-native-vector-icons/Ionicons';
 import WelcomeScreen from './src/screens/WelcomeScreen';
-import { pushSubViewHistory, popSubViewHistory, useBrowserBack } from './src/utils/browserHistory';
+import {
+  pushSubViewHistory,
+  replaceSubViewHistory,
+  popSubViewHistory,
+  useBrowserBack,
+} from './src/utils/browserHistory';
 
 // DSN is injected via __DEV__ webpack DefinePlugin / Metro env — never hardcoded
 const sentryDsn = (typeof process !== 'undefined' && process.env?.SENTRY_DSN) || '';
@@ -253,6 +259,7 @@ function MainTabs() {
   const [notificationsVisible, setNotificationsVisible] = useState(false);
   const [notificationCount, setNotificationCount] = useState(0);
   const [activeChat, setActiveChat] = useState<any>(null);
+  const [rekycVisible, setRekycVisible] = useState(false);
   const [parcelMode, setParcelMode] = useState(false);
   const [currentRoute, setCurrentRoute] = useState('Home');
   const insets = useSafeAreaInsets();
@@ -260,6 +267,64 @@ function MainTabs() {
   const navigation = useNavigation();
 
   const isDriver = user?.role === 'driver';
+  const notificationsVisibleRef = useRef(notificationsVisible);
+  notificationsVisibleRef.current = notificationsVisible;
+  const activeChatRef = useRef(activeChat);
+  activeChatRef.current = activeChat;
+  const rekycVisibleRef = useRef(rekycVisible);
+  rekycVisibleRef.current = rekycVisible;
+  const isMountedRef = useRef(true);
+  const notifEpochRef = useRef(0);
+  const latestPollIdRef = useRef(0);
+  const tokenRef = useRef(token);
+  tokenRef.current = token;
+  const isDriverRef = useRef(isDriver);
+  isDriverRef.current = isDriver;
+  const logoutRef = useRef(logout);
+  logoutRef.current = logout;
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const openOverlay = useCallback((target: 'notifications' | 'chat' | 'rekyc', chatBooking?: any) => {
+    const hadOverlay = Boolean(
+      notificationsVisibleRef.current || activeChatRef.current || rekycVisibleRef.current
+    );
+    const nextChat = target === 'chat' ? (chatBooking ?? null) : null;
+    notificationsVisibleRef.current = target === 'notifications';
+    activeChatRef.current = nextChat;
+    rekycVisibleRef.current = target === 'rekyc';
+
+    setNotificationsVisible(target === 'notifications');
+    setActiveChat(nextChat);
+    setRekycVisible(target === 'rekyc');
+
+    if (hadOverlay) {
+      replaceSubViewHistory(target);
+    } else {
+      pushSubViewHistory(target);
+    }
+  }, []);
+
+  const closeAllOverlays = useCallback((popHistory = true) => {
+    const hadOverlay = Boolean(
+      notificationsVisibleRef.current || activeChatRef.current || rekycVisibleRef.current
+    );
+    notificationsVisibleRef.current = false;
+    activeChatRef.current = null;
+    rekycVisibleRef.current = false;
+    setNotificationsVisible(false);
+    setActiveChat(null);
+    setRekycVisible(false);
+    if (popHistory && hadOverlay) {
+      popSubViewHistory();
+    }
+  }, []);
+
   const [isAppActive, setIsAppActive] = useState<boolean>(() => {
     if (Platform.OS === 'web') {
       return typeof document === 'undefined' || document.visibilityState === 'visible';
@@ -284,33 +349,30 @@ function MainTabs() {
 
   // ─── FCM: register when authenticated, unregister on logout ─────────────
   const handleFCMNavigate = useCallback((type: string, data: any) => {
+    if (data?.action === 'rekyc') {
+      openOverlay('rekyc');
+      return;
+    }
     switch (type) {
       case 'booking_request':
-        // Driver: open requests overlay
-        setNotificationsVisible(true);
-        break;
       case 'booking_status':
       case 'ride_started':
       case 'ride_completed':
-        // Passenger: open Trips tab
-        setNotificationsVisible(true);
-        break;
-      case 'chat':
-        if (data.relatedId) {
-          setActiveChat({ id: data.relatedId });
-          pushSubViewHistory('chat');
-        } else {
-          setNotificationsVisible(true);
-        }
-        break;
       case 'document_verification':
       case 'admin_alert':
-        setNotificationsVisible(true);
+        openOverlay('notifications');
+        break;
+      case 'chat':
+        if (data?.relatedId) {
+          openOverlay('chat', { id: data.relatedId });
+        } else {
+          openOverlay('notifications');
+        }
         break;
       default:
-        setNotificationsVisible(true);
+        openOverlay('notifications');
     }
-  }, []);
+  }, [openOverlay]);
 
   // Handle Cold-Start Web Deep Links (notification taps that open a new window)
   useEffect(() => {
@@ -319,26 +381,22 @@ function MainTabs() {
       const chatId = urlParams.get('chat');
       const openRequests = urlParams.get('openRequests');
       const openTrips = urlParams.get('openTrips');
+      const rekyc = urlParams.get('rekyc');
 
-      if (chatId) {
-        setActiveChat({ id: chatId });
-        pushSubViewHistory('chat');
-      } else if (openRequests === 'true') {
-        // Driver tapped a booking_request notification — open requests overlay
-        setNotificationsVisible(true);
-        pushSubViewHistory('notifications');
-      } else if (openTrips === 'true') {
-        // Passenger tapped a booking_status/ride_started notification — open overlay
-        setNotificationsVisible(true);
-        pushSubViewHistory('notifications');
-      }
-
-      // Always clean up the URL so a refresh doesn't re-trigger
-      if (chatId || openRequests || openTrips) {
+      // Clean up the URL first so replaceState doesn't clobber the pushed subView state
+      if (chatId || openRequests || openTrips || rekyc) {
         window.history.replaceState({}, document.title, '/');
       }
+
+      if (rekyc === 'true') {
+        openOverlay('rekyc');
+      } else if (chatId) {
+        openOverlay('chat', { id: chatId });
+      } else if (openRequests === 'true' || openTrips === 'true') {
+        openOverlay('notifications');
+      }
     }
-  }, [user]);
+  }, [user, openOverlay]);
 
   const fcmRegisteredTokenRef = useRef<string | null>(null);
   const activeTokenRef = useRef<string | null>(token);
@@ -367,30 +425,19 @@ function MainTabs() {
   // ────────────────────────────────────────────────────────────────────────
 
 
-  useBrowserBack(Boolean(notificationsVisible || activeChat), () => {
-    if (activeChat) {
-      setActiveChat(null);
-    } else if (notificationsVisible) {
-      setNotificationsVisible(false);
-    }
+  useBrowserBack(Boolean(notificationsVisible || activeChat || rekycVisible), () => {
+    closeAllOverlays(false);
   });
 
-  useEffect(() => {
-    if (!token || !isAppActive) return;
-    fetchNotificationCount();
-    const interval = setInterval(() => {
-      if (Platform.OS === 'web' && typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
-      if (Platform.OS !== 'web' && AppState.currentState !== 'active') return;
-      fetchNotificationCount();
-    }, 10000);
-    return () => clearInterval(interval);
-  }, [user, token, isAppActive]);
-
-  const fetchNotificationCount = async () => {
+  const fetchNotificationCount = useCallback(async () => {
     try {
-      if (!token) return;
-      const endpoint = isDriver ? '/api/rides/requests' : '/api/rides/bookings';
-      const response = await apiRequest(endpoint, {}, logout);
+      const currentToken = tokenRef.current;
+      if (!currentToken) return;
+      const pollId = ++latestPollIdRef.current;
+      const startEpoch = notifEpochRef.current;
+      const driver = isDriverRef.current;
+      const endpoint = driver ? '/api/rides/requests' : '/api/rides/bookings';
+      const response = await apiRequest(endpoint, {}, logoutRef.current);
 
       let reqCount = 0;
       let unreadChatTotal = 0;
@@ -399,7 +446,7 @@ function MainTabs() {
         const data = await response.json() || [];
         // Filter: Driver sees UNVIEWED 'pending' reqs, Passenger sees UNVIEWED 'accepted' or 'rejected'
         reqCount = data.filter((b: any) =>
-          isDriver
+          driver
             ? (b.status === 'pending' && !b.viewedByDriver)
             : ((b.status === 'accepted' || b.status === 'rejected') && !b.viewedByPassenger)
         ).length;
@@ -411,26 +458,41 @@ function MainTabs() {
       // Also count unread system notifications (e.g. document approved/rejected)
       let systemNotifCount = 0;
       try {
-        const notifResponse = await apiRequest('/api/notifications/', {}, logout);
+        const notifResponse = await apiRequest('/api/notifications/', {}, logoutRef.current);
         if (notifResponse.ok) {
           const notifs = await notifResponse.json() || [];
           systemNotifCount = notifs.filter((n: any) => !n.read).length;
         }
       } catch (_) { /* ignore */ }
 
+      if (!isMountedRef.current || notifEpochRef.current !== startEpoch || latestPollIdRef.current !== pollId) {
+        return;
+      }
       setNotificationCount(reqCount + unreadChatTotal + systemNotifCount);
     } catch (err) {
       console.error('Badge poll fail:', err);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!token || !isAppActive) return;
+    fetchNotificationCount();
+    const interval = setInterval(() => {
+      if (Platform.OS === 'web' && typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      if (Platform.OS !== 'web' && AppState.currentState !== 'active') return;
+      fetchNotificationCount();
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [user, token, isAppActive, fetchNotificationCount]);
 
   const handleMarkViewed = async () => {
     try {
-      if (!token) return;
-      await apiRequest(`/api/rides/viewed?role=${isDriver ? 'driver' : 'passenger'}`, {
-        method: 'POST'
-      }, logout);
+      if (!tokenRef.current) return;
+      notifEpochRef.current += 1;
       setNotificationCount(0);
+      await apiRequest(`/api/rides/viewed?role=${isDriverRef.current ? 'driver' : 'passenger'}`, {
+        method: 'POST'
+      }, logoutRef.current);
     } catch (err) {
       console.error('Mark viewed fail:', err);
     }
@@ -442,20 +504,17 @@ function MainTabs() {
         <AppHeader
           notificationCount={notificationCount}
           onPressLogo={() => {
-            setNotificationsVisible(false);
-            setActiveChat(null);
+            closeAllOverlays(true);
             setParcelMode(false);
             navigation.navigate('Home' as never);
           }}
           onToggleNotifications={() => {
-            const newState = !notificationsVisible;
-            if (newState) {
-              pushSubViewHistory('notifications');
+            if (!notificationsVisibleRef.current) {
+              openOverlay('notifications');
               handleMarkViewed();
             } else {
-              popSubViewHistory();
+              closeAllOverlays(true);
             }
-            setNotificationsVisible(newState);
           }}
         />
       )}
@@ -499,7 +558,7 @@ function MainTabs() {
             paddingBottom: 8,
             backgroundColor: colors.background,
             borderTopColor: colors.borderColor,
-            display: notificationsVisible || activeChat ? 'none' : 'flex'
+            display: notificationsVisible || activeChat || rekycVisible ? 'none' : 'flex'
           },
         })}
       >
@@ -511,7 +570,7 @@ function MainTabs() {
           children={(props) => <TripsScreen 
             {...props} 
             isParcelMode={user?.role === 'parceller' || parcelMode} 
-            onOpenChat={(booking) => { setActiveChat(booking); pushSubViewHistory('chat'); }}
+            onOpenChat={(booking) => openOverlay('chat', booking)}
           />}
           options={{ title: (user?.role === 'parceller' || parcelMode) ? t('tab.trackPackage') : t('tab.trips') }}
         />
@@ -525,7 +584,7 @@ function MainTabs() {
               isParcelHistory={isParcel} 
               isRideHistory={!isParcel} 
               title={t('tab.history')} 
-              onOpenChat={(booking) => { setActiveChat(booking); pushSubViewHistory('chat'); }}
+              onOpenChat={(booking) => openOverlay('chat', booking)}
             />;
           }}
           options={{ title: t('tab.history') }}
@@ -540,15 +599,8 @@ function MainTabs() {
       {notificationsVisible && (
         <View style={[StyleSheet.absoluteFill, { top: insets.top + 64, bottom: 0, backgroundColor: colors.background, zIndex: 100, elevation: 10 }]}>
           <RequestsOverlay
-            onClose={() => {
-              setNotificationsVisible(false);
-              popSubViewHistory();
-            }}
-            onOpenChat={(booking) => {
-              pushSubViewHistory('chat');
-              setActiveChat(booking);
-              setNotificationsVisible(false);
-            }}
+            onClose={() => closeAllOverlays(true)}
+            onOpenChat={(booking) => openOverlay('chat', booking)}
           />
         </View>
       )}
@@ -566,10 +618,16 @@ function MainTabs() {
             dropoffLat={activeChat.ride?.dropoffLat}
             dropoffLng={activeChat.ride?.dropoffLng}
             departureTime={activeChat.ride?.departureTime}
-            onBack={() => {
-              setActiveChat(null);
-              popSubViewHistory();
-            }}
+            onBack={() => closeAllOverlays(true)}
+          />
+        </View>
+      )}
+
+      {rekycVisible && (
+        <View style={[StyleSheet.absoluteFill, { zIndex: 1100, elevation: 1100, backgroundColor: colors.background }]}>
+          <ResubmitDocsView
+            disableBrowserBack
+            onClose={() => closeAllOverlays(true)}
           />
         </View>
       )}
@@ -603,6 +661,21 @@ function RootApp() {
   const { isAuthenticated, user, isInitialLoading } = useAuth();
   const { isDark } = useTheme();
   const [welcomeDone, setWelcomeDone] = useState(false);
+  const wasAuthenticatedRef = useRef(isAuthenticated);
+
+  useEffect(() => {
+    if (wasAuthenticatedRef.current && !isAuthenticated) {
+      setWelcomeDone(false);
+    }
+    wasAuthenticatedRef.current = isAuthenticated;
+
+    if (isAuthenticated && Platform.OS === 'web' && typeof window !== 'undefined') {
+      const subView = window.history.state?.subView;
+      if (typeof subView === 'string' && subView.startsWith('login')) {
+        window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+      }
+    }
+  }, [isAuthenticated]);
 
   useBrowserBack(welcomeDone && !isAuthenticated, () => {
     setWelcomeDone(false);

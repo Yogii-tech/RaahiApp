@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, useWindowDimensions, Platform, TouchableOpacity, Alert } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, useWindowDimensions, TouchableOpacity } from 'react-native';
 import AdminChart from '../../components/AdminChart';
 import { downloadCSV } from '../../utils/exportUtils';
 import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
 
 interface AdminStatsData {
-    rides: { total: number; available: number; completed: number; cancelled: number };
+    rides: { total: number; available: number; ongoing?: number; completed: number; cancelled: number };
     bookings: { total: number; pending: number; accepted: number; rejected: number };
     users: { total: number; drivers: number; passengers: number };
     routes: number;
@@ -14,22 +14,36 @@ interface AdminStatsData {
     trends?: { month: string; count: number }[];
 }
 
-export default function AdminDashboardView({ token, onNavigateToRides, onNavigateToParcels, onNavigateToVisitors, onNavigateToRoutes }: {
+export default function AdminDashboardView({
+    token,
+    isDark = true,
+    onNavigateToRides,
+    onNavigateToBookings,
+    onNavigateToParcels,
+    onNavigateToVisitors,
+    onNavigateToRoutes,
+}: {
     token: string;
+    isDark?: boolean;
     onNavigateToRides?: () => void;
+    onNavigateToBookings?: () => void;
     onNavigateToParcels?: () => void;
     onNavigateToVisitors?: () => void;
     onNavigateToRoutes?: () => void;
 }) {
     const [stats, setStats] = useState<AdminStatsData | null>(null);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [viewDate, setViewDate] = useState(new Date());
     const { fetchWithAuth } = useAuth();
+    const fetchWithAuthRef = useRef(fetchWithAuth);
+    fetchWithAuthRef.current = fetchWithAuth;
+    const abortRef = useRef<AbortController | null>(null);
+    const requestIdRef = useRef(0);
     const { width } = useWindowDimensions();
     const isMobile = width < 768;
 
-    const isDark = true;
     const T = {
         bg: isDark ? '#111827' : '#F7F9FC',
         card: isDark ? '#1F2937' : '#FFFFFF',
@@ -38,28 +52,55 @@ export default function AdminDashboardView({ token, onNavigateToRides, onNavigat
         border: isDark ? 'rgba(255,255,255,0.08)' : '#DEE2E6',
     };
 
-    useEffect(() => {
+    const loadStats = useCallback((isRefresh = false) => {
+        if (isRefresh && refreshing) return;
+        abortRef.current?.abort();
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 10000); // 10s timeout
+        abortRef.current = controller;
+        const reqId = ++requestIdRef.current;
+        const timeout = setTimeout(() => controller.abort(), 10000);
 
-        fetchWithAuth(`${API_BASE}/api/admin/stats`)
+        if (isRefresh && stats) {
+            setRefreshing(true);
+        } else {
+            setLoading(true);
+        }
+        setError(null);
+
+        fetchWithAuthRef.current(`${API_BASE}/api/admin/stats`, { signal: controller.signal })
             .then(r => {
                 clearTimeout(timeout);
                 if (!r.ok) throw new Error(`Server error: ${r.status}`);
                 return r.json();
             })
-            .then((d: AdminStatsData) => setStats(d))
+            .then((d: AdminStatsData) => {
+                if (reqId !== requestIdRef.current) return;
+                setStats(d);
+            })
             .catch((err: any) => {
                 clearTimeout(timeout);
+                if (reqId !== requestIdRef.current) return;
                 if (err?.name === 'AbortError') {
                     setError('Backend not responding. Is the server running?');
                 } else {
                     setError(`Could not load stats (${err?.message ?? 'network error'})`);
                 }
             })
-            .finally(() => setLoading(false));
+            .finally(() => {
+                clearTimeout(timeout);
+                if (reqId === requestIdRef.current) {
+                    setLoading(false);
+                    setRefreshing(false);
+                }
+            });
+    }, [refreshing, stats]);
 
-        return () => { clearTimeout(timeout); controller.abort(); };
+    useEffect(() => {
+        loadStats(false);
+        return () => {
+            requestIdRef.current += 1;
+            abortRef.current?.abort();
+        };
     }, []);
 
     // Calendar
@@ -93,17 +134,7 @@ export default function AdminDashboardView({ token, onNavigateToRides, onNavigat
             </View>
             <TouchableOpacity
                 style={{ backgroundColor: '#3B7DDD', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 }}
-                onPress={() => {
-                    setLoading(true);
-                    setError(null);
-                    const controller = new AbortController();
-                    const t = setTimeout(() => controller.abort(), 10000);
-                    fetchWithAuth(`${API_BASE}/api/admin/stats`)
-                        .then(r => { clearTimeout(t); if (!r.ok) throw new Error(`Server error: ${r.status}`); return r.json(); })
-                        .then((d: AdminStatsData) => setStats(d))
-                        .catch((err: any) => { clearTimeout(t); setError(err?.name === 'AbortError' ? 'Backend not responding. Is the server running?' : `Could not load stats (${err?.message ?? 'network error'})`); })
-                        .finally(() => setLoading(false));
-                }}
+                onPress={() => loadStats(false)}
             >
                 <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 14 }}>↻ Retry Connection</Text>
             </TouchableOpacity>
@@ -121,7 +152,7 @@ export default function AdminDashboardView({ token, onNavigateToRides, onNavigat
             id: 'bookings', label: 'Bookings', icon: '🎫',
             value: stats?.bookings?.total ?? 0,
             sub: `${stats?.bookings?.pending ?? 0} pending`,
-            onPress: onNavigateToParcels,
+            onPress: onNavigateToBookings,
         },
         {
             id: 'users', label: 'Users', icon: '👥',
@@ -148,17 +179,11 @@ export default function AdminDashboardView({ token, onNavigateToRides, onNavigat
                 <Text style={[styles.headerTitle, { color: T.text }]}>Analytics Dashboard</Text>
                 <View style={styles.headerButtons}>
                     <TouchableOpacity
-                        style={[styles.ghostBtn, { backgroundColor: T.card, borderColor: T.border }]}
-                        onPress={() => {
-                            setLoading(true); setError(null);
-                            fetchWithAuth(`${API_BASE}/api/admin/stats`)
-                                .then(r => { if (!r.ok) throw new Error(`Server error: ${r.status}`); return r.json(); })
-                                .then(setStats)
-                                .catch(() => setError('Could not load'))
-                                .finally(() => setLoading(false));
-                        }}
+                        style={[styles.ghostBtn, { backgroundColor: T.card, borderColor: T.border }, refreshing && { opacity: 0.6 }]}
+                        onPress={() => loadStats(true)}
+                        disabled={refreshing}
                     >
-                        <Text style={[styles.ghostBtnText, { color: T.text }]}>↻ Refresh</Text>
+                        <Text style={[styles.ghostBtnText, { color: T.text }]}>{refreshing ? '↻ Refreshing...' : '↻ Refresh'}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                         style={styles.primaryBtn}

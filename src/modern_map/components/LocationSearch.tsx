@@ -38,28 +38,74 @@ export default function LocationSearch({
   const [activeIdx, setActiveIdx] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef  = useRef<HTMLUListElement>(null);
+  const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchSeqRef = useRef(0);
+  const skipNextSearchRef = useRef(false);
 
   const debouncedQuery = useDebounce(query, 350);
 
-  useEffect(() => { setQuery(value); }, [value]);
+  useEffect(() => {
+    skipNextSearchRef.current = true;
+    setQuery(value);
+  }, [value]);
+
+  useEffect(() => {
+    return () => {
+      if (blurTimerRef.current) {
+        clearTimeout(blurTimerRef.current);
+        blurTimerRef.current = null;
+      }
+    };
+  }, []);
 
   // ── Fetch suggestions ──
   useEffect(() => {
-    if (!debouncedQuery || debouncedQuery.length < 3) {
-      setResults([]);
+    const seq = ++searchSeqRef.current;
+
+    if (skipNextSearchRef.current) {
+      skipNextSearchRef.current = false;
+      setLoading(false);
       return;
     }
+
+    if (!debouncedQuery || debouncedQuery.trim().length < 3) {
+      setResults([]);
+      setLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
     setLoading(true);
-    searchPlaces(debouncedQuery)
-      .then(setResults)
-      .catch(() => setResults([]))
-      .finally(() => setLoading(false));
+    searchPlaces(debouncedQuery, controller.signal)
+      .then((data) => {
+        if (!controller.signal.aborted && seq === searchSeqRef.current) {
+          setResults(data);
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted && seq === searchSeqRef.current) {
+          setResults([]);
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted && seq === searchSeqRef.current) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      controller.abort();
+    };
   }, [debouncedQuery]);
 
   const handleSelect = useCallback((r: GeoResult) => {
+    skipNextSearchRef.current = true;
+    searchSeqRef.current += 1;
     setQuery(r.display_name);
     setResults([]);
+    setLoading(false);
     setActiveIdx(-1);
+    setFocused(false);
     onSelect(r);
     inputRef.current?.blur();
   }, [onSelect]);
@@ -82,7 +128,13 @@ export default function LocationSearch({
     }
   };
 
-  const showDropdown = focused && (results.length > 0 || loading);
+  const canShowCurrentLocation = Boolean(onUseCurrentLocation && query.length === 0);
+  const canShowNoResult =
+    results.length === 0 &&
+    !loading &&
+    debouncedQuery.trim().length >= 3 &&
+    query.trim().length >= 3;
+  const showDropdown = focused && (results.length > 0 || loading || canShowCurrentLocation || canShowNoResult);
 
   return (
     <div className={styles.wrapper}>
@@ -93,9 +145,27 @@ export default function LocationSearch({
           className={styles.input}
           placeholder={placeholder}
           value={query}
-          onChange={e => { setQuery(e.target.value); setActiveIdx(-1); }}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setTimeout(() => setFocused(false), 200)}
+          onChange={e => {
+            skipNextSearchRef.current = false;
+            setQuery(e.target.value);
+            setActiveIdx(-1);
+          }}
+          onFocus={() => {
+            if (blurTimerRef.current) {
+              clearTimeout(blurTimerRef.current);
+              blurTimerRef.current = null;
+            }
+            setFocused(true);
+          }}
+          onBlur={() => {
+            if (blurTimerRef.current) {
+              clearTimeout(blurTimerRef.current);
+            }
+            blurTimerRef.current = setTimeout(() => {
+              blurTimerRef.current = null;
+              setFocused(false);
+            }, 200);
+          }}
           onKeyDown={handleKeyDown}
           autoComplete="off"
           spellCheck={false}
@@ -112,10 +182,13 @@ export default function LocationSearch({
 
       {showDropdown && (
         <ul ref={listRef} className={styles.dropdown}>
-          {onUseCurrentLocation && query.length === 0 && (
+          {canShowCurrentLocation && onUseCurrentLocation && (
             <li
               className={styles.item}
-              onClick={onUseCurrentLocation}
+              onMouseDown={() => {
+                setFocused(false);
+                onUseCurrentLocation();
+              }}
             >
               <span className={styles.itemIcon}>📍</span>
               <span className={styles.itemText}>Use current location</span>
@@ -140,7 +213,7 @@ export default function LocationSearch({
               </div>
             </li>
           ))}
-          {results.length === 0 && !loading && query.length >= 3 && (
+          {canShowNoResult && (
             <li className={`${styles.item} ${styles.noResult}`}>
               No results found for "{query}"
             </li>

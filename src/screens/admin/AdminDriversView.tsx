@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
     View, Text, StyleSheet, FlatList, ActivityIndicator,
-    ScrollView, TouchableOpacity, Modal, Image, TextInput, Alert, Platform, Linking, useWindowDimensions
+    ScrollView, TouchableOpacity, Modal, Image, TextInput, Platform, Linking, useWindowDimensions
 } from 'react-native';
 import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
@@ -29,11 +29,18 @@ export interface Driver {
     totalRides?: number;
 }
 
+type DriverModalState =
+    | { type: 'none' }
+    | { type: 'inspect'; driver: Driver }
+    | { type: 'rekyc'; driver: Driver; returnToInspect: boolean }
+    | { type: 'delete'; driver: Driver; returnToInspect: boolean };
+
 export default function AdminDriversView({ token, searchQuery = '', initialFilter = 'all' }: { token: string; searchQuery?: string; initialFilter?: 'all' | 'pending' | 'verified' | 'rejected' }) {
     const [drivers, setDrivers] = useState<Driver[]>([]);
     const [loading, setLoading] = useState(true);
-    const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
-    const [inspectModalVisible, setInspectModalVisible] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [modalState, setModalState] = useState<DriverModalState>({ type: 'none' });
     const [previewImage, setPreviewImageRaw] = useState<string | null>(null);
     const [previewStatus, setPreviewStatus] = useState<'loading' | 'loaded' | 'error'>('loading');
     const setPreviewImage = (url: string | null) => {
@@ -43,14 +50,17 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
     const [rejectionReason, setRejectionReason] = useState('');
     const [submittingAction, setSubmittingAction] = useState(false);
     const [deletingDriverId, setDeletingDriverId] = useState<string | null>(null);
-    const [deleteConfirmDriver, setDeleteConfirmDriver] = useState<Driver | null>(null);
-    const [rekycModalVisible, setRekycModalVisible] = useState(false);
-    const [rekycDriver, setRekycDriver] = useState<Driver | null>(null);
     const [rekycReason, setRekycReason] = useState('');
     const [rekycLoading, setRekycLoading] = useState(false);
     const [activeFilter, setActiveFilter] = useState<'all' | 'pending' | 'verified' | 'rejected'>(initialFilter);
 
     const { fetchWithAuth } = useAuth();
+    const fetchWithAuthRef = useRef(fetchWithAuth);
+    fetchWithAuthRef.current = fetchWithAuth;
+    const driversAbortRef = useRef<AbortController | null>(null);
+    const driversReqIdRef = useRef(0);
+    const reviewsAbortRef = useRef<AbortController | null>(null);
+    const reviewsReqIdRef = useRef(0);
     const { width } = useWindowDimensions();
     const isMobile = width < 768;
 
@@ -58,44 +68,96 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
     const [driverReviews, setDriverReviews] = useState<{ reviews: any[]; averageRating: number; totalReviews: number } | null>(null);
     const [reviewsLoading, setReviewsLoading] = useState(false);
 
-    useEffect(() => {
-        loadDrivers();
+    const selectedDriver = modalState.type === 'inspect' ? modalState.driver : null;
+    const inspectModalVisible = modalState.type === 'inspect';
+    const rekycDriver = modalState.type === 'rekyc' ? modalState.driver : null;
+    const rekycModalVisible = modalState.type === 'rekyc';
+    const deleteConfirmDriver = modalState.type === 'delete' ? modalState.driver : null;
+
+    const loadDrivers = useCallback(async (background = false) => {
+        driversAbortRef.current?.abort();
+        const controller = new AbortController();
+        driversAbortRef.current = controller;
+        const reqId = ++driversReqIdRef.current;
+
+        if (background) {
+            setRefreshing(true);
+        } else {
+            setLoading(true);
+        }
+        setError(null);
+        try {
+            const res = await fetchWithAuthRef.current(`${API_BASE}/api/admin/drivers`, { signal: controller.signal });
+            if (!res.ok) throw new Error(`Server error: ${res.status}`);
+            const d = await res.json();
+            if (reqId !== driversReqIdRef.current) return;
+            setDrivers(Array.isArray(d) ? d : []);
+        } catch (err: any) {
+            if (err?.name === 'AbortError' || reqId !== driversReqIdRef.current) return;
+            console.error('Failed to load drivers:', err);
+            setError(err?.message || 'Failed to load drivers');
+            if (!background) setDrivers([]);
+        } finally {
+            if (reqId === driversReqIdRef.current) {
+                setLoading(false);
+                setRefreshing(false);
+            }
+        }
     }, []);
 
-    const loadDrivers = async () => {
-        setLoading(true);
-        try {
-            const res = await fetchWithAuth(`${API_BASE}/api/admin/drivers`);
-            const d = await res.json();
-            setDrivers(Array.isArray(d) ? d : []);
-        } catch (err) {
-            console.error('Failed to load drivers:', err);
-            setDrivers([]);
-        } finally {
-            setLoading(false);
-        }
+    useEffect(() => {
+        loadDrivers(false);
+        return () => {
+            driversReqIdRef.current += 1;
+            reviewsReqIdRef.current += 1;
+            driversAbortRef.current?.abort();
+            reviewsAbortRef.current?.abort();
+        };
+    }, [loadDrivers]);
+
+    const closeInspectModal = () => {
+        if (submittingAction) return;
+        reviewsReqIdRef.current += 1;
+        reviewsAbortRef.current?.abort();
+        setPreviewImageRaw(null);
+        setRejectionReason('');
+        setDriverReviews(null);
+        setReviewsLoading(false);
+        setModalState({ type: 'none' });
     };
 
     const handleInspect = (driver: Driver) => {
-        setSelectedDriver(driver);
+        reviewsAbortRef.current?.abort();
+        const controller = new AbortController();
+        reviewsAbortRef.current = controller;
+        const reqId = ++reviewsReqIdRef.current;
+
+        setPreviewImageRaw(null);
         setRejectionReason(driver.rejectionReason || '');
-        setInspectModalVisible(true);
-        // Fetch reviews for this driver
+        setModalState({ type: 'inspect', driver });
         setDriverReviews(null);
         setReviewsLoading(true);
-        fetchWithAuth(`${API_BASE}/api/admin/reviews/driver/${driver.id}`)
+
+        fetchWithAuthRef.current(`${API_BASE}/api/admin/reviews/driver/${driver.id}`, { signal: controller.signal })
             .then(async (res: Response) => {
+                if (reqId !== reviewsReqIdRef.current) return;
                 if (res.ok) {
                     const d = await res.json();
-                    setDriverReviews(d);
+                    if (reqId === reviewsReqIdRef.current) {
+                        setDriverReviews(d);
+                    }
                 }
             })
             .catch(() => {})
-            .finally(() => setReviewsLoading(false));
+            .finally(() => {
+                if (reqId === reviewsReqIdRef.current) {
+                    setReviewsLoading(false);
+                }
+            });
     };
 
     const handleVerifyAction = async (status: 'verified' | 'rejected') => {
-        if (!selectedDriver) return;
+        if (!selectedDriver || submittingAction) return;
         if (status === 'rejected' && !rejectionReason.trim()) {
             notify('Reason Required', 'Please enter a rejection reason (e.g. RC document photo is unclear).');
             return;
@@ -103,7 +165,7 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
 
         setSubmittingAction(true);
         try {
-            const res = await fetchWithAuth(`${API_BASE}/api/admin/drivers/${selectedDriver.id}/verify`, {
+            const res = await fetchWithAuthRef.current(`${API_BASE}/api/admin/drivers/${selectedDriver.id}/verify`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -114,9 +176,13 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
 
             if (res.ok) {
                 notify('Success', `Driver ${selectedDriver.name} marked as ${status.toUpperCase()}`);
-                setInspectModalVisible(false);
-                setSelectedDriver(null);
-                loadDrivers();
+                reviewsReqIdRef.current += 1;
+                reviewsAbortRef.current?.abort();
+                setPreviewImageRaw(null);
+                setRejectionReason('');
+                setDriverReviews(null);
+                setModalState({ type: 'none' });
+                loadDrivers(true);
             } else {
                 const data = await res.json();
                 notify('Error', data.error || 'Failed to update verification status');
@@ -129,37 +195,41 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
     };
 
     // Step 1: Delete button pressed -> only open the confirmation popup (nothing is deleted yet).
-    const handleDeleteDriver = (driver: Driver) => {
-        if (deletingDriverId) return;
-        setDeleteConfirmDriver(driver);
+    const handleDeleteDriver = (driver: Driver, fromInspect = false) => {
+        if (deletingDriverId || submittingAction) return;
+        setModalState({ type: 'delete', driver, returnToInspect: fromInspect });
     };
 
-    // "No" -> close the popup, nothing happens.
+    // "No" -> close the popup (or return to Inspect if opened from there), nothing happens.
     const handleCancelDelete = () => {
         if (deletingDriverId) return;
-        setDeleteConfirmDriver(null);
+        if (modalState.type === 'delete' && modalState.returnToInspect) {
+            setModalState({ type: 'inspect', driver: modalState.driver });
+        } else {
+            setModalState({ type: 'none' });
+        }
     };
 
-    // "Yes" -> close the popup and perform the actual delete.
+    // "Yes" -> perform the actual delete and close.
     const handleConfirmDelete = async () => {
-        if (!deleteConfirmDriver || deletingDriverId) return;
-        const driver = deleteConfirmDriver;
-        await executeDelete(driver);
-        setDeleteConfirmDriver(null);
+        if (modalState.type !== 'delete' || deletingDriverId) return;
+        await executeDelete(modalState.driver);
     };
 
     const executeDelete = async (driver: Driver) => {
         setDeletingDriverId(driver.id);
         try {
-            const res = await fetchWithAuth(`${API_BASE}/api/admin/drivers/${driver.id}`, {
+            const res = await fetchWithAuthRef.current(`${API_BASE}/api/admin/drivers/${driver.id}`, {
                 method: 'DELETE',
             });
             if (res.ok) {
                 const data = await res.json();
                 notify('Deleted', data.message || `Driver ${driver.name} deleted successfully`);
-                setInspectModalVisible(false);
-                setSelectedDriver(null);
-                loadDrivers();
+                setPreviewImageRaw(null);
+                setRejectionReason('');
+                setDriverReviews(null);
+                setModalState({ type: 'none' });
+                loadDrivers(true);
             } else {
                 const data = await res.json();
                 notify('Error', data.error || 'Failed to delete driver');
@@ -171,17 +241,26 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
         }
     };
 
-    const handleOpenReKYC = (driver: Driver) => {
-        setRekycDriver(driver);
+    const handleOpenReKYC = (driver: Driver, fromInspect = false) => {
+        if (submittingAction || rekycLoading) return;
         setRekycReason('Your uploaded documents could not be verified or are missing. Please re-upload your driving license, vehicle RC, and other KYC documents.');
-        setRekycModalVisible(true);
+        setModalState({ type: 'rekyc', driver, returnToInspect: fromInspect });
+    };
+
+    const handleCloseReKYC = () => {
+        if (rekycLoading) return;
+        if (modalState.type === 'rekyc' && modalState.returnToInspect) {
+            setModalState({ type: 'inspect', driver: modalState.driver });
+        } else {
+            setModalState({ type: 'none' });
+        }
     };
 
     const handleExecuteReKYC = async () => {
-        if (!rekycDriver) return;
+        if (!rekycDriver || rekycLoading) return;
         setRekycLoading(true);
         try {
-            const res = await fetchWithAuth(`${API_BASE}/api/admin/drivers/${rekycDriver.id}/rekyc`, {
+            const res = await fetchWithAuthRef.current(`${API_BASE}/api/admin/drivers/${rekycDriver.id}/rekyc`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -191,10 +270,11 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
 
             if (res.ok) {
                 notify('Notification Sent', `Re-KYC request sent to ${rekycDriver.name} (${rekycDriver.phone}). The driver will be notified to re-upload documents.`);
-                setRekycModalVisible(false);
-                setRekycDriver(null);
-                if (inspectModalVisible) setInspectModalVisible(false);
-                loadDrivers();
+                setPreviewImageRaw(null);
+                setRejectionReason('');
+                setDriverReviews(null);
+                setModalState({ type: 'none' });
+                loadDrivers(true);
             } else {
                 const data = await res.json();
                 notify('Error', data.error || 'Failed to request Re-KYC');
@@ -251,7 +331,18 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
         else Linking.openURL(safeUrl).catch(() => {});
     };
 
-    if (loading) return <ActivityIndicator color="#3B7DDD" size="large" style={{ marginTop: 60 }} />;
+    if (loading && drivers.length === 0) return <ActivityIndicator color="#3B7DDD" size="large" style={{ marginTop: 60 }} />;
+
+    if (error && drivers.length === 0) {
+        return (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 }}>
+                <Text style={{ color: '#EF4444', fontSize: 16, fontWeight: 'bold', marginBottom: 12 }}>{error}</Text>
+                <TouchableOpacity style={styles.exportBtn} onPress={() => loadDrivers(false)}>
+                    <Text style={styles.exportBtnText}>↻ Retry</Text>
+                </TouchableOpacity>
+            </View>
+        );
+    }
 
     return (
         <View style={[styles.container, isMobile && { padding: 16 }]}>
@@ -263,12 +354,21 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                         Drivers must pass 100% document review before receiving ride-posting privileges.
                     </Text>
                 </View>
-                <TouchableOpacity
-                    style={styles.exportBtn}
-                    onPress={() => downloadCSV(drivers, 'Driver_Onboarding_Report')}
-                >
-                    <Text style={styles.exportBtnText}>Export CSV</Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
+                    <TouchableOpacity
+                        style={[styles.exportBtn, { backgroundColor: '#1F2937', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' }, refreshing && { opacity: 0.6 }]}
+                        onPress={() => loadDrivers(true)}
+                        disabled={refreshing}
+                    >
+                        <Text style={styles.exportBtnText}>{refreshing ? '↻ Refreshing...' : '↻ Refresh'}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={styles.exportBtn}
+                        onPress={() => downloadCSV(filteredDrivers, 'Driver_Onboarding_Report')}
+                    >
+                        <Text style={styles.exportBtnText}>Export CSV</Text>
+                    </TouchableOpacity>
+                </View>
             </View>
 
             {/* Filter Tabs */}
@@ -518,7 +618,7 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                     visible={inspectModalVisible}
                     transparent={true}
                     animationType="fade"
-                    onRequestClose={() => setInspectModalVisible(false)}
+                    onRequestClose={closeInspectModal}
                 >
                     <View style={[styles.modalBackdrop, isMobile && { padding: 12 }]}>
                         <View style={styles.inspectModalCard}>
@@ -528,7 +628,11 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                                     <Text style={styles.modalTitle}>Inspect Driver Documents</Text>
                                     <Text style={styles.modalSub}>{selectedDriver.name} ({selectedDriver.phone})</Text>
                                 </View>
-                                <TouchableOpacity onPress={() => setInspectModalVisible(false)} style={styles.closeBtn}>
+                                <TouchableOpacity
+                                    onPress={closeInspectModal}
+                                    disabled={submittingAction}
+                                    style={[styles.closeBtn, submittingAction && { opacity: 0.4 }]}
+                                >
                                     <Text style={{ color: '#9CA3AF', fontSize: 20, fontWeight: 'bold' }}>✕</Text>
                                 </TouchableOpacity>
                             </View>
@@ -649,7 +753,7 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                             <View style={[styles.modalFooter, isMobile && { flexWrap: 'wrap', padding: 14, gap: 8 }]}>
                                 <TouchableOpacity
                                     style={[styles.actionBtn, styles.deleteDriverBtn, isMobile && { minWidth: '46%', paddingVertical: 10 }, (submittingAction || deletingDriverId === selectedDriver.id) && { opacity: 0.6 }]}
-                                    onPress={() => handleDeleteDriver(selectedDriver)}
+                                    onPress={() => handleDeleteDriver(selectedDriver, true)}
                                     disabled={submittingAction || deletingDriverId === selectedDriver.id}
                                 >
                                     <Text style={styles.actionBtnText}>🗑 Delete</Text>
@@ -657,7 +761,7 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
 
                                 <TouchableOpacity
                                     style={[styles.actionBtn, styles.rekycModalBtn, isMobile && { minWidth: '46%', paddingVertical: 10 }, submittingAction && { opacity: 0.6 }]}
-                                    onPress={() => handleOpenReKYC(selectedDriver)}
+                                    onPress={() => handleOpenReKYC(selectedDriver, true)}
                                     disabled={submittingAction}
                                 >
                                     <Text style={styles.actionBtnText}>🔄 Re-KYC</Text>
@@ -685,6 +789,53 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                                 </TouchableOpacity>
                             </View>
                         </View>
+
+                        {/* Inline Document Preview Overlay (avoids stacked React Native Modals) */}
+                        {previewImage && (
+                            <View style={[StyleSheet.absoluteFillObject, styles.previewBackdrop, { zIndex: 20 }]}>
+                                <View style={styles.previewCard}>
+                                    <View style={styles.previewHeader}>
+                                        <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>Document Preview</Text>
+                                        <TouchableOpacity onPress={() => setPreviewImage(null)}>
+                                            <Text style={{ color: '#fff', fontSize: 22, fontWeight: 'bold' }}>✕</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                    <View style={styles.previewImgBox}>
+                                        {isPdf(previewImage) ? (
+                                            Platform.OS === 'web' ? (
+                                                React.createElement('iframe', {
+                                                    src: previewImage,
+                                                    title: 'Document Preview',
+                                                    style: { width: '100%', height: '100%', border: 0, backgroundColor: '#fff', borderRadius: 8 },
+                                                })
+                                            ) : (
+                                                <Text style={styles.previewMsg}>PDF documents open in your browser.</Text>
+                                            )
+                                        ) : previewStatus === 'error' ? (
+                                            <Text style={styles.previewMsg}>
+                                                ⚠ Could not load this document.{'\n'}The file may be missing on the server.
+                                            </Text>
+                                        ) : (
+                                            <>
+                                                <Image
+                                                    source={{ uri: previewImage }}
+                                                    style={styles.fullImage}
+                                                    resizeMode="contain"
+                                                    onLoad={() => setPreviewStatus('loaded')}
+                                                    onError={() => setPreviewStatus('error')}
+                                                />
+                                                {previewStatus === 'loading' && (
+                                                    <ActivityIndicator color="#3B7DDD" size="large" style={StyleSheet.absoluteFill} />
+                                                )}
+                                            </>
+                                        )}
+                                    </View>
+                                    <TouchableOpacity style={styles.openExternalBtn} onPress={() => openExternally(previewImage)}>
+                                        <Text style={styles.viewDocBtnText}>Open in new tab ↗</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        )}
                     </View>
                 </Modal>
             )}
@@ -695,7 +846,7 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                     visible={rekycModalVisible}
                     transparent={true}
                     animationType="fade"
-                    onRequestClose={() => setRekycModalVisible(false)}
+                    onRequestClose={handleCloseReKYC}
                 >
                     <View style={[styles.modalBackdrop, isMobile && { padding: 12 }]}>
                         <View style={styles.rekycModalCard}>
@@ -706,7 +857,11 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                                         Driver: {rekycDriver.name} ({rekycDriver.phone})
                                     </Text>
                                 </View>
-                                <TouchableOpacity onPress={() => setRekycModalVisible(false)} style={styles.closeBtn}>
+                                <TouchableOpacity
+                                    onPress={handleCloseReKYC}
+                                    disabled={rekycLoading}
+                                    style={[styles.closeBtn, rekycLoading && { opacity: 0.4 }]}
+                                >
                                     <Text style={{ color: '#9CA3AF', fontSize: 20, fontWeight: 'bold' }}>✕</Text>
                                 </TouchableOpacity>
                             </View>
@@ -733,8 +888,8 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
 
                                 <View style={{ flexDirection: 'row', gap: 12, marginTop: 20 }}>
                                     <TouchableOpacity
-                                        style={[styles.actionBtn, { backgroundColor: '#374151' }]}
-                                        onPress={() => setRekycModalVisible(false)}
+                                        style={[styles.actionBtn, { backgroundColor: '#374151' }, rekycLoading && { opacity: 0.6 }]}
+                                        onPress={handleCloseReKYC}
                                         disabled={rekycLoading}
                                     >
                                         <Text style={styles.actionBtnText}>Cancel</Text>
@@ -800,55 +955,6 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                                     )}
                                 </TouchableOpacity>
                             </View>
-                        </View>
-                    </View>
-                </Modal>
-            )}
-
-            {/* Image Preview Sub-Modal */}
-            {previewImage && (
-                <Modal visible={!!previewImage} transparent={true} animationType="fade" onRequestClose={() => setPreviewImage(null)}>
-                    <View style={styles.previewBackdrop}>
-                        <View style={styles.previewCard}>
-                            <View style={styles.previewHeader}>
-                                <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>Document Preview</Text>
-                                <TouchableOpacity onPress={() => setPreviewImage(null)}>
-                                    <Text style={{ color: '#fff', fontSize: 22, fontWeight: 'bold' }}>✕</Text>
-                                </TouchableOpacity>
-                            </View>
-                            <View style={styles.previewImgBox}>
-                                {isPdf(previewImage) ? (
-                                    Platform.OS === 'web' ? (
-                                        React.createElement('iframe', {
-                                            src: previewImage,
-                                            title: 'Document Preview',
-                                            style: { width: '100%', height: '100%', border: 0, backgroundColor: '#fff', borderRadius: 8 },
-                                        })
-                                    ) : (
-                                        <Text style={styles.previewMsg}>PDF documents open in your browser.</Text>
-                                    )
-                                ) : previewStatus === 'error' ? (
-                                    <Text style={styles.previewMsg}>
-                                        ⚠ Could not load this document.{'\n'}The file may be missing on the server.
-                                    </Text>
-                                ) : (
-                                    <>
-                                        <Image
-                                            source={{ uri: previewImage }}
-                                            style={styles.fullImage}
-                                            resizeMode="contain"
-                                            onLoad={() => setPreviewStatus('loaded')}
-                                            onError={() => setPreviewStatus('error')}
-                                        />
-                                        {previewStatus === 'loading' && (
-                                            <ActivityIndicator color="#3B7DDD" size="large" style={StyleSheet.absoluteFill} />
-                                        )}
-                                    </>
-                                )}
-                            </View>
-                            <TouchableOpacity style={styles.openExternalBtn} onPress={() => openExternally(previewImage)}>
-                                <Text style={styles.viewDocBtnText}>Open in new tab ↗</Text>
-                            </TouchableOpacity>
                         </View>
                     </View>
                 </Modal>

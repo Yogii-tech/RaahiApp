@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, ScrollView, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
@@ -8,8 +8,14 @@ import { Driver } from './AdminDriversView';
 export default function AdminVehiclesView({ token, searchQuery = '', isDark }: { token: string; searchQuery?: string; isDark: boolean }) {
     const [vehicles, setVehicles] = useState<Driver[]>([]);
     const [loading, setLoading] = useState(true);
-    const [activeFilter, setActiveFilter] = useState<'all' | 'verified' | 'pending'>('all');
+    const [refreshing, setRefreshing] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [activeFilter, setActiveFilter] = useState<'all' | 'verified' | 'pending' | 'rejected'>('all');
     const { fetchWithAuth } = useAuth();
+    const fetchWithAuthRef = useRef(fetchWithAuth);
+    fetchWithAuthRef.current = fetchWithAuth;
+    const abortRef = useRef<AbortController | null>(null);
+    const reqIdRef = useRef(0);
     const { width } = useWindowDimensions();
     const isMobile = width < 768;
 
@@ -22,29 +28,56 @@ export default function AdminVehiclesView({ token, searchQuery = '', isDark }: {
         accent: '#3B7DDD',
     };
 
-    useEffect(() => {
-        loadVehicles();
-    }, []);
+    const loadVehicles = useCallback(async (background = false) => {
+        abortRef.current?.abort();
+        const controller = new AbortController();
+        abortRef.current = controller;
+        const reqId = ++reqIdRef.current;
 
-    const loadVehicles = async () => {
-        setLoading(true);
+        if (background) {
+            setRefreshing(true);
+        } else {
+            setLoading(true);
+        }
+        setError(null);
         try {
-            const res = await fetchWithAuth(`${API_BASE}/api/admin/drivers`);
+            const res = await fetchWithAuthRef.current(`${API_BASE}/api/admin/drivers`, { signal: controller.signal });
+            if (!res.ok) throw new Error(`Server error: ${res.status}`);
             const data = await res.json();
-            // Filter drivers that actually have a vehicle registered
+            if (reqId !== reqIdRef.current) return;
             const withVehicles = Array.isArray(data) ? data.filter(d => d.vehicleNumber || d.vehicleName) : [];
             setVehicles(withVehicles);
-        } catch (err) {
+        } catch (err: any) {
+            if (err?.name === 'AbortError' || reqId !== reqIdRef.current) return;
             console.error('Failed to load vehicles:', err);
-            setVehicles([]);
+            setError(err?.message || 'Failed to load vehicles');
+            if (!background) setVehicles([]);
         } finally {
-            setLoading(false);
+            if (reqId === reqIdRef.current) {
+                setLoading(false);
+                setRefreshing(false);
+            }
         }
+    }, []);
+
+    useEffect(() => {
+        loadVehicles(false);
+        return () => {
+            reqIdRef.current += 1;
+            abortRef.current?.abort();
+        };
+    }, [loadVehicles]);
+
+    const getNormalizedStatus = (status?: string) => {
+        if (status === 'verified') return 'verified';
+        if (status === 'rejected') return 'rejected';
+        return 'pending';
     };
 
     const totalCount = vehicles.length;
-    const verifiedCount = vehicles.filter(v => v.verificationStatus === 'verified').length;
-    const pendingCount = vehicles.filter(v => v.verificationStatus === 'pending' || !v.verificationStatus).length;
+    const verifiedCount = vehicles.filter(v => getNormalizedStatus(v.verificationStatus) === 'verified').length;
+    const pendingCount = vehicles.filter(v => getNormalizedStatus(v.verificationStatus) === 'pending').length;
+    const rejectedCount = vehicles.filter(v => getNormalizedStatus(v.verificationStatus) === 'rejected').length;
 
     const filteredVehicles = vehicles.filter(v => {
         const matchesSearch =
@@ -53,9 +86,10 @@ export default function AdminVehiclesView({ token, searchQuery = '', isDark }: {
             v.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
             v.vehicleType?.toLowerCase().includes(searchQuery.toLowerCase());
 
-        const status = v.verificationStatus || 'pending';
+        const status = getNormalizedStatus(v.verificationStatus);
         if (activeFilter === 'verified') return matchesSearch && status === 'verified';
         if (activeFilter === 'pending') return matchesSearch && status === 'pending';
+        if (activeFilter === 'rejected') return matchesSearch && status === 'rejected';
         return matchesSearch;
     });
 
@@ -66,10 +100,21 @@ export default function AdminVehiclesView({ token, searchQuery = '', isDark }: {
         Capacity: v.seats ? `${v.seats} Seats` : '—',
         OwnerName: v.name || '—',
         OwnerPhone: v.phone || '—',
-        Status: v.verificationStatus || 'pending'
+        Status: getNormalizedStatus(v.verificationStatus)
     }));
 
-    if (loading) return <ActivityIndicator color="#3B7DDD" size="large" style={{ marginTop: 60 }} />;
+    if (loading && vehicles.length === 0) return <ActivityIndicator color="#3B7DDD" size="large" style={{ marginTop: 60 }} />;
+
+    if (error && vehicles.length === 0) {
+        return (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 }}>
+                <Text style={{ color: '#DC3545', fontSize: 16, fontWeight: 'bold', marginBottom: 12 }}>{error}</Text>
+                <TouchableOpacity style={styles.exportBtn} onPress={() => loadVehicles(false)}>
+                    <Text style={styles.exportBtnText}>↻ Retry</Text>
+                </TouchableOpacity>
+            </View>
+        );
+    }
 
     return (
         <ScrollView style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: T.bg }]} contentContainerStyle={{ paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
@@ -77,15 +122,24 @@ export default function AdminVehiclesView({ token, searchQuery = '', isDark }: {
                 <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={[styles.sectionTitle, { color: T.text }]}>Vehicle Fleet Management</Text>
                     <Text style={[styles.sectionSubtitle, { color: T.subtext }]}>
-                        Overview of active, pending, and retired vehicles registered in the system.
+                        Overview of active, pending, and rejected vehicles registered in the system.
                     </Text>
                 </View>
-                <TouchableOpacity
-                    style={styles.exportBtn}
-                    onPress={() => downloadCSV(exportData, 'Vehicles_Fleet_Report')}
-                >
-                    <Text style={styles.exportBtnText}>Export Fleet CSV</Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
+                    <TouchableOpacity
+                        style={[styles.refreshBtn, { backgroundColor: T.card, borderColor: T.border }, refreshing && { opacity: 0.6 }]}
+                        onPress={() => loadVehicles(true)}
+                        disabled={refreshing}
+                    >
+                        <Text style={[styles.refreshBtnText, { color: T.text }]}>{refreshing ? '↻ Refreshing...' : '↻ Refresh'}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={styles.exportBtn}
+                        onPress={() => downloadCSV(exportData, 'Vehicles_Fleet_Report')}
+                    >
+                        <Text style={styles.exportBtnText}>Export Fleet CSV</Text>
+                    </TouchableOpacity>
+                </View>
             </View>
 
             {/* KPI Row */}
@@ -94,6 +148,7 @@ export default function AdminVehiclesView({ token, searchQuery = '', isDark }: {
                     { label: 'Total Fleet', count: totalCount, color: '#3B7DDD', icon: '🚐' },
                     { label: 'Verified Active', count: verifiedCount, color: '#28A745', icon: '✅' },
                     { label: 'Pending Safety Audit', count: pendingCount, color: '#FCB92C', icon: '⏳' },
+                    { label: 'Rejected / Blocked', count: rejectedCount, color: '#DC3545', icon: '❌' },
                 ].map(card => (
                     <View key={card.label} style={[styles.kpiCard, isMobile && { minWidth: 140, padding: 14 }, { backgroundColor: T.card, borderColor: T.border }]}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -108,9 +163,10 @@ export default function AdminVehiclesView({ token, searchQuery = '', isDark }: {
             {/* Filter Tabs */}
             <View style={[styles.filterRow, { flexWrap: 'wrap' }, isMobile && { gap: 8 }]}>
                 {[
-                    { id: 'all', label: 'All Fleet' },
-                    { id: 'verified', label: 'Verified / Active' },
-                    { id: 'pending', label: 'Pending Inspection' },
+                    { id: 'all', label: `All Fleet (${totalCount})` },
+                    { id: 'verified', label: `Verified / Active (${verifiedCount})` },
+                    { id: 'pending', label: `Pending Inspection (${pendingCount})` },
+                    { id: 'rejected', label: `Rejected (${rejectedCount})` },
                 ].map(tab => (
                     <TouchableOpacity
                         key={tab.id}
@@ -139,7 +195,10 @@ export default function AdminVehiclesView({ token, searchQuery = '', isDark }: {
                         </Text>
                     ) : (
                         filteredVehicles.map((item, index) => {
-                            const status = item.verificationStatus || 'pending';
+                            const status = getNormalizedStatus(item.verificationStatus);
+                            const badgeStyle = status === 'verified' ? styles.badgeVerified : status === 'rejected' ? styles.badgeRejected : styles.badgePending;
+                            const badgeColor = status === 'verified' ? '#28A745' : status === 'rejected' ? '#DC3545' : '#FCB92C';
+                            const badgeLabel = status === 'verified' ? 'Active / Audit OK' : status === 'rejected' ? 'Rejected' : 'Pending Audit';
                             return (
                                 <View key={item.id} style={[styles.mobileVehicleCard, { borderBottomColor: T.border, backgroundColor: index % 2 === 1 ? (isDark ? 'rgba(255,255,255,0.01)' : '#F8FAFC') : 'transparent' }]}>
                                     <View style={styles.mobileCardTop}>
@@ -151,15 +210,9 @@ export default function AdminVehiclesView({ token, searchQuery = '', isDark }: {
                                                 {item.vehicleNumber || 'No Plate Number'}
                                             </Text>
                                         </View>
-                                        <View style={[
-                                            styles.statusBadge,
-                                            status === 'verified' ? styles.badgeVerified : styles.badgePending
-                                        ]}>
-                                            <Text style={[
-                                                styles.badgeText,
-                                                { color: status === 'verified' ? '#28A745' : '#FCB92C' }
-                                            ]}>
-                                                {status === 'verified' ? 'Active / Audit OK' : 'Pending Audit'}
+                                        <View style={[styles.statusBadge, badgeStyle]}>
+                                            <Text style={[styles.badgeText, { color: badgeColor }]}>
+                                                {badgeLabel}
                                             </Text>
                                         </View>
                                     </View>
@@ -190,7 +243,10 @@ export default function AdminVehiclesView({ token, searchQuery = '', isDark }: {
                                 data={filteredVehicles}
                                 keyExtractor={item => item.id}
                                 renderItem={({ item, index }) => {
-                                    const status = item.verificationStatus || 'pending';
+                                    const status = getNormalizedStatus(item.verificationStatus);
+                                    const badgeStyle = status === 'verified' ? styles.badgeVerified : status === 'rejected' ? styles.badgeRejected : styles.badgePending;
+                                    const badgeColor = status === 'verified' ? '#28A745' : status === 'rejected' ? '#DC3545' : '#FCB92C';
+                                    const badgeLabel = status === 'verified' ? 'Active / Audit OK' : status === 'rejected' ? 'Rejected' : 'Pending Audit';
                                     return (
                                         <View style={[styles.tableRow, { borderBottomColor: T.border, backgroundColor: index % 2 === 1 ? (isDark ? 'rgba(255,255,255,0.01)' : '#F8FAFC') : 'transparent' }]}>
                                             <View style={{ flex: 2, justifyContent: 'center', minWidth: 0, paddingRight: 8 }}>
@@ -208,15 +264,9 @@ export default function AdminVehiclesView({ token, searchQuery = '', isDark }: {
                                                 <Text style={[styles.ownerPhone, { color: T.subtext }]} numberOfLines={1}>{item.phone}</Text>
                                             </View>
                                             <View style={{ flex: 1.5, justifyContent: 'center', minWidth: 0 }}>
-                                                <View style={[
-                                                    styles.statusBadge,
-                                                    status === 'verified' ? styles.badgeVerified : styles.badgePending
-                                                ]}>
-                                                    <Text style={[
-                                                        styles.badgeText,
-                                                        { color: status === 'verified' ? '#28A745' : '#FCB92C' }
-                                                    ]}>
-                                                        {status === 'verified' ? 'Active / Audit OK' : 'Pending Audit'}
+                                                <View style={[styles.statusBadge, badgeStyle]}>
+                                                    <Text style={[styles.badgeText, { color: badgeColor }]}>
+                                                        {badgeLabel}
                                                     </Text>
                                                 </View>
                                             </View>
@@ -242,6 +292,8 @@ const styles = StyleSheet.create({
     headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
     sectionTitle: { fontSize: 20, fontWeight: '600' },
     sectionSubtitle: { fontSize: 13, marginTop: 4 },
+    refreshBtn: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 4, borderWidth: 1 },
+    refreshBtnText: { fontSize: 13, fontWeight: '500' },
     exportBtn: { backgroundColor: '#3B7DDD', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 4 },
     exportBtnText: { color: '#FFFFFF', fontSize: 13, fontWeight: '500' },
     kpiRow: { flexDirection: 'row', gap: 20, marginBottom: 24 },
@@ -263,6 +315,7 @@ const styles = StyleSheet.create({
     statusBadge: { alignSelf: 'flex-start', paddingVertical: 4, paddingHorizontal: 10, borderRadius: 4, borderWidth: 1 },
     badgeVerified: { backgroundColor: 'rgba(40,167,69,0.1)', borderColor: 'rgba(40,167,69,0.3)' },
     badgePending: { backgroundColor: 'rgba(252,185,44,0.1)', borderColor: 'rgba(252,185,44,0.3)' },
+    badgeRejected: { backgroundColor: 'rgba(220,53,69,0.1)', borderColor: 'rgba(220,53,69,0.3)' },
     badgeText: { fontSize: 11, fontWeight: 'bold' },
     mobileVehicleCard: { padding: 14, borderBottomWidth: 1, gap: 8 },
     mobileCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 },

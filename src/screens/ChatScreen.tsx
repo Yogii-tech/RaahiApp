@@ -69,6 +69,9 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
     const [isSending, setIsSending] = useState(false);
     const flatListRef = useRef<FlatList>(null);
     const lastMarkedReadRef = useRef<string>('');
+    const sendingRef = useRef(false);
+    const fetchSeqRef = useRef(0);
+    const abortRef = useRef<AbortController | null>(null);
     const [isAppActive, setIsAppActive] = useState<boolean>(() => {
         if (Platform.OS === 'web') {
             return typeof document === 'undefined' || document.visibilityState === 'visible';
@@ -92,23 +95,39 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
     }, []);
 
     useEffect(() => {
+        abortRef.current?.abort();
         lastMarkedReadRef.current = '';
+        setMessages([]);
+        setIsLoading(true);
     }, [bookingId]);
 
+    const myUserId = user?.id || (user as any)?._id;
+
     const fetchMessages = async () => {
-        if (!bookingId) {
+        const targetBookingId = bookingId;
+        if (!targetBookingId) {
             setIsLoading(false);
             return;
         }
+        abortRef.current?.abort();
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        abortRef.current = controller;
+        const seq = ++fetchSeqRef.current;
+
         try {
-            const response = await apiRequest(`/api/chat/${bookingId}`, { method: 'GET' }, logout);
+            const response = await apiRequest(
+                `/api/chat/${targetBookingId}`,
+                controller ? { method: 'GET', signal: controller.signal } : { method: 'GET' },
+                logout
+            );
+            if (seq !== fetchSeqRef.current || controller?.signal.aborted) return;
             if (response.ok) {
                 const data = await response.json();
+                if (seq !== fetchSeqRef.current || controller?.signal.aborted) return;
                 const safeMessages: Message[] = Array.isArray(data) ? data : [];
                 setMessages(safeMessages);
                 // Mark as read only when new incoming messages arrive
-                const myId = user?.id || (user as any)?._id;
-                const incoming = safeMessages.filter(m => !myId || m.senderId !== myId);
+                const incoming = safeMessages.filter(m => !myUserId || m.senderId !== myUserId);
                 const latestIncoming = incoming[incoming.length - 1];
                 const latestIncomingId = latestIncoming
                     ? (latestIncoming.id || (latestIncoming as any)._id || latestIncoming.createdAt || String(incoming.length))
@@ -116,30 +135,48 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
                 const readMarker = latestIncoming ? `${incoming.length}:${latestIncomingId}` : '';
                 if (readMarker && readMarker !== lastMarkedReadRef.current) {
                     lastMarkedReadRef.current = readMarker;
-                    apiRequest(`/api/chat/${bookingId}/read`, { method: 'POST' }, logout).catch(() => {
-                        if (lastMarkedReadRef.current === readMarker) {
-                            lastMarkedReadRef.current = '';
-                        }
-                    });
+                    apiRequest(`/api/chat/${targetBookingId}/read`, { method: 'POST' }, logout)
+                        .then(res => {
+                            if (!res.ok && lastMarkedReadRef.current === readMarker) {
+                                lastMarkedReadRef.current = '';
+                            }
+                        })
+                        .catch(() => {
+                            if (lastMarkedReadRef.current === readMarker) {
+                                lastMarkedReadRef.current = '';
+                            }
+                        });
                 }
             }
-        } catch (err) {
+        } catch (err: any) {
+            if (err?.name === 'AbortError' || controller?.signal.aborted) return;
             console.error('Fetch messages error:', err);
         } finally {
-            setIsLoading(false);
+            if (seq === fetchSeqRef.current && !controller?.signal.aborted) {
+                setIsLoading(false);
+            }
         }
     };
 
+    const fetchMessagesRef = useRef(fetchMessages);
+    fetchMessagesRef.current = fetchMessages;
+
     useEffect(() => {
-        if (!isAppActive) return;
-        fetchMessages();
+        if (!isAppActive) {
+            abortRef.current?.abort();
+            return;
+        }
+        fetchMessagesRef.current();
         const interval = setInterval(() => {
             if (Platform.OS === 'web' && typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
             if (Platform.OS !== 'web' && AppState.currentState !== 'active') return;
-            fetchMessages();
+            fetchMessagesRef.current();
         }, 3000); // Poll every 3s while active
-        return () => clearInterval(interval);
-    }, [bookingId, isAppActive]);
+        return () => {
+            clearInterval(interval);
+            abortRef.current?.abort();
+        };
+    }, [bookingId, isAppActive, myUserId]);
 
     useEffect(() => {
         const handleHardwareBack = () => {
@@ -151,9 +188,11 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
     }, [onBack]);
 
     const handleSend = async (customText?: string) => {
-        const textToSend = customText || inputText;
+        if (isSending || sendingRef.current) return;
+        const textToSend = customText ?? inputText;
         if (!textToSend.trim()) return;
 
+        sendingRef.current = true;
         setIsSending(true);
         try {
             const response = await apiRequest(`/api/chat/${bookingId}`, {
@@ -162,16 +201,21 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
             }, logout);
 
             if (response.ok) {
-                setInputText('');
-                fetchMessages();
+                if (!customText) {
+                    setInputText('');
+                }
+                fetchMessagesRef.current();
                 // Wait a bit then scroll to bottom
                 setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
             } else {
-                notify('Error', 'Failed to send message');
+                const errData = await response.json().catch(() => ({}));
+                notify('Error', errData.error || 'Failed to send message');
             }
         } catch (err) {
             console.error('Send message error:', err);
+            notify('Error', 'Failed to send message');
         } finally {
+            sendingRef.current = false;
             setIsSending(false);
         }
     };
@@ -299,7 +343,8 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
                         data={quickReplies}
                         renderItem={({ item }) => (
                             <TouchableOpacity
-                                style={[styles.quickReplyPill, { borderColor: colors.borderColor }]}
+                                style={[styles.quickReplyPill, { borderColor: colors.borderColor }, isSending && { opacity: 0.5 }]}
+                                disabled={isSending}
                                 onPress={() => handleSend(item.text)}>
                                 <Text style={[styles.quickReplyText, { color: colors.textColor }]}>{item.label}</Text>
                             </TouchableOpacity>

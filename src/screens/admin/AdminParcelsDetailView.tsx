@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { downloadCSV } from '../../utils/exportUtils';
 import { API_BASE } from '../../apiConfig';
@@ -33,7 +33,13 @@ export default function AdminParcelsDetailView({ isDark, searchQuery = '' }: { i
      const [parcelStats, setParcelStats] = useState<ParcelStats | null>(null);
      const [parcels, setParcels] = useState<ParcelRow[]>([]);
      const [loading, setLoading] = useState(true);
+     const [refreshing, setRefreshing] = useState(false);
+     const [error, setError] = useState<string | null>(null);
      const { fetchWithAuth } = useAuth();
+     const fetchWithAuthRef = useRef(fetchWithAuth);
+     fetchWithAuthRef.current = fetchWithAuth;
+     const abortRef = useRef<AbortController | null>(null);
+     const reqIdRef = useRef(0);
      const { width } = useWindowDimensions();
      const isMobile = width < 768;
 
@@ -46,23 +52,70 @@ export default function AdminParcelsDetailView({ isDark, searchQuery = '' }: { i
           accent: '#3B7DDD',
      };
 
-     const fetchData = () => {
-          setLoading(true);
+     const fetchData = useCallback((background = false) => {
+          abortRef.current?.abort();
+          const controller = new AbortController();
+          abortRef.current = controller;
+          const reqId = ++reqIdRef.current;
+
+          if (background) {
+               setRefreshing(true);
+          } else {
+               setLoading(true);
+          }
+          setError(null);
+
           Promise.all([
-               fetchWithAuth(`${API_BASE}/api/admin/stats`).then(r => r.json()),
-               fetchWithAuth(`${API_BASE}/api/admin/parcels`).then(r => r.json()),
+               fetchWithAuthRef.current(`${API_BASE}/api/admin/stats`, { signal: controller.signal }).then(r => {
+                    if (!r.ok) throw new Error(`Stats error: ${r.status}`);
+                    return r.json();
+               }),
+               fetchWithAuthRef.current(`${API_BASE}/api/admin/parcels`, { signal: controller.signal }).then(r => {
+                    if (!r.ok) throw new Error(`Parcels error: ${r.status}`);
+                    return r.json();
+               }),
           ])
                .then(([stats, parcelsData]) => {
+                    if (reqId !== reqIdRef.current) return;
                     setParcelStats(stats?.parcels ?? null);
                     setParcels(Array.isArray(parcelsData) ? parcelsData : []);
                })
-               .catch(() => { setParcelStats(null); setParcels([]); })
-               .finally(() => setLoading(false));
-     };
+               .catch((err: any) => {
+                    if (err?.name === 'AbortError' || reqId !== reqIdRef.current) return;
+                    setError(err?.message || 'Could not load parcel data');
+                    if (!background) {
+                         setParcelStats(null);
+                         setParcels([]);
+                    }
+               })
+               .finally(() => {
+                    if (reqId === reqIdRef.current) {
+                         setLoading(false);
+                         setRefreshing(false);
+                    }
+               });
+     }, []);
 
-     useEffect(() => { fetchData(); }, []);
+     useEffect(() => {
+          fetchData(false);
+          return () => {
+               reqIdRef.current += 1;
+               abortRef.current?.abort();
+          };
+     }, [fetchData]);
 
-     if (loading) return <ActivityIndicator color="#3B7DDD" size="large" style={{ marginTop: 60 }} />;
+     if (loading && parcels.length === 0) return <ActivityIndicator color="#3B7DDD" size="large" style={{ marginTop: 60 }} />;
+
+     if (error && parcels.length === 0) {
+          return (
+               <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 }}>
+                    <Text style={{ color: '#D9534F', fontSize: 16, fontWeight: 'bold', marginBottom: 12 }}>{error}</Text>
+                    <TouchableOpacity onPress={() => fetchData(false)} style={styles.primaryBtn}>
+                         <Text style={styles.primaryBtnText}>↻ Retry</Text>
+                    </TouchableOpacity>
+               </View>
+          );
+     }
 
      const filteredParcels = parcels.filter(p =>
           (p.sender || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -75,14 +128,21 @@ export default function AdminParcelsDetailView({ isDark, searchQuery = '' }: { i
                <View style={[styles.header, isMobile && { flexDirection: 'column', alignItems: 'flex-start', gap: 12 }]}>
                     <Text style={[styles.headerTitle, { color: T.text }]}>Parcels Overview</Text>
                     <View style={[styles.headerButtons, { flexWrap: 'wrap', gap: 10 }]}>
-                         <TouchableOpacity onPress={fetchData} style={[styles.ghostBtn, { borderColor: T.border }]}>
-                              <Text style={[styles.ghostBtnText, { color: T.text }]}>↻ Refresh</Text>
+                         <TouchableOpacity
+                              onPress={() => fetchData(true)}
+                              disabled={refreshing}
+                              style={[styles.ghostBtn, { borderColor: T.border }, refreshing && { opacity: 0.6 }]}
+                         >
+                              <Text style={[styles.ghostBtnText, { color: T.text }]}>{refreshing ? '↻ Refreshing...' : '↻ Refresh'}</Text>
                          </TouchableOpacity>
-                         <TouchableOpacity onPress={() => downloadCSV(parcels, 'Parcels_Report')} style={styles.primaryBtn}>
+                         <TouchableOpacity onPress={() => downloadCSV(filteredParcels, 'Parcels_Report')} style={styles.primaryBtn}>
                               <Text style={styles.primaryBtnText}>Export Report</Text>
                          </TouchableOpacity>
                     </View>
                </View>
+               {error && (
+                    <Text style={{ color: '#D9534F', fontSize: 12, marginBottom: 12 }}>Refresh failed: {error}</Text>
+               )}
 
                {/* KPI Cards */}
                <View style={[styles.statsRow, { flexWrap: 'wrap' }, isMobile && { gap: 12 }]}>
@@ -135,7 +195,7 @@ export default function AdminParcelsDetailView({ isDark, searchQuery = '' }: { i
                                    </Text>
                                    <View style={styles.mobileCardBottom}>
                                         <Text style={{ color: T.subtext, fontSize: 12, flex: 1, minWidth: 0 }} numberOfLines={1} ellipsizeMode="tail">
-                                             {p.pickup.split(',')[0]} → {p.dropoff.split(',')[0]}
+                                             {(p.pickup || '—').split(',')[0]} → {(p.dropoff || '—').split(',')[0]}
                                         </Text>
                                         <Text style={{ color: '#00C853', fontWeight: 'bold', fontSize: 14 }}>₹{p.price}</Text>
                                    </View>
@@ -150,8 +210,8 @@ export default function AdminParcelsDetailView({ isDark, searchQuery = '' }: { i
                                         <Text style={{ color: T.subtext, fontSize: 11 }} numberOfLines={1}>→ {p.recipient}</Text>
                                    </View>
                                    <View style={[styles.tableCell, { flex: 1.2, minWidth: 0, paddingRight: 8 }]}>
-                                        <Text style={{ color: T.text, fontSize: 12 }} numberOfLines={1}>{p.pickup.split(',')[0]}</Text>
-                                        <Text style={{ color: T.subtext, fontSize: 11 }} numberOfLines={1}>to {p.dropoff.split(',')[0]}</Text>
+                                        <Text style={{ color: T.text, fontSize: 12 }} numberOfLines={1}>{(p.pickup || '—').split(',')[0]}</Text>
+                                        <Text style={{ color: T.subtext, fontSize: 11 }} numberOfLines={1}>to {(p.dropoff || '—').split(',')[0]}</Text>
                                    </View>
                                    <View style={[styles.tableCell, { minWidth: 0 }]}>
                                         <View style={[styles.statusBadge, { backgroundColor: (STATUS_COLORS[p.status] || '#6C757D') + '22' }]}>

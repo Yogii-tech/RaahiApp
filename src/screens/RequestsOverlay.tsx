@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View, Text, StyleSheet, FlatList, ActivityIndicator,
     TouchableOpacity, Modal, AppState, Platform
@@ -66,6 +66,17 @@ const RatingModal: React.FC<RatingModalProps> = ({ visible, rideId, driverName, 
     // Ref-based guard prevents double-submit even before React state propagates
     const submittingRef = React.useRef(false);
 
+    // Reset rating state whenever modal opens or targets a different ride
+    useEffect(() => {
+        if (visible) {
+            setRating(0);
+            setComment('');
+            setSubmitted(false);
+            submittingRef.current = false;
+            setSubmitting(false);
+        }
+    }, [visible, rideId]);
+
     // Import TextInput inline to avoid adding to outer component
     const { TextInput } = require('react-native');
 
@@ -106,6 +117,7 @@ const RatingModal: React.FC<RatingModalProps> = ({ visible, rideId, driverName, 
     };
 
     const handleClose = () => {
+        if (submittingRef.current) return;
         setRating(0);
         setComment('');
         setSubmitted(false);
@@ -155,8 +167,9 @@ const RatingModal: React.FC<RatingModalProps> = ({ visible, rideId, driverName, 
                             </View>
                             <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
                                 <TouchableOpacity
-                                    style={[ratingModalStyles.skipBtn, { borderColor: colors.borderColor }]}
+                                    style={[ratingModalStyles.skipBtn, { borderColor: colors.borderColor }, submitting && { opacity: 0.5 }]}
                                     onPress={handleClose}
+                                    disabled={submitting}
                                 >
                                     <Text style={{ color: colors.subtextColor, fontWeight: '600' }}>Skip</Text>
                                 </TouchableOpacity>
@@ -200,6 +213,10 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
     const [notifLoading, setNotifLoading] = useState(false);
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [clearing, setClearing] = useState(false);
+    const [updatingBookings, setUpdatingBookings] = useState<Record<string, boolean>>({});
+    const updatingBookingsRef = useRef<Record<string, boolean>>({});
+    const clearingRef = useRef(false);
+    const pollAbortRef = useRef<AbortController | null>(null);
 
     // Rating modal state
     const [ratingModal, setRatingModal] = useState<{ visible: boolean; rideId: string; driverName: string }>({
@@ -229,16 +246,52 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
         return () => sub?.remove?.();
     }, []);
 
+    const fetchData = async () => {
+        pollAbortRef.current?.abort();
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        pollAbortRef.current = controller;
+
+        try {
+            const endpoint = isDriver ? '/api/rides/requests' : '/api/rides/bookings';
+            const response = await apiRequest(endpoint, controller ? { signal: controller.signal } : {}, logout);
+            if (controller?.signal.aborted) return;
+            if (response.ok) {
+                const data = await response.json();
+                if (controller?.signal.aborted) return;
+                const list = Array.isArray(data) ? data : [];
+                const recent = list.filter((b: any) => isWithin24h(b.createdAt));
+                recent.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+                setBookings(recent);
+            }
+        } catch (err: any) {
+            if (err?.name === 'AbortError' || controller?.signal.aborted) return;
+            console.error('Fetch error:', err);
+        } finally {
+            if (!controller?.signal.aborted) {
+                setLoading(false);
+            }
+        }
+    };
+
+    const fetchDataRef = useRef(fetchData);
+    fetchDataRef.current = fetchData;
+
     useEffect(() => {
-        if (!isAppActive) return;
-        fetchData();
+        if (!isAppActive) {
+            pollAbortRef.current?.abort();
+            return;
+        }
+        fetchDataRef.current();
         const interval = setInterval(() => {
             if (Platform.OS === 'web' && typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
             if (Platform.OS !== 'web' && AppState.currentState !== 'active') return;
-            fetchData();
+            fetchDataRef.current();
         }, 5000);
-        return () => clearInterval(interval);
-    }, [isAppActive]);
+        return () => {
+            clearInterval(interval);
+            pollAbortRef.current?.abort();
+        };
+    }, [isAppActive, isDriver]);
 
     useEffect(() => {
         fetchSystemNotifs();
@@ -263,46 +316,54 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
         }
     };
 
-    const fetchData = async () => {
-        try {
-            const endpoint = isDriver ? '/api/rides/requests' : '/api/rides/bookings';
-            const response = await apiRequest(endpoint, {}, logout);
-            if (response.ok) {
-                const data = await response.json();
-                const list = Array.isArray(data) ? data : [];
-                const recent = list.filter((b: any) => isWithin24h(b.createdAt));
-                recent.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-                setBookings(recent);
-            }
-        } catch (err) {
-            console.error('Fetch error:', err);
-        } finally {
-            setLoading(false);
-        }
-    };
-
     const handleUpdateStatus = async (bookingId: string, status: string) => {
+        if (updatingBookingsRef.current[bookingId]) return;
+        updatingBookingsRef.current = { ...updatingBookingsRef.current, [bookingId]: true };
+        setUpdatingBookings(prev => ({ ...prev, [bookingId]: true }));
         try {
             const response = await apiRequest(`/api/rides/bookings/${bookingId}`, {
                 method: 'PUT',
                 body: JSON.stringify({ status }),
             }, logout);
             if (response.ok) {
-                fetchData();
+                await fetchDataRef.current();
+            } else {
+                const data = await response.json().catch(() => ({}));
+                notify(t('common.error'), data.error || 'Could not update status.');
             }
         } catch (err) {
             notify(t('common.error'), 'Could not update status.');
+        } finally {
+            const next = { ...updatingBookingsRef.current };
+            delete next[bookingId];
+            updatingBookingsRef.current = next;
+            setUpdatingBookings(prev => {
+                const copy = { ...prev };
+                delete copy[bookingId];
+                return copy;
+            });
         }
     };
 
     const handleClearAll = async () => {
+        if (clearingRef.current || clearing) return;
+        clearingRef.current = true;
         setClearing(true);
         try {
-            await apiRequest('/api/notifications/clear', { method: 'DELETE' }, logout);
-            setSystemNotifs([]);
-            setBookings([]);
-        } catch (_) {}
-        setClearing(false);
+            const res = await apiRequest('/api/notifications/clear', { method: 'DELETE' }, logout);
+            if (res.ok) {
+                setSystemNotifs([]);
+                await fetchDataRef.current();
+            } else {
+                const data = await res.json().catch(() => ({}));
+                notify(t('common.error'), data.error || 'Failed to clear notifications.');
+            }
+        } catch (_) {
+            notify(t('common.error'), 'Failed to clear notifications.');
+        } finally {
+            clearingRef.current = false;
+            setClearing(false);
+        }
     };
 
     const toggleExpand = (id: string) => {
@@ -408,14 +469,24 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
                         {item.status === 'pending' ? (
                             <View style={styles.actions}>
                                 <TouchableOpacity
-                                    style={[styles.actionBtn, { backgroundColor: '#00C853' }]}
+                                    style={[styles.actionBtn, { backgroundColor: '#00C853' }, updatingBookings[item.id] && { opacity: 0.6 }]}
+                                    disabled={Boolean(updatingBookings[item.id])}
                                     onPress={() => handleUpdateStatus(item.id, 'accepted')}>
-                                    <Text style={styles.btnText}>✓ Accept</Text>
+                                    {updatingBookings[item.id] ? (
+                                        <ActivityIndicator color="#FFF" size="small" />
+                                    ) : (
+                                        <Text style={styles.btnText}>✓ Accept</Text>
+                                    )}
                                 </TouchableOpacity>
                                 <TouchableOpacity
-                                    style={[styles.actionBtn, { backgroundColor: '#F44336' }]}
+                                    style={[styles.actionBtn, { backgroundColor: '#F44336' }, updatingBookings[item.id] && { opacity: 0.6 }]}
+                                    disabled={Boolean(updatingBookings[item.id])}
                                     onPress={() => handleUpdateStatus(item.id, 'rejected')}>
-                                    <Text style={styles.btnText}>✗ Reject</Text>
+                                    {updatingBookings[item.id] ? (
+                                        <ActivityIndicator color="#FFF" size="small" />
+                                    ) : (
+                                        <Text style={styles.btnText}>✗ Reject</Text>
+                                    )}
                                 </TouchableOpacity>
                             </View>
                         ) : item.status === 'accepted' && (
@@ -537,7 +608,6 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
     };
 
     const renderItem = ({ item }: { item: any }) => {
-        if (!isDriver && item.status === 'pending') return null;
         return isDriver ? renderDriverCard(item) : renderPassengerCard(item);
     };
 
@@ -632,7 +702,7 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
                                             {isExpanded ? '▲' : '▼'}
                                         </Text>
                                     </View>
-                                    {isExpanded && !isRideCompleted && (
+                                    {isExpanded && (
                                         <View style={[styles.expanded, { borderTopColor: colors.borderColor }]}>
                                             <Text style={[styles.notifMessage, { color: colors.textColor }]}>
                                                 {notif.message}
@@ -655,7 +725,7 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
                 <ActivityIndicator color={colors.primary} size="large" style={{ marginTop: 20 }} />
             ) : (
                 <FlatList
-                    data={bookings.filter(b => isDriver || b.status !== 'pending')}
+                    data={bookings}
                     keyExtractor={(item) => item.id}
                     renderItem={renderItem}
                     contentContainerStyle={styles.list}

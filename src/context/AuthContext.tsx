@@ -1,8 +1,14 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE } from '../apiConfig';
 import { setGlobalAuthenticated } from '../utils/browserHistory';
-import { normalizeHeaders, refreshAuthToken, registerAuthTokenListener } from '../utils/api';
+import {
+    bumpAuthSessionGeneration,
+    getAuthSessionGeneration,
+    normalizeHeaders,
+    refreshAuthToken,
+    registerAuthTokenListener,
+} from '../utils/api';
 import { unregisterFCM } from '../services/fcmService';
 
 interface User {
@@ -58,6 +64,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [user, setUser] = useState<User | null>(null);
     const [isInitialLoading, setIsInitialLoading] = useState(true);
 
+    const tokenRef = useRef<string | null>(null);
+    tokenRef.current = token;
+    const userRef = useRef<User | null>(null);
+    userRef.current = user;
+    const logoutPromiseRef = useRef<Promise<void> | null>(null);
+
+    const clearStorageCredentials = async () => {
+        await Promise.all([
+            AsyncStorage.removeItem('auth_token'),
+            AsyncStorage.removeItem('auth_refresh_token'),
+            AsyncStorage.removeItem('auth_user'),
+        ]);
+    };
+
     // Load credentials on startup
     useEffect(() => {
         const loadCredentials = async () => {
@@ -68,13 +88,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
                 // Only require token + user to restore session; refreshToken is optional
                 if (storedToken && storedUser) {
+                    const parsedUser = JSON.parse(storedUser);
                     setToken(storedToken);
                     if (storedRefresh) setRefreshToken(storedRefresh);
-                    setUser(JSON.parse(storedUser));
+                    setUser(parsedUser);
                     setGlobalAuthenticated(true);
+                } else if (storedToken || storedRefresh || storedUser) {
+                    // Clean up partial/orphaned credentials
+                    await clearStorageCredentials().catch(() => {});
                 }
             } catch (e) {
                 console.error('Failed to load credentials', e);
+                await clearStorageCredentials().catch(() => {});
             } finally {
                 setIsInitialLoading(false);
             }
@@ -86,6 +111,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Keep React state in sync whenever apiRequest or uploadDocumentFile refreshes a token
     useEffect(() => {
         const unsubscribe = registerAuthTokenListener((newToken, newRefresh) => {
+            // Only sync refreshed tokens if there is still an active session
+            if (!tokenRef.current) return;
             if (newToken) {
                 setToken(newToken);
                 setGlobalAuthenticated(true);
@@ -98,46 +125,75 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, []);
 
     const setAuth = async (newToken: string | null, newRefresh: string | null, newUser: User | null) => {
+        // Normalize partial-null states: a valid session requires both token and user.
+        if (!newToken || !newUser) {
+            bumpAuthSessionGeneration();
+            tokenRef.current = null;
+            userRef.current = null;
+            setToken(null);
+            setRefreshToken(null);
+            setUser(null);
+            setGlobalAuthenticated(false);
+            await clearStorageCredentials();
+            return;
+        }
+
+        // Bump generation when establishing a new session or switching users so
+        // any refresh from a prior session cannot overwrite the new one.
+        if (!tokenRef.current || (userRef.current?.id && newUser.id && userRef.current.id !== newUser.id)) {
+            bumpAuthSessionGeneration();
+        }
+
+        tokenRef.current = newToken;
+        userRef.current = newUser;
         setToken(newToken);
         setRefreshToken(newRefresh);
         setUser(newUser);
-        setGlobalAuthenticated(!!newToken);
+        setGlobalAuthenticated(true);
 
-        if (newToken && newUser) {
-            await AsyncStorage.setItem('auth_token', newToken);
-            if (newRefresh) {
-                await AsyncStorage.setItem('auth_refresh_token', newRefresh);
-            }
-            await AsyncStorage.setItem('auth_user', JSON.stringify(newUser));
-        } else if (!newToken && !newRefresh && !newUser) {
-            // Explicit full logout — clear everything
-            await AsyncStorage.removeItem('auth_token');
+        await AsyncStorage.setItem('auth_token', newToken);
+        if (newRefresh) {
+            await AsyncStorage.setItem('auth_refresh_token', newRefresh);
+        } else {
             await AsyncStorage.removeItem('auth_refresh_token');
-            await AsyncStorage.removeItem('auth_user');
         }
+        await AsyncStorage.setItem('auth_user', JSON.stringify(newUser));
     };
 
     const logout = async () => {
-        const currentToken = (await AsyncStorage.getItem('auth_token').catch(() => null)) || token;
-        try {
-            // Unregister FCM while the Bearer token is still valid and before clearing storage
-            await unregisterFCM(currentToken || undefined);
-        } catch (e) {
-            console.warn('FCM unregister on logout failed:', e);
+        if (logoutPromiseRef.current) {
+            return logoutPromiseRef.current;
         }
-        try {
-            await fetch(`${API_BASE}/api/user/logout`, {
-                method: 'POST',
-                headers: {
-                    ...(currentToken ? { 'Authorization': `Bearer ${currentToken}` } : {}),
-                    'Content-Type': 'application/json'
-                },
-                credentials: 'include',
-            });
-        } catch (e) {
-            console.error('Logout error:', e);
-        }
-        await setAuth(null, null, null);
+
+        const run = (async () => {
+            // Invalidate any in-flight token refreshes immediately
+            bumpAuthSessionGeneration();
+            const currentToken = (await AsyncStorage.getItem('auth_token').catch(() => null)) || tokenRef.current;
+            try {
+                // Unregister FCM while the Bearer token is still valid and before clearing storage
+                await unregisterFCM(currentToken || undefined);
+            } catch (e) {
+                console.warn('FCM unregister on logout failed:', e);
+            }
+            try {
+                await fetch(`${API_BASE}/api/user/logout`, {
+                    method: 'POST',
+                    headers: {
+                        ...(currentToken ? { 'Authorization': `Bearer ${currentToken}` } : {}),
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include',
+                });
+            } catch (e) {
+                console.error('Logout error:', e);
+            }
+            await setAuth(null, null, null);
+        })().finally(() => {
+            logoutPromiseRef.current = null;
+        });
+
+        logoutPromiseRef.current = run;
+        return run;
     };
 
     // Try to get a new access token using the shared single-flight refresh mutex
@@ -165,21 +221,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
 
         if (res.status === 401) {
+            const requestGeneration = getAuthSessionGeneration();
             // Access token expired — check if another concurrent request already rotated it, else refresh
             const latestToken = await AsyncStorage.getItem('auth_token').catch(() => null);
-            const newToken = (latestToken && latestToken !== currentToken)
+            const newToken = (getAuthSessionGeneration() === requestGeneration && latestToken && latestToken !== currentToken)
                 ? latestToken
                 : await tryRefreshToken();
-            if (newToken) {
+            if (newToken && getAuthSessionGeneration() === requestGeneration) {
                 res = await fetch(url, {
                     ...options,
                     headers: { ...headers, Authorization: `Bearer ${newToken}` },
                     credentials: 'include',
                 });
             }
-            // If still 401 after retry or if refresh was not possible, force logout
-            if (res.status === 401) {
-                await setAuth(null, null, null);
+            // If still 401 after retry or if refresh was not possible, run full logout cleanup
+            if (res.status === 401 && getAuthSessionGeneration() === requestGeneration) {
+                await logout();
             }
         }
         return res;
@@ -192,7 +249,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 refreshToken,
                 user,
                 setAuth,
-                isAuthenticated: !!token,
+                isAuthenticated: !!(token && user),
                 logout,
                 isInitialLoading,
                 tryRefreshToken,

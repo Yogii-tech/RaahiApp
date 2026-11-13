@@ -1,25 +1,41 @@
 import { Platform } from 'react-native';
 
+const FORMULA_INJECTION_RE = /^[=+\-@\t\r]/;
+
+/**
+ * Escapes a single CSV cell value against quote breaking and spreadsheet formula injection.
+ */
+const escapeCSVCell = (val: unknown): string => {
+     const raw = String(val ?? '');
+     const safe = FORMULA_INJECTION_RE.test(raw) ? `'${raw}` : raw;
+     return `"${safe.replace(/"/g, '""')}"`;
+};
+
 /**
  * Generates a properly escaped CSV string from an array of row objects.
+ * Collects the union of keys across all rows in encounter order.
  */
 export const generateCSV = (data: any[]): string => {
-     if (data.length === 0) return '';
+     if (!Array.isArray(data) || data.length === 0) return '';
 
-     // Get headers from the first object
-     const headers = Object.keys(data[0]);
-     const csvRows = [];
-
-     // Add header row
-     csvRows.push(headers.join(','));
-
-     // Add data rows
+     const headers: string[] = [];
+     const seen = new Set<string>();
      for (const row of data) {
-          const values = headers.map(header => {
-               const val = row[header];
-               const escaped = String(val ?? '').replace(/"/g, '""');
-               return `"${escaped}"`;
-          });
+          if (row && typeof row === 'object') {
+               for (const key of Object.keys(row)) {
+                    if (!seen.has(key)) {
+                         seen.add(key);
+                         headers.push(key);
+                    }
+               }
+          }
+     }
+     if (headers.length === 0) return '';
+
+     const csvRows = [headers.map(escapeCSVCell).join(',')];
+
+     for (const row of data) {
+          const values = headers.map(header => escapeCSVCell(row?.[header]));
           csvRows.push(values.join(','));
      }
 
@@ -45,7 +61,7 @@ export const downloadCSV = (data: any[], filename: string) => {
           document.body.appendChild(link);
           link.click();
           document.body.removeChild(link);
-          URL.revokeObjectURL(url);
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
      } else {
           // Fallback for mobile without dumping PII/financial CSV data to console
           if (typeof alert !== 'undefined') {
