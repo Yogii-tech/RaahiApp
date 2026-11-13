@@ -18,6 +18,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { apiRequest } from '../utils/api';
+import { parseJsonSafe, getApiErrorMessage, createRequestAbort } from '../utils/json';
 import { notify, confirmAction } from '../utils/notify';
 import { useRoute, useNavigation } from '@react-navigation/native';
 
@@ -66,12 +67,21 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
     const [messages, setMessages] = useState<Message[]>([]);
     const [inputText, setInputText] = useState('');
     const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [isSending, setIsSending] = useState(false);
     const flatListRef = useRef<FlatList>(null);
     const lastMarkedReadRef = useRef<string>('');
     const sendingRef = useRef(false);
     const fetchSeqRef = useRef(0);
     const abortRef = useRef<AbortController | null>(null);
+    const isMountedRef = useRef(true);
+
+    useEffect(() => {
+        isMountedRef.current = true;
+        return () => {
+            isMountedRef.current = false;
+        };
+    }, []);
     const [isAppActive, setIsAppActive] = useState<boolean>(() => {
         if (Platform.OS === 'web') {
             return typeof document === 'undefined' || document.visibilityState === 'visible';
@@ -98,6 +108,7 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
         abortRef.current?.abort();
         lastMarkedReadRef.current = '';
         setMessages([]);
+        setError(null);
         setIsLoading(true);
     }, [bookingId]);
 
@@ -110,22 +121,23 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
             return;
         }
         abortRef.current?.abort();
-        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-        abortRef.current = controller;
+        const abort = createRequestAbort(10000);
+        abortRef.current = abort.controller;
         const seq = ++fetchSeqRef.current;
 
         try {
             const response = await apiRequest(
                 `/api/chat/${targetBookingId}`,
-                controller ? { method: 'GET', signal: controller.signal } : { method: 'GET' },
+                { method: 'GET', signal: abort.signal },
                 logout
             );
-            if (seq !== fetchSeqRef.current || controller?.signal.aborted) return;
+            if (!isMountedRef.current || seq !== fetchSeqRef.current || abort.signal.aborted) return;
             if (response.ok) {
-                const data = await response.json();
-                if (seq !== fetchSeqRef.current || controller?.signal.aborted) return;
+                const data = await parseJsonSafe(response);
+                if (!isMountedRef.current || seq !== fetchSeqRef.current || abort.signal.aborted) return;
                 const safeMessages: Message[] = Array.isArray(data) ? data : [];
                 setMessages(safeMessages);
+                setError(null);
                 // Mark as read only when new incoming messages arrive
                 const incoming = safeMessages.filter(m => !myUserId || m.senderId !== myUserId);
                 const latestIncoming = incoming[incoming.length - 1];
@@ -147,12 +159,26 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
                             }
                         });
                 }
+            } else {
+                const errData = await parseJsonSafe(response);
+                if (isMountedRef.current && seq === fetchSeqRef.current) {
+                    setError(getApiErrorMessage(errData, 'Failed to load messages.', response));
+                }
             }
         } catch (err: any) {
-            if (err?.name === 'AbortError' || controller?.signal.aborted) return;
+            if (err?.name === 'AbortError' || abort.signal.aborted) {
+                if (abort.didTimeout() && isMountedRef.current && seq === fetchSeqRef.current) {
+                    setError('Connection timed out while loading messages.');
+                }
+                return;
+            }
             console.error('Fetch messages error:', err);
+            if (isMountedRef.current && seq === fetchSeqRef.current) {
+                setError('Could not load messages. Please check your connection.');
+            }
         } finally {
-            if (seq === fetchSeqRef.current && !controller?.signal.aborted) {
+            abort.cleanup();
+            if (isMountedRef.current && seq === fetchSeqRef.current && (!abort.signal.aborted || abort.didTimeout())) {
                 setIsLoading(false);
             }
         }
@@ -201,22 +227,24 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
             }, logout);
 
             if (response.ok) {
-                if (!customText) {
+                if (isMountedRef.current && !customText) {
                     setInputText('');
                 }
                 fetchMessagesRef.current();
                 // Wait a bit then scroll to bottom
                 setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
             } else {
-                const errData = await response.json().catch(() => ({}));
-                notify('Error', errData.error || 'Failed to send message');
+                const errData = await parseJsonSafe(response);
+                notify('Error', getApiErrorMessage(errData, 'Failed to send message', response));
             }
         } catch (err) {
             console.error('Send message error:', err);
             notify('Error', 'Failed to send message');
         } finally {
             sendingRef.current = false;
-            setIsSending(false);
+            if (isMountedRef.current) {
+                setIsSending(false);
+            }
         }
     };
 
@@ -320,15 +348,42 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
 
             {isLoading ? (
                 <ActivityIndicator size="large" color={colors.primary} style={{ flex: 1 }} />
+            ) : error && messages.length === 0 ? (
+                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+                    <Text style={{ color: '#F44336', fontSize: 15, textAlign: 'center', marginBottom: 12 }}>
+                        {error}
+                    </Text>
+                    <TouchableOpacity
+                        onPress={() => {
+                            setIsLoading(true);
+                            fetchMessagesRef.current();
+                        }}
+                        style={{ backgroundColor: colors.primary, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 8 }}
+                    >
+                        <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Retry</Text>
+                    </TouchableOpacity>
+                </View>
             ) : (
-                <FlatList
-                    ref={flatListRef}
-                    data={messages}
-                    renderItem={renderMessage}
-                    keyExtractor={(item) => item.id}
-                    contentContainerStyle={styles.listContent}
-                    onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-                />
+                <View style={{ flex: 1 }}>
+                    {error ? (
+                        <TouchableOpacity
+                            onPress={() => fetchMessagesRef.current()}
+                            style={{ backgroundColor: 'rgba(244, 67, 54, 0.12)', paddingHorizontal: 14, paddingVertical: 8 }}
+                        >
+                            <Text style={{ color: '#F44336', fontSize: 12, fontWeight: '600', textAlign: 'center' }}>
+                                ⚠️ {error} Tap to retry.
+                            </Text>
+                        </TouchableOpacity>
+                    ) : null}
+                    <FlatList
+                        ref={flatListRef}
+                        data={messages}
+                        renderItem={renderMessage}
+                        keyExtractor={(item) => item.id}
+                        contentContainerStyle={styles.listContent}
+                        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+                    />
+                </View>
             )}
 
             <KeyboardAvoidingView

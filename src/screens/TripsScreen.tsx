@@ -9,6 +9,7 @@ import JeepLayout from '../components/JeepLayout';
 import SlideToComplete from '../components/SlideToComplete';
 
 import { apiRequest } from '../utils/api';
+import { parseJsonSafe, getApiErrorMessage, createRequestAbort } from '../utils/json';
 import { notify } from '../utils/notify';
 import Icon from 'react-native-vector-icons/Ionicons';
 import TrackPackageView from '../components/TrackPackageView';
@@ -32,12 +33,13 @@ const KNOWN_LOCATIONS: Record<string, { lat: string; lon: string }> = {
     rima: { lat: '29.833', lon: '79.800' },
 };
 
-const geocodeLocation = async (name: string): Promise<{ lat: string; lon: string } | null> => {
+const geocodeLocation = async (name: string, signal?: AbortSignal): Promise<{ lat: string; lon: string } | null> => {
     const key = name.toLowerCase().trim();
     if (KNOWN_LOCATIONS[key]) return KNOWN_LOCATIONS[key];
     const query = `${name}, Uttarakhand, India`;
-    const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`);
-    const data = await res.json();
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`, { signal });
+    if (!res.ok) return null;
+    const data = await parseJsonSafe<any[]>(res);
     if (!data || data.length === 0) return null;
     return { lat: data[0].lat, lon: data[0].lon };
 };
@@ -47,28 +49,36 @@ const DistanceDisplay = ({ pickup, dropoff, color }: { pickup?: string, dropoff?
     useEffect(() => {
         if (!pickup || !dropoff) return;
         let mounted = true;
+        const abort = createRequestAbort(8000);
         const fetchDist = async () => {
             try {
-                const pCoords = await geocodeLocation(pickup);
-                if (!pCoords) return;
-                const dCoords = await geocodeLocation(dropoff);
-                if (!dCoords) return;
+                const pCoords = await geocodeLocation(pickup, abort.signal);
+                if (!pCoords || !mounted || abort.signal.aborted) return;
+                const dCoords = await geocodeLocation(dropoff, abort.signal);
+                if (!dCoords || !mounted || abort.signal.aborted) return;
 
                 const url = `https://router.project-osrm.org/route/v1/driving/${pCoords.lon},${pCoords.lat};${dCoords.lon},${dCoords.lat}?overview=false`;
-                const rRes = await fetch(url);
-                const rData = await rRes.json();
+                const rRes = await fetch(url, { signal: abort.signal });
+                if (!rRes.ok) return;
+                const rData = await parseJsonSafe(rRes);
 
-                if (rData.routes && rData.routes.length > 0 && mounted) {
+                if (rData?.routes && rData.routes.length > 0 && mounted) {
                     const km = Math.round(rData.routes[0].distance / 1000);
                     const hrs = Math.round(rData.routes[0].duration / 3600);
                     setInfo(`${km} KM · ${hrs}h`);
                 }
             } catch (e) {
                 // Ignore geocoding / routing network error quietly
+            } finally {
+                abort.cleanup();
             }
         };
         fetchDist();
-        return () => { mounted = false; };
+        return () => {
+            mounted = false;
+            abort.cleanup();
+            abort.controller.abort();
+        };
     }, [pickup, dropoff]);
 
     return <Text style={{ fontSize: 8, color: color, marginBottom: 2 }}>{info}</Text>;
@@ -90,12 +100,24 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
     const isFocused = useIsFocused();
     const [bookings, setBookings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [expandedRideId, setExpandedRideId] = useState<string | null>(null);
     const [viewMode, setViewMode] = useState<'list' | 'detailed'>('detailed');
     const [startingRideId, setStartingRideId] = useState<string | null>(null);
     const startingRideRef = useRef<string | null>(null);
     const completingRideRef = useRef<Set<string>>(new Set());
     const togglingSeatRef = useRef<Set<string>>(new Set());
+    const fetchSeqRef = useRef(0);
+    const abortRef = useRef<AbortController | null>(null);
+    const isMountedRef = useRef(true);
+
+    useEffect(() => {
+        isMountedRef.current = true;
+        return () => {
+            isMountedRef.current = false;
+            abortRef.current?.abort();
+        };
+    }, []);
     const [isAppActive, setIsAppActive] = useState<boolean>(() => {
         if (Platform.OS === 'web') {
             return typeof document === 'undefined' || document.visibilityState === 'visible';
@@ -121,11 +143,18 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
     const isDriver = user?.role === 'driver';
 
     const fetchData = React.useCallback(async () => {
+        abortRef.current?.abort();
+        const abort = createRequestAbort(12000);
+        abortRef.current = abort.controller;
+        const seq = ++fetchSeqRef.current;
+
         try {
             const endpoint = isDriver ? '/api/rides/recent?role=driver&limit=100' : '/api/rides/bookings';
-            const response = await apiRequest(endpoint, {}, logout);
+            const response = await apiRequest(endpoint, { signal: abort.signal }, logout);
+            if (!isMountedRef.current || seq !== fetchSeqRef.current || abort.signal.aborted) return;
             if (response.ok) {
-                let data = await response.json() || [];
+                let data = (await parseJsonSafe<any[]>(response)) || [];
+                if (!isMountedRef.current || seq !== fetchSeqRef.current || abort.signal.aborted) return;
 
                 // If this is the "History" tab in parcel mode, filter for parcels only
                 if (isParcelHistory) {
@@ -162,23 +191,47 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
                 }
 
                 setBookings(data);
+                setError(null);
+            } else {
+                const errData = await parseJsonSafe(response);
+                if (isMountedRef.current && seq === fetchSeqRef.current) {
+                    setError(getApiErrorMessage(errData, 'Failed to load trips.', response));
+                }
             }
-        } catch (err) {
+        } catch (err: any) {
+            if (err?.name === 'AbortError' || abort.signal.aborted) {
+                if (abort.didTimeout() && isMountedRef.current && seq === fetchSeqRef.current) {
+                    setError('Connection timed out while loading trips.');
+                }
+                return;
+            }
             console.error('Fetch error:', err);
+            if (isMountedRef.current && seq === fetchSeqRef.current) {
+                setError('Could not load trips. Please check your connection.');
+            }
         } finally {
-            setLoading(false);
+            abort.cleanup();
+            if (isMountedRef.current && seq === fetchSeqRef.current && (!abort.signal.aborted || abort.didTimeout())) {
+                setLoading(false);
+            }
         }
-    }, [isDriver, isParcelHistory, isRideHistory, title, t, logout]);
+    }, [isDriver, isParcelHistory, isRideHistory, logout]);
 
     useEffect(() => {
-        if (isParcelMode || !isFocused || !isAppActive) return;
+        if (isParcelMode || !isFocused || !isAppActive) {
+            abortRef.current?.abort();
+            return;
+        }
         fetchData();
         const interval = setInterval(() => {
             if (Platform.OS === 'web' && typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
             if (Platform.OS !== 'web' && AppState.currentState !== 'active') return;
             fetchData();
         }, 5000); // Poll only when tab is focused and app is foregrounded
-        return () => clearInterval(interval);
+        return () => {
+            clearInterval(interval);
+            abortRef.current?.abort();
+        };
     }, [fetchData, isFocused, isAppActive, isParcelMode]);
 
     // For driver, auto-expand if there's only one active ride and in detailed mode
@@ -214,8 +267,8 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
                 fetchData();
                 return true;
             } else {
-                const data = await response.json().catch(() => ({}));
-                const errorMsg = data.error || 'Failed to complete trip';
+                const data = await parseJsonSafe(response);
+                const errorMsg = getApiErrorMessage(data, 'Failed to complete trip', response);
                 notify(t('common.error') || 'Error', errorMsg);
                 return false;
             }
@@ -241,8 +294,8 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
                 notify(t('common.success') || 'Success', msg);
                 fetchData();
             } else {
-                const data = await response.json().catch(() => ({}));
-                const errorMsg = data.error || 'Failed to start trip';
+                const data = await parseJsonSafe(response);
+                const errorMsg = getApiErrorMessage(data, 'Failed to start trip', response);
                 notify(t('common.error') || 'Error', errorMsg);
             }
         } catch (err) {
@@ -250,7 +303,9 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
             notify(t('common.error') || 'Error', 'Failed to start trip. Please try again.');
         } finally {
             startingRideRef.current = null;
-            setStartingRideId(prev => (prev === rideId ? null : prev));
+            if (isMountedRef.current) {
+                setStartingRideId(prev => (prev === rideId ? null : prev));
+            }
         }
     };
 
@@ -267,11 +322,12 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
             if (response.ok) {
                 fetchData(); // Refresh to show new state
             } else {
-                const data = await response.json().catch(() => ({}));
-                notify(t('common.error'), data.error || 'Failed to toggle seat');
+                const data = await parseJsonSafe(response);
+                notify(t('common.error'), getApiErrorMessage(data, 'Failed to toggle seat', response));
             }
         } catch (err) {
             console.error('Toggle block error:', err);
+            notify(t('common.error'), 'Could not update seat availability. Please try again.');
         } finally {
             togglingSeatRef.current.delete(key);
         }
@@ -740,18 +796,45 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
 
             {loading ? (
                 <ActivityIndicator color={colors.primary} size="large" style={{ marginTop: 20 }} />
+            ) : error && bookings.length === 0 ? (
+                <View style={{ alignItems: 'center', marginTop: 40, paddingHorizontal: 16 }}>
+                    <Text style={{ color: '#F44336', fontSize: 15, textAlign: 'center', marginBottom: 14 }}>
+                        {error}
+                    </Text>
+                    <TouchableOpacity
+                        onPress={() => {
+                            setLoading(true);
+                            fetchData();
+                        }}
+                        style={{ backgroundColor: colors.primary, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 8 }}
+                    >
+                        <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Retry</Text>
+                    </TouchableOpacity>
+                </View>
             ) : (
-                <FlatList
-                    data={bookings}
-                    keyExtractor={(item) => item.id}
-                    renderItem={renderRequestItem}
-                    contentContainerStyle={styles.list}
-                    ListEmptyComponent={
-                        <Text style={[styles.empty, { color: colors.subtextColor }]}>
-                            {isParcelHistory || isRideHistory || title === t('tab.history') ? t('trips.noHistory') : (isDriver ? t('trips.noPublished') : t('trips.noTrips'))}
-                        </Text>
-                    }
-                />
+                <View style={{ flex: 1 }}>
+                    {error ? (
+                        <TouchableOpacity
+                            onPress={() => fetchData()}
+                            style={{ backgroundColor: 'rgba(244, 67, 54, 0.12)', borderRadius: 8, padding: 10, marginBottom: 12 }}
+                        >
+                            <Text style={{ color: '#F44336', fontSize: 12, fontWeight: '600', textAlign: 'center' }}>
+                                ⚠️ {error} Tap to retry.
+                            </Text>
+                        </TouchableOpacity>
+                    ) : null}
+                    <FlatList
+                        data={bookings}
+                        keyExtractor={(item) => item.id}
+                        renderItem={renderRequestItem}
+                        contentContainerStyle={styles.list}
+                        ListEmptyComponent={
+                            <Text style={[styles.empty, { color: colors.subtextColor }]}>
+                                {isParcelHistory || isRideHistory || title === t('tab.history') ? t('trips.noHistory') : (isDriver ? t('trips.noPublished') : t('trips.noTrips'))}
+                            </Text>
+                        }
+                    />
+                </View>
             )}
         </View>
     );

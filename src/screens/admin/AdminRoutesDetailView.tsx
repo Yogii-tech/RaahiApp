@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity
 import { downloadCSV } from '../../utils/exportUtils';
 import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
+import { parseJsonSafe, createRequestAbort } from '../../utils/json';
 
 interface RouteRow {
      id: string;
@@ -38,6 +39,7 @@ export default function AdminRoutesDetailView({ isDark, searchQuery = '' }: { is
      fetchWithAuthRef.current = fetchWithAuth;
      const abortRef = useRef<AbortController | null>(null);
      const reqIdRef = useRef(0);
+     const isMountedRef = useRef(true);
      const { width } = useWindowDimensions();
      const isMobile = width < 768;
 
@@ -50,9 +52,9 @@ export default function AdminRoutesDetailView({ isDark, searchQuery = '' }: { is
           accent: '#3B7DDD',
      };
 
-     const fetchData = useCallback((background = false) => {
+     const fetchData = useCallback(async (background = false) => {
           abortRef.current?.abort();
-          const controller = new AbortController();
+          const { controller, cleanup, didTimeout } = createRequestAbort(12000);
           abortRef.current = controller;
           const reqId = ++reqIdRef.current;
 
@@ -63,31 +65,31 @@ export default function AdminRoutesDetailView({ isDark, searchQuery = '' }: { is
           }
           setError(null);
 
-          fetchWithAuthRef.current(`${API_BASE}/api/admin/routes`, { signal: controller.signal })
-               .then(r => {
-                    if (!r.ok) throw new Error(`Server error: ${r.status}`);
-                    return r.json();
-               })
-               .then(d => {
-                    if (reqId !== reqIdRef.current) return;
-                    setRoutes(Array.isArray(d) ? d : []);
-               })
-               .catch((err: any) => {
-                    if (err?.name === 'AbortError' || reqId !== reqIdRef.current) return;
-                    setError(err?.message || 'Could not load routes');
-                    if (!background) setRoutes([]);
-               })
-               .finally(() => {
-                    if (reqId === reqIdRef.current) {
-                         setLoading(false);
-                         setRefreshing(false);
-                    }
-               });
+          try {
+               const r = await fetchWithAuthRef.current(`${API_BASE}/api/admin/routes`, { signal: controller.signal });
+               if (!r.ok) throw new Error(`Server error: ${r.status}`);
+               const d = await parseJsonSafe<RouteRow[]>(r);
+               if (!isMountedRef.current || reqId !== reqIdRef.current) return;
+               setRoutes(Array.isArray(d) ? d : []);
+          } catch (err: any) {
+               if (!isMountedRef.current || reqId !== reqIdRef.current) return;
+               if (err?.name === 'AbortError' && !didTimeout()) return;
+               setError(didTimeout() ? 'Request timed out while loading routes' : (err?.message || 'Could not load routes'));
+               if (!background) setRoutes([]);
+          } finally {
+               cleanup();
+               if (isMountedRef.current && reqId === reqIdRef.current) {
+                    setLoading(false);
+                    setRefreshing(false);
+               }
+          }
      }, []);
 
      useEffect(() => {
+          isMountedRef.current = true;
           fetchData(false);
           return () => {
+               isMountedRef.current = false;
                reqIdRef.current += 1;
                abortRef.current?.abort();
           };

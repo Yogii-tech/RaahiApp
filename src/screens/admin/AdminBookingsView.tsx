@@ -7,6 +7,7 @@ import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
 import { downloadCSV } from '../../utils/exportUtils';
 import { notify } from '../../utils/notify';
+import { parseJsonSafe, getApiErrorMessage, createRequestAbort } from '../../utils/json';
 
 interface Booking {
     id: string;
@@ -57,12 +58,13 @@ export default function AdminBookingsView({ token, searchQuery = '' }: { token: 
     const listReqIdRef = useRef(0);
     const detailAbortRef = useRef<AbortController | null>(null);
     const detailReqIdRef = useRef(0);
+    const isMountedRef = useRef(true);
     const { width } = useWindowDimensions();
     const isMobile = width < 768;
 
     const loadBookings = useCallback(async (background = false) => {
         listAbortRef.current?.abort();
-        const controller = new AbortController();
+        const { controller, cleanup, didTimeout } = createRequestAbort(12000);
         listAbortRef.current = controller;
         const reqId = ++listReqIdRef.current;
 
@@ -74,16 +76,21 @@ export default function AdminBookingsView({ token, searchQuery = '' }: { token: 
         setError(null);
         try {
             const res = await fetchWithAuthRef.current(`${API_BASE}/api/admin/bookings`, { signal: controller.signal });
-            if (!res.ok) throw new Error(`Server error: ${res.status}`);
-            const d = await res.json();
-            if (reqId !== listReqIdRef.current) return;
+            if (!res.ok) {
+                const errData = await parseJsonSafe<any>(res);
+                throw new Error(getApiErrorMessage(errData, `Server error: ${res.status}`));
+            }
+            const d = await parseJsonSafe<Booking[]>(res);
+            if (!isMountedRef.current || reqId !== listReqIdRef.current) return;
             setBookings(Array.isArray(d) ? d : []);
         } catch (err: any) {
-            if (err?.name === 'AbortError' || reqId !== listReqIdRef.current) return;
-            setError(err?.message || 'Failed to load bookings');
+            if (!isMountedRef.current || reqId !== listReqIdRef.current) return;
+            if (err?.name === 'AbortError' && !didTimeout()) return;
+            setError(didTimeout() ? 'Request timed out while loading bookings' : (err?.message || 'Failed to load bookings'));
             if (!background) setBookings([]);
         } finally {
-            if (reqId === listReqIdRef.current) {
+            cleanup();
+            if (isMountedRef.current && reqId === listReqIdRef.current) {
                 setLoading(false);
                 setRefreshing(false);
             }
@@ -91,8 +98,10 @@ export default function AdminBookingsView({ token, searchQuery = '' }: { token: 
     }, []);
 
     useEffect(() => {
+        isMountedRef.current = true;
         loadBookings(false);
         return () => {
+            isMountedRef.current = false;
             listReqIdRef.current += 1;
             detailReqIdRef.current += 1;
             listAbortRef.current?.abort();
@@ -109,10 +118,10 @@ export default function AdminBookingsView({ token, searchQuery = '' }: { token: 
 
     const fetchBookingDetails = async (queryVal: string) => {
         const trimmed = queryVal.trim();
-        if (!trimmed || fetchingDetails) return;
+        if (!trimmed) return;
 
         detailAbortRef.current?.abort();
-        const controller = new AbortController();
+        const { controller, cleanup, didTimeout } = createRequestAbort(12000);
         detailAbortRef.current = controller;
         const reqId = ++detailReqIdRef.current;
 
@@ -121,26 +130,27 @@ export default function AdminBookingsView({ token, searchQuery = '' }: { token: 
             const res = await fetchWithAuthRef.current(`${API_BASE}/api/admin/bookings/detail?bid=${encodeURIComponent(trimmed)}`, {
                 signal: controller.signal,
             });
-            const data = await res.json();
-            if (reqId !== detailReqIdRef.current) return;
-            if (res.ok) {
+            const data = await parseJsonSafe<any>(res);
+            if (!isMountedRef.current || reqId !== detailReqIdRef.current) return;
+            if (res.ok && data) {
                 setSelectedBookingDetails(data);
                 setDetailModalVisible(true);
             } else {
-                notify('Not Found', data.error || 'Booking not found with specified BID');
+                notify('Not Found', getApiErrorMessage(data, 'Booking not found with specified BID'));
             }
         } catch (err: any) {
-            if (err?.name === 'AbortError' || reqId !== detailReqIdRef.current) return;
-            notify('Error', 'Failed to fetch booking details');
+            if (!isMountedRef.current || reqId !== detailReqIdRef.current) return;
+            if (err?.name === 'AbortError' && !didTimeout()) return;
+            notify('Error', didTimeout() ? 'Request timed out while fetching booking details' : 'Failed to fetch booking details');
         } finally {
-            if (reqId === detailReqIdRef.current) {
+            cleanup();
+            if (isMountedRef.current && reqId === detailReqIdRef.current) {
                 setFetchingDetails(false);
             }
         }
     };
 
     const handleRowClick = (item: Booking) => {
-        if (fetchingDetails) return;
         const queryId = item.bookingId || item.id;
         fetchBookingDetails(queryId);
     };
@@ -240,6 +250,10 @@ export default function AdminBookingsView({ token, searchQuery = '' }: { token: 
                 </View>
             </View>
 
+            {error && (
+                <Text style={{ color: '#EF4444', fontSize: 12, marginBottom: 12 }}>Refresh failed: {error}</Text>
+            )}
+
             {/* Status Filter Chips */}
             <View style={styles.filterChipsRow}>
                 {BOOKING_FILTER_TABS.map(tab => {
@@ -271,9 +285,8 @@ export default function AdminBookingsView({ token, searchQuery = '' }: { token: 
                         placeholderTextColor="#6B7280"
                         value={bidSearchInput}
                         onChangeText={setBidSearchInput}
-                        editable={!fetchingDetails}
                         onSubmitEditing={() => {
-                            if (!fetchingDetails) fetchBookingDetails(bidSearchInput);
+                            fetchBookingDetails(bidSearchInput);
                         }}
                     />
                     <TouchableOpacity

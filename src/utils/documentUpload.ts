@@ -1,7 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE } from '../apiConfig';
 import { notify, confirmAction } from './notify';
-import { refreshAuthToken } from './api';
+import { getAuthSessionGeneration, refreshAuthToken } from './api';
+import { parseJsonSafe } from './json';
 
 export { notify, confirmAction };
 
@@ -64,8 +65,10 @@ const compressImage = (file: File): Promise<File> =>
 export interface UploadAuthOptions {
     /** Refresh token to use if the access token is rejected. Falls back to the one in AsyncStorage. */
     refreshToken?: string | null;
-    /** Called with the new access token after a successful silent refresh. */
-    onTokenRefreshed?: (newToken: string) => void;
+    /** Called with the new access token (and rotated refresh token when available) after a successful silent refresh. */
+    onTokenRefreshed?: (newToken: string, newRefreshToken?: string | null) => void;
+    /** Called if upload fails with unrecoverable 401 within the same session generation. */
+    onAuthFailure?: () => void;
 }
 
 /** Uploads one file to the backend and returns its public URL. Throws Error with a user-readable message. */
@@ -78,6 +81,8 @@ export const uploadDocumentFile = async (
         throw new Error('Your session has expired. Please log in again.');
     }
 
+    const requestGeneration = getAuthSessionGeneration();
+
     if (file.size > MAX_UPLOAD_BYTES) {
         throw new Error('File is larger than 5MB. Please choose an image or PDF under 5MB.');
     }
@@ -85,6 +90,10 @@ export const uploadDocumentFile = async (
     const prepared = await compressImage(file);
     if (prepared.size > MAX_UPLOAD_BYTES) {
         throw new Error('File is larger than 5MB. Please choose an image or PDF under 5MB.');
+    }
+
+    if (getAuthSessionGeneration() !== requestGeneration) {
+        throw new Error('Your session has expired. Please log in again.');
     }
 
     const sendOnce = async (token: string): Promise<Response> => {
@@ -115,28 +124,30 @@ export const uploadDocumentFile = async (
 
     // Access token expired/invalid: silently refresh once via shared mutex and retry.
     if (response.status === 401) {
+        if (getAuthSessionGeneration() !== requestGeneration) {
+            throw new Error('Your session has expired. Please log in again.');
+        }
         const latestToken = await AsyncStorage.getItem('auth_token').catch(() => null);
-        const newToken = (latestToken && latestToken !== authToken)
+        const newToken = (getAuthSessionGeneration() === requestGeneration && latestToken && latestToken !== authToken)
             ? latestToken
             : await refreshAuthToken(options.refreshToken);
-        if (newToken) {
-            options.onTokenRefreshed?.(newToken);
+        if (newToken && getAuthSessionGeneration() === requestGeneration) {
+            const latestRefresh = await AsyncStorage.getItem('auth_refresh_token').catch(() => null);
+            options.onTokenRefreshed?.(newToken, latestRefresh ?? options.refreshToken ?? null);
             response = await sendOnce(newToken);
         }
     }
 
-    let data: any = null;
-    try {
-        data = await response.json();
-    } catch {
-        // non-JSON response (e.g. proxy error page)
-    }
+    const data = await parseJsonSafe(response);
 
     if (!response.ok) {
         if (response.status === 429) {
             throw new Error('Too many uploads. Please wait a minute and try again.');
         }
         if (response.status === 401) {
+            if (getAuthSessionGeneration() === requestGeneration) {
+                options.onAuthFailure?.();
+            }
             throw new Error(data?.error || 'Your session has expired. Please log in again.');
         }
         throw new Error(data?.error || `Upload failed (error ${response.status}). Please try again.`);

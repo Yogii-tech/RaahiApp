@@ -17,7 +17,8 @@ import { useLanguage, LanguageType } from '../context/LanguageContext';
 import Icon from 'react-native-vector-icons/Ionicons';
 
 import { API_BASE } from '../apiConfig';
-import { apiRequest } from '../utils/api';
+import { apiRequest, getAuthSessionGeneration } from '../utils/api';
+import { parseJsonSafe } from '../utils/json';
 import { notify } from '../utils/notify';
 import TrustedContactsScreen from './TrustedContactsScreen';
 import VehicleDetailsScreen from './VehicleDetailsScreen';
@@ -61,18 +62,19 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
         let cancelled = false;
         const currentUser = userRef.current;
         if (isFocused && currentUser?.role === 'driver') {
+            const startGeneration = getAuthSessionGeneration();
             apiRequest('/api/user/profile', {}, logout)
                 .then(async res => {
-                    if (cancelled || !res.ok) return;
-                    const fresh = await res.json();
-                    if (cancelled) return;
+                    if (cancelled || !res.ok || getAuthSessionGeneration() !== startGeneration) return;
+                    const fresh = await parseJsonSafe(res);
+                    if (cancelled || !fresh || getAuthSessionGeneration() !== startGeneration) return;
                     const latestUser = userRef.current;
                     if (!latestUser) return;
                     if (fresh.verification_status !== latestUser.verification_status ||
                         fresh.rejection_reason !== latestUser.rejection_reason) {
-                        const latestToken = (await AsyncStorage.getItem('auth_token').catch(() => null)) || token;
-                        const latestRefresh = (await AsyncStorage.getItem('auth_refresh_token').catch(() => null)) || refreshToken;
-                        if (cancelled) return;
+                        const latestToken = await AsyncStorage.getItem('auth_token').catch(() => null);
+                        const latestRefresh = (await AsyncStorage.getItem('auth_refresh_token').catch(() => null)) ?? refreshToken;
+                        if (cancelled || !latestToken || getAuthSessionGeneration() !== startGeneration) return;
                         await setAuth(latestToken, latestRefresh, {
                             ...latestUser,
                             verification_status: fresh.verification_status,
@@ -86,9 +88,9 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
             if (currentUser?.id) {
                 apiRequest(`/api/reviews/driver/${currentUser.id}`, {}, logout)
                     .then(async res => {
-                        if (cancelled || !res.ok) return;
-                        const d = await res.json();
-                        if (!cancelled) {
+                        if (cancelled || !res.ok || getAuthSessionGeneration() !== startGeneration) return;
+                        const d = await parseJsonSafe(res);
+                        if (!cancelled && d && getAuthSessionGeneration() === startGeneration) {
                             setDriverRating({ avg: d.averageRating ?? 0, total: d.totalReviews ?? 0 });
                         }
                     })
@@ -118,6 +120,7 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
         const activeUser = userRef.current;
         // Sync with backend if logged in
         if (token && activeUser) {
+            const startGeneration = getAuthSessionGeneration();
             try {
                 const response = await apiRequest('/api/user/profile', {
                     method: 'PUT',
@@ -128,10 +131,15 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
                     }),
                 }, logout);
 
+                if (getAuthSessionGeneration() !== startGeneration) {
+                    return;
+                }
+
                 if (response.ok) {
-                    // Update local user state using latest userRef to avoid clobbering concurrent profile updates
-                    const latestToken = (await AsyncStorage.getItem('auth_token').catch(() => null)) || token;
-                    const latestRefresh = (await AsyncStorage.getItem('auth_refresh_token').catch(() => null)) || refreshToken;
+                    // Update local user state only if the session is still active
+                    const latestToken = await AsyncStorage.getItem('auth_token').catch(() => null);
+                    if (!latestToken || getAuthSessionGeneration() !== startGeneration) return;
+                    const latestRefresh = (await AsyncStorage.getItem('auth_refresh_token').catch(() => null)) ?? refreshToken;
                     const latestUser = userRef.current || activeUser;
                     await setAuth(latestToken, latestRefresh, { ...latestUser, language: lang });
                 } else {
@@ -140,8 +148,10 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
                 }
             } catch (err) {
                 console.error('Failed to sync language to backend:', err);
-                await setLanguage(previousLanguage);
-                notify(t('common.error'), 'Failed to update language preference.');
+                if (getAuthSessionGeneration() === startGeneration) {
+                    await setLanguage(previousLanguage);
+                    notify(t('common.error'), 'Failed to update language preference.');
+                }
             }
         }
     };

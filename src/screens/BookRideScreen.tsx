@@ -17,7 +17,9 @@ import { API_BASE } from '../apiConfig';
 import JeepLayout from '../components/JeepLayout';
 import { useLanguage } from '../context/LanguageContext';
 import { apiRequest } from '../utils/api';
+import { parseJsonSafe, getApiErrorMessage, createRequestAbort } from '../utils/json';
 import { notify } from '../utils/notify';
+import { useBrowserBack } from '../utils/browserHistory';
 
 interface BookRideScreenProps {
     ride: {
@@ -58,7 +60,22 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [bookingId, setBookingId] = useState('');
     const submittingRef = useRef(false);
+    const isMountedRef = useRef(true);
     const pollAbortRef = useRef<AbortController | null>(null);
+
+    useEffect(() => {
+        isMountedRef.current = true;
+        return () => {
+            isMountedRef.current = false;
+        };
+    }, []);
+
+    const dismissSuccessModal = () => {
+        setShowSuccessModal(false);
+        onBookingComplete();
+    };
+
+    useBrowserBack(showSuccessModal, dismissSuccessModal, isFocused);
     const [isAppActive, setIsAppActive] = useState<boolean>(() => {
         if (Platform.OS === 'web') {
             return typeof document === 'undefined' || document.visibilityState === 'visible';
@@ -105,8 +122,8 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
 
     const fetchRideDetails = async () => {
         pollAbortRef.current?.abort();
-        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-        pollAbortRef.current = controller;
+        const abort = createRequestAbort(10000);
+        pollAbortRef.current = abort.controller;
 
         try {
             const rideId = initialRide.id || (initialRide as any)._id;
@@ -118,11 +135,11 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
                 url += `?${queryParams.join('&')}`;
             }
 
-            const response = await apiRequest(url, controller ? { signal: controller.signal } : {}, logout);
-            if (controller?.signal.aborted) return;
+            const response = await apiRequest(url, { signal: abort.signal }, logout);
+            if (!isMountedRef.current || abort.signal.aborted) return;
             if (response.ok) {
-                const data = await response.json();
-                if (controller?.signal.aborted) return;
+                const data = await parseJsonSafe(response);
+                if (!isMountedRef.current || abort.signal.aborted || !data) return;
                 setRide(prev => ({
                     ...prev,
                     ...data,
@@ -138,8 +155,10 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
                 }
             }
         } catch (err: any) {
-            if (err?.name === 'AbortError' || controller?.signal.aborted) return;
+            if (err?.name === 'AbortError' || abort.signal.aborted) return;
             console.error('Fetch ride details error:', err);
+        } finally {
+            abort.cleanup();
         }
     };
 
@@ -199,27 +218,39 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
             }, logout);
 
             if (response.ok) {
-                const data = await response.json().catch(() => ({}));
+                const data = await parseJsonSafe(response);
                 const rawServerId = data?.bookingId || data?.id || data?._id;
-                const formattedId = rawServerId
-                    ? (/^(RA|GO)-/i.test(String(rawServerId))
-                        ? String(rawServerId).toUpperCase()
-                        : `RA-${String(rawServerId).slice(-4).toUpperCase()}`)
-                    : `RA-${Math.floor(1000 + Math.random() * 9000)}`;
-                setBookingId(formattedId);
-                setShowSuccessModal(true);
+                if (!rawServerId) {
+                    notify(
+                        t('common.error'),
+                        'Booking confirmation was incomplete. Please refresh your trips before retrying.'
+                    );
+                    fetchRideDetailsRef.current();
+                    return;
+                }
+                const formattedId = /^(RA|GO)-/i.test(String(rawServerId))
+                    ? String(rawServerId).toUpperCase()
+                    : `RA-${String(rawServerId).slice(-4).toUpperCase()}`;
+                if (isMountedRef.current) {
+                    setBookingId(formattedId);
+                    setShowSuccessModal(true);
+                }
             } else {
-                const errorData = await response.json().catch(() => ({}));
-                const errorMsg = errorData.error || t('book.failBook') || 'Failed to book ride';
+                const errorData = await parseJsonSafe(response);
+                const errorMsg = getApiErrorMessage(errorData, t('book.failBook') || 'Failed to book ride', response);
                 notify(t('common.error'), errorMsg);
+                fetchRideDetailsRef.current();
             }
         } catch (err) {
             console.error('Booking error:', err);
             const errStr = t('book.errorConnect') || 'Error connecting to server';
             notify(t('common.error'), errStr);
+            fetchRideDetailsRef.current();
         } finally {
             submittingRef.current = false;
-            setLoading(false);
+            if (isMountedRef.current) {
+                setLoading(false);
+            }
         }
     };
 
@@ -314,7 +345,7 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
                 visible={showSuccessModal}
                 transparent={true}
                 animationType="fade"
-                onRequestClose={() => { }}>
+                onRequestClose={dismissSuccessModal}>
                 <View style={styles.modalOverlay}>
                     <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
                         <View style={styles.successIconContainer}>
@@ -345,10 +376,7 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
 
                         <TouchableOpacity
                             style={styles.returnHomeBtn}
-                            onPress={() => {
-                                setShowSuccessModal(false);
-                                onBookingComplete();
-                            }}>
+                            onPress={dismissSuccessModal}>
                             <Text style={styles.returnHomeBtnText}>{t('common.ok')}</Text>
                         </TouchableOpacity>
                     </View>

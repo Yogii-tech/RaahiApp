@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView, ActivityIndicator, useWindowDimensions } from 'react-native';
 import { API_BASE } from '../../apiConfig';
+import { useAuth } from '../../context/AuthContext';
 import { notify } from '../../utils/notify';
+import { parseJsonSafe, getApiErrorMessage, createRequestAbort } from '../../utils/json';
 
 const REPORTS = [
     { label: 'Daily Bookings', type: 'daily_bookings', icon: '📋' },
@@ -9,10 +11,23 @@ const REPORTS = [
     { label: 'Driver Payouts', type: 'payouts', icon: '🚗' },
 ];
 
-export default function AdminReportsView({ token }: { token: string }) {
+export default function AdminReportsView({ token: _token }: { token: string }) {
     const [downloadingReport, setDownloadingReport] = useState<string | null>(null);
+    const { fetchWithAuth } = useAuth();
+    const fetchWithAuthRef = useRef(fetchWithAuth);
+    fetchWithAuthRef.current = fetchWithAuth;
+    const isMountedRef = useRef(true);
+    const abortRef = useRef<AbortController | null>(null);
     const { width } = useWindowDimensions();
     const isMobile = width < 768;
+
+    useEffect(() => {
+        isMountedRef.current = true;
+        return () => {
+            isMountedRef.current = false;
+            abortRef.current?.abort();
+        };
+    }, []);
 
     const handleDownload = async (type: string, label: string) => {
         if (downloadingReport) return;
@@ -21,16 +36,14 @@ export default function AdminReportsView({ token }: { token: string }) {
             return;
         }
         setDownloadingReport(type);
+        const { controller, cleanup, didTimeout } = createRequestAbort(15000);
+        abortRef.current = controller;
         try {
             const url = `${API_BASE}/api/admin/reports/${type}`;
-            const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+            const res = await fetchWithAuthRef.current(url, { signal: controller.signal });
             if (!res.ok) {
-                let errMsg = `Download failed (${res.status})`;
-                try {
-                    const errBody = await res.json();
-                    if (errBody?.error) errMsg = errBody.error;
-                } catch {}
-                throw new Error(errMsg);
+                const errBody = await parseJsonSafe<any>(res);
+                throw new Error(getApiErrorMessage(errBody, `Download failed (${res.status})`));
             }
             const blob = await res.blob();
             const blobUrl = URL.createObjectURL(blob);
@@ -43,9 +56,14 @@ export default function AdminReportsView({ token }: { token: string }) {
             document.body.removeChild(anchor);
             setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
         } catch (err: any) {
-            notify('Error', err?.message || 'Download failed');
+            if (!isMountedRef.current) return;
+            if (err?.name === 'AbortError' && !didTimeout()) return;
+            notify('Error', didTimeout() ? 'Report download timed out' : (err?.message || 'Download failed'));
         } finally {
-            setDownloadingReport(null);
+            cleanup();
+            if (isMountedRef.current) {
+                setDownloadingReport(null);
+            }
         }
     };
 

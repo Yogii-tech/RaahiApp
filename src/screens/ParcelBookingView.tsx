@@ -18,11 +18,20 @@ import { useTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
 import Icon from 'react-native-vector-icons/Ionicons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE } from '../apiConfig';
 import LocationInput from '../components/LocationInput';
-import { apiRequest } from '../utils/api';
+import { apiRequest, getAuthSessionGeneration } from '../utils/api';
+import { parseJsonSafe, getApiErrorMessage, createRequestAbort } from '../utils/json';
 import { uploadDocumentFile, notify } from '../utils/documentUpload';
-import { saveFormDraft, loadFormDraft, clearFormDraft } from '../utils/formDraftStorage';
+import {
+    saveFormDraft,
+    loadFormDraft,
+    clearFormDraft,
+    getTodayDisplayDate,
+    resolveDraftDate,
+    isTodayOrFutureDisplayDate,
+} from '../utils/formDraftStorage';
 import { pushSubViewHistory, popSubViewHistory, useBrowserBack } from '../utils/browserHistory';
 
 const { width } = Dimensions.get('window');
@@ -52,52 +61,78 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
     const geocodingRef = useRef(false);
     const fetchingRidesRef = useRef(false);
     const submittingRef = useRef(false);
+    const isMountedRef = useRef(true);
+    const roadMetricsAbortRef = useRef<AbortController | null>(null);
+    const userRef = useRef(user);
+    userRef.current = user;
+    const draftScope = user?.id || null;
+    const prevDraftScopeRef = useRef(draftScope);
+
+    React.useEffect(() => {
+        isMountedRef.current = true;
+        return () => {
+            isMountedRef.current = false;
+            roadMetricsAbortRef.current?.abort();
+        };
+    }, []);
 
     // Form state - Step 1
-    const [pickup, setPickup] = useState(() => loadFormDraft('parcel_pickup', ''));
-    const [dropoff, setDropoff] = useState(() => loadFormDraft('parcel_dropoff', ''));
+    const [pickup, setPickup] = useState(() => loadFormDraft('parcel_pickup', '', draftScope));
+    const [dropoff, setDropoff] = useState(() => loadFormDraft('parcel_dropoff', '', draftScope));
     const [pickupCoords, setPickupCoords] = useState<[number, number] | null>(null);
     const [dropoffCoords, setDropoffCoords] = useState<[number, number] | null>(null);
     const [roadDistance, setRoadDistance] = useState<number | null>(null);
     const [roadDuration, setRoadDuration] = useState<number | null>(null);
-    const [selectedDate, setSelectedDate] = useState(() => {
-        const defaultDate = (() => {
-            const today = new Date();
-            const dd = String(today.getDate()).padStart(2, '0');
-            const mm = String(today.getMonth() + 1).padStart(2, '0');
-            const yyyy = today.getFullYear();
-            return `${dd}/${mm}/${yyyy}`;
-        })();
-        return loadFormDraft('parcel_date', defaultDate);
-    });
+    const [selectedDate, setSelectedDate] = useState(() =>
+        resolveDraftDate(loadFormDraft('parcel_date', getTodayDisplayDate(), draftScope))
+    );
     const [showCalendar, setShowCalendar] = useState(false);
     const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
     const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
     const [selectedSize, setSelectedSize] = useState<'small' | 'medium' | 'large'>('medium');
 
     // Form state - Step 2 (Recipient Details)
-    const [recipientName, setRecipientName] = useState(() => loadFormDraft('parcel_recipientName', ''));
-    const [contactNumber, setContactNumber] = useState(() => loadFormDraft('parcel_contactNumber', ''));
-    const [dropLocation, setDropLocation] = useState(() => loadFormDraft('parcel_dropLocation', ''));
-    const [notes, setNotes] = useState(() => loadFormDraft('parcel_notes', ''));
+    const [recipientName, setRecipientName] = useState(() => loadFormDraft('parcel_recipientName', '', draftScope));
+    const [contactNumber, setContactNumber] = useState(() => loadFormDraft('parcel_contactNumber', '', draftScope));
+    const [dropLocation, setDropLocation] = useState(() => loadFormDraft('parcel_dropLocation', '', draftScope));
+    const [notes, setNotes] = useState(() => loadFormDraft('parcel_notes', '', draftScope));
     const [parcelPhoto, setParcelPhoto] = useState<string | null>(null);
 
-    // Save draft state to sessionStorage
-    React.useEffect(() => { saveFormDraft('parcel_pickup', pickup); }, [pickup]);
-    React.useEffect(() => { saveFormDraft('parcel_dropoff', dropoff); }, [dropoff]);
-    React.useEffect(() => { saveFormDraft('parcel_date', selectedDate); }, [selectedDate]);
-    React.useEffect(() => { saveFormDraft('parcel_recipientName', recipientName); }, [recipientName]);
-    React.useEffect(() => { saveFormDraft('parcel_contactNumber', contactNumber); }, [contactNumber]);
-    React.useEffect(() => { saveFormDraft('parcel_dropLocation', dropLocation); }, [dropLocation]);
-    React.useEffect(() => { saveFormDraft('parcel_notes', notes); }, [notes]);
+    // Reload user-scoped drafts if authenticated user switches
+    React.useEffect(() => {
+        if (prevDraftScopeRef.current !== draftScope) {
+            prevDraftScopeRef.current = draftScope;
+            setPickup(loadFormDraft('parcel_pickup', '', draftScope));
+            setDropoff(loadFormDraft('parcel_dropoff', '', draftScope));
+            setPickupCoords(null);
+            setDropoffCoords(null);
+            setRoadDistance(null);
+            setRoadDuration(null);
+            setSelectedDate(resolveDraftDate(loadFormDraft('parcel_date', getTodayDisplayDate(), draftScope)));
+            setRecipientName(loadFormDraft('parcel_recipientName', '', draftScope));
+            setContactNumber(loadFormDraft('parcel_contactNumber', '', draftScope));
+            setDropLocation(loadFormDraft('parcel_dropLocation', '', draftScope));
+            setNotes(loadFormDraft('parcel_notes', '', draftScope));
+        }
+    }, [draftScope]);
+
+    // Save draft state to sessionStorage (scoped by user ID)
+    React.useEffect(() => { saveFormDraft('parcel_pickup', pickup, draftScope); }, [pickup, draftScope]);
+    React.useEffect(() => { saveFormDraft('parcel_dropoff', dropoff, draftScope); }, [dropoff, draftScope]);
+    React.useEffect(() => { saveFormDraft('parcel_date', selectedDate, draftScope); }, [selectedDate, draftScope]);
+    React.useEffect(() => { saveFormDraft('parcel_recipientName', recipientName, draftScope); }, [recipientName, draftScope]);
+    React.useEffect(() => { saveFormDraft('parcel_contactNumber', contactNumber, draftScope); }, [contactNumber, draftScope]);
+    React.useEffect(() => { saveFormDraft('parcel_dropLocation', dropLocation, draftScope); }, [dropLocation, draftScope]);
+    React.useEffect(() => { saveFormDraft('parcel_notes', notes, draftScope); }, [notes, draftScope]);
 
     const clearParcelDrafts = () => {
-        clearFormDraft('parcel_pickup');
-        clearFormDraft('parcel_dropoff');
-        clearFormDraft('parcel_recipientName');
-        clearFormDraft('parcel_contactNumber');
-        clearFormDraft('parcel_dropLocation');
-        clearFormDraft('parcel_notes');
+        clearFormDraft('parcel_pickup', draftScope);
+        clearFormDraft('parcel_dropoff', draftScope);
+        clearFormDraft('parcel_date', draftScope);
+        clearFormDraft('parcel_recipientName', draftScope);
+        clearFormDraft('parcel_contactNumber', draftScope);
+        clearFormDraft('parcel_dropLocation', draftScope);
+        clearFormDraft('parcel_notes', draftScope);
     };
 
     const navigateToStep = (newStep: ParcelStep) => {
@@ -146,18 +181,31 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
     const pickupLabelColor = isDark ? '#00FFFF' : '#5B4FFF';
     const dropoffLabelColor = isDark ? '#FF4081' : '#5B4FFF';
 
-    const fetchRoadMetrics = async (from: [number, number], to: [number, number]) => {
+    const fetchRoadMetrics = async (from: [number, number], to: [number, number]): Promise<number | null> => {
+        roadMetricsAbortRef.current?.abort();
+        const abort = createRequestAbort(10000);
+        roadMetricsAbortRef.current = abort.controller;
         try {
             const url = `https://router.project-osrm.org/route/v1/driving/${from[1]},${from[0]};${to[1]},${to[0]}?overview=false`;
-            const res = await fetch(url);
-            const data = await res.json();
-            if (data.routes && data.routes.length > 0) {
-                const route = data.routes[0];
-                setRoadDistance(Math.round(route.distance / 1000)); // KM
-                setRoadDuration(Math.round(route.duration / 3600) || 1); // Hours (min 1)
+            const res = await fetch(url, { signal: abort.signal });
+            if (!res.ok || abort.signal.aborted) return null;
+            const data = await parseJsonSafe(res);
+            if (abort.signal.aborted || !data?.routes || data.routes.length === 0) return null;
+            const route = data.routes[0];
+            const km = Math.max(1, Math.round(route.distance / 1000));
+            const hrs = Math.max(1, Math.round(route.duration / 3600) || 1);
+            if (isMountedRef.current) {
+                setRoadDistance(km);
+                setRoadDuration(hrs);
             }
-        } catch (e) {
-            console.error("Failed to fetch road metrics", e);
+            return km;
+        } catch (e: any) {
+            if (e?.name !== 'AbortError') {
+                console.error("Failed to fetch road metrics", e);
+            }
+            return null;
+        } finally {
+            abort.cleanup();
         }
     };
 
@@ -189,11 +237,11 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
         const segmentKm = ride?.segmentDistanceKm && ride.segmentDistanceKm > 0
             ? Math.round(ride.segmentDistanceKm)
             : null;
-        // Use segment distance when available, then real road distance, otherwise fallback to estimates
-        const distance = segmentKm !== null ? segmentKm : (roadDistance !== null ? roadDistance : 35);
+        // Require verified segment or road distance; never fall back to arbitrary hardcoded KM
+        const distance = segmentKm !== null ? segmentKm : (roadDistance !== null ? roadDistance : 0);
         const durationHours = segmentKm !== null
             ? Math.max(1, Math.ceil(distance / 30))
-            : (roadDuration !== null ? roadDuration : Math.ceil(distance / 30) + 1);
+            : (roadDuration !== null ? roadDuration : (distance > 0 ? Math.ceil(distance / 30) + 1 : 1));
 
         // Calculate Arrival Time
         let arrivalTime = '—';
@@ -242,18 +290,21 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                 : selectedDate.trim();
             const endpoint = `/api/rides/available?pickup=${encodeURIComponent(pickup.trim())}&dropoff=${encodeURIComponent(dropoff.trim())}&date=${encodeURIComponent(apiDate)}`;
             const response = await apiRequest(endpoint, {}, logout);
-            const data = await response.json().catch(() => ({}));
+            const data = await parseJsonSafe(response);
+            if (!isMountedRef.current) return;
             if (response.ok) {
                 setAvailableRides(Array.isArray(data) ? data : []);
                 navigateToStep('rides');
             } else {
-                notify(t('common.error'), data.error || 'Failed to fetch vehicles');
+                notify(t('common.error'), getApiErrorMessage(data, 'Failed to fetch vehicles', response));
             }
         } catch (err) {
             notify(t('common.error'), 'Connection error');
         } finally {
             fetchingRidesRef.current = false;
-            setFetchingRides(false);
+            if (isMountedRef.current) {
+                setFetchingRides(false);
+            }
         }
     };
 
@@ -271,19 +322,39 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                         notify(t('common.error'), 'Image must be under 5MB.');
                         return;
                     }
+                    const startGeneration = getAuthSessionGeneration();
                     setUploadingPhoto(true);
                     try {
                         const url = await uploadDocumentFile(file, token, {
                             refreshToken,
-                            onTokenRefreshed: async (newToken: string) => {
-                                await setAuth(newToken, refreshToken, user);
+                            onTokenRefreshed: async (newToken: string, newRefreshToken?: string | null) => {
+                                if (getAuthSessionGeneration() !== startGeneration) return;
+                                const latestStoredToken = await AsyncStorage.getItem('auth_token').catch(() => null);
+                                const latestUser = userRef.current;
+                                if (!latestStoredToken || !latestUser || getAuthSessionGeneration() !== startGeneration) return;
+                                const latestRefresh =
+                                    newRefreshToken ??
+                                    (await AsyncStorage.getItem('auth_refresh_token').catch(() => null)) ??
+                                    refreshToken;
+                                await setAuth(newToken, latestRefresh, latestUser);
+                            },
+                            onAuthFailure: () => {
+                                if (getAuthSessionGeneration() === startGeneration) {
+                                    logout();
+                                }
                             },
                         });
-                        setParcelPhoto(url);
+                        if (isMountedRef.current && getAuthSessionGeneration() === startGeneration) {
+                            setParcelPhoto(url);
+                        }
                     } catch (err: any) {
-                        notify(t('common.error'), err?.message || 'Upload failed');
+                        if (isMountedRef.current && getAuthSessionGeneration() === startGeneration) {
+                            notify(t('common.error'), err?.message || 'Upload failed');
+                        }
                     } finally {
-                        setUploadingPhoto(false);
+                        if (isMountedRef.current) {
+                            setUploadingPhoto(false);
+                        }
                     }
                 }
             };
@@ -320,14 +391,18 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
         const effectivePickup = getEffectivePickup(selectedRide);
         const effectiveDropoff = getEffectiveDropoff(selectedRide);
 
+        const stats = getTravelStats(effectivePickup, effectiveDropoff, selectedRide.departureTime, selectedRide);
+        const distNum = parseInt(stats.distance, 10) || 0;
+        if (distNum <= 0) {
+            notify(t('common.error'), 'Route distance could not be verified. Please go back and re-select your route.');
+            return;
+        }
+        const calculatedPrice = calculateParcelPrice(distNum, selectedSize);
+
         submittingRef.current = true;
         setSubmitting(true);
         try {
             const rideId = selectedRide.id || selectedRide._id;
-            const stats = getTravelStats(effectivePickup, effectiveDropoff, selectedRide.departureTime, selectedRide);
-            const distNum = parseInt(stats.distance, 10) || 0;
-            const calculatedPrice = calculateParcelPrice(distNum, selectedSize);
-
             const response = await apiRequest(`/api/rides/${rideId}/book`, {
                 method: 'POST',
                 body: JSON.stringify({
@@ -346,27 +421,53 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
             }, logout);
 
             if (response.ok) {
-                const data = await response.json().catch(() => ({}));
-                const rawId = data.bookingId || data.id || data._id;
-                const displayId = rawId ? `RA-P-${String(rawId).slice(-4).toUpperCase()}` : 'Booked';
+                const data = await parseJsonSafe(response);
+                const rawId = data?.bookingId || data?.id || data?._id;
+                if (!rawId) {
+                    notify(
+                        t('common.error'),
+                        'Booking confirmation was incomplete. Please check your notifications before retrying.'
+                    );
+                    return;
+                }
+                const displayId = `RA-P-${String(rawId).slice(-4).toUpperCase()}`;
 
                 clearParcelDrafts();
+                if (isMountedRef.current) {
+                    setSelectedRide(null);
+                    setParcelPhoto(null);
+                    setPickup('');
+                    setDropoff('');
+                    setPickupCoords(null);
+                    setDropoffCoords(null);
+                    setRoadDistance(null);
+                    setRoadDuration(null);
+                    setRecipientName('');
+                    setContactNumber('');
+                    setDropLocation('');
+                    setNotes('');
+                    setStep('search');
+                }
                 notify(
                     t('common.success'),
-                    `Your parcel was successfully scheduled!\n\nBooking ID: ${displayId}\n\nYou can track this in your notifications.`,
-                    () => onBack && onBack()
+                    `Your parcel was successfully scheduled!\n\nBooking ID: ${displayId}\n\nYou can track this in your notifications.`
                 );
+                if (onBack) {
+                    onBack();
+                }
             } else {
-                const errorData = await response.json().catch(() => ({}));
+                const errorData = await parseJsonSafe(response);
                 console.error("Booking failed:", errorData);
-                notify(t('common.error'), errorData.error || 'Failed to schedule pickup. Please try again.');
+                notify(t('common.error'), getApiErrorMessage(errorData, 'Failed to schedule pickup. Please try again.', response));
             }
         } catch (err) {
             console.error("Booking catch error:", err);
             notify(t('common.error'), t('login.connectionError'));
         } finally {
             submittingRef.current = false;
-            setSubmitting(false);
+            if (isMountedRef.current) {
+                setSubmitting(false);
+            }
         }
     };
 
@@ -912,54 +1013,78 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                         disabled={geocoding}
                         onPress={async () => {
                             if (geocodingRef.current) return;
-                            if (pickup.trim() && dropoff.trim()) {
-                                geocodingRef.current = true;
-                                setGeocoding(true);
-                                let pCoords = pickupCoords;
-                                let dCoords = dropoffCoords;
+                            if (!pickup.trim() || !dropoff.trim()) {
+                                notify(t('common.error'), 'Please enter pickup and dropoff locations.');
+                                return;
+                            }
+                            if (!isTodayOrFutureDisplayDate(selectedDate)) {
+                                notify(t('common.error'), 'Please select today or a future pickup date.');
+                                return;
+                            }
 
-                                try {
-                                    if (!pCoords) {
-                                        const res = await apiRequest(`/api/location/search?q=${encodeURIComponent(pickup.trim() + ', Uttarakhand, India')}`, {}, logout);
-                                        if (res.ok) {
-                                            const data = await res.json();
-                                            if (data && data.length > 0) {
-                                                pCoords = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
-                                                setPickupCoords(pCoords);
-                                            }
-                                        }
-                                    }
-                                    if (!dCoords) {
-                                        const res = await apiRequest(`/api/location/search?q=${encodeURIComponent(dropoff.trim() + ', Uttarakhand, India')}`, {}, logout);
-                                        if (res.ok) {
-                                            const data = await res.json();
-                                            if (data && data.length > 0) {
-                                                dCoords = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
-                                                setDropoffCoords(dCoords);
-                                            }
-                                        }
-                                    }
+                            geocodingRef.current = true;
+                            setGeocoding(true);
+                            let pCoords = pickupCoords;
+                            let dCoords = dropoffCoords;
+                            let resolvedDistanceKm = roadDistance;
 
-                                    if (pCoords && dCoords) {
-                                        const url = `https://router.project-osrm.org/route/v1/driving/${pCoords[1]},${pCoords[0]};${dCoords[1]},${dCoords[0]}?overview=false`;
-                                        const res = await fetch(url);
-                                        const data = await res.json();
-                                        if (data.routes && data.routes.length > 0) {
-                                            setRoadDistance(Math.round(data.routes[0].distance / 1000));
-                                            setRoadDuration(Math.round(data.routes[0].duration / 3600) || 1);
+                            const abort = createRequestAbort(12000);
+                            try {
+                                if (!pCoords) {
+                                    const res = await apiRequest(
+                                        `/api/location/search?q=${encodeURIComponent(pickup.trim() + ', Uttarakhand, India')}`,
+                                        { signal: abort.signal },
+                                        logout
+                                    );
+                                    if (res.ok) {
+                                        const data = await parseJsonSafe<any[]>(res);
+                                        if (data && data.length > 0) {
+                                            pCoords = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+                                            if (isMountedRef.current) setPickupCoords(pCoords);
                                         }
                                     }
-                                } catch (e) {
-                                    console.error('Failed to geocode or fetch route:', e);
-                                } finally {
-                                    geocodingRef.current = false;
-                                    setGeocoding(false);
+                                }
+                                if (!dCoords) {
+                                    const res = await apiRequest(
+                                        `/api/location/search?q=${encodeURIComponent(dropoff.trim() + ', Uttarakhand, India')}`,
+                                        { signal: abort.signal },
+                                        logout
+                                    );
+                                    if (res.ok) {
+                                        const data = await parseJsonSafe<any[]>(res);
+                                        if (data && data.length > 0) {
+                                            dCoords = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+                                            if (isMountedRef.current) setDropoffCoords(dCoords);
+                                        }
+                                    }
                                 }
 
-                                navigateToStep('details');
-                            } else {
-                                notify(t('common.error'), 'Please enter pickup and dropoff locations.');
+                                if (pCoords && dCoords && resolvedDistanceKm === null) {
+                                    const km = await fetchRoadMetrics(pCoords, dCoords);
+                                    if (km !== null) {
+                                        resolvedDistanceKm = km;
+                                    }
+                                }
+                            } catch (e) {
+                                console.error('Failed to geocode or fetch route:', e);
+                            } finally {
+                                abort.cleanup();
+                                geocodingRef.current = false;
+                                if (isMountedRef.current) {
+                                    setGeocoding(false);
+                                }
                             }
+
+                            if (!isMountedRef.current) return;
+                            if (resolvedDistanceKm === null || resolvedDistanceKm <= 0) {
+                                notify(
+                                    t('common.error'),
+                                    'Could not determine route distance between pickup and dropoff. Please select valid locations from suggestions or check your connection.'
+                                );
+                                return;
+                            }
+
+                            navigateToStep('details');
                         }}>
                         {geocoding ? (
                             <ActivityIndicator color="#FFF" />

@@ -4,13 +4,14 @@ import AdminChart from '../../components/AdminChart';
 import { downloadCSV } from '../../utils/exportUtils';
 import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
+import { parseJsonSafe, createRequestAbort } from '../../utils/json';
 
 interface AdminStatsData {
-    rides: { total: number; available: number; ongoing?: number; completed: number; cancelled: number };
-    bookings: { total: number; pending: number; accepted: number; rejected: number };
-    users: { total: number; drivers: number; passengers: number };
-    routes: number;
-    monthlyTrend: { month: string; rides: number }[];
+    rides?: { total?: number; available?: number; ongoing?: number; completed?: number; cancelled?: number };
+    bookings?: { total?: number; pending?: number; accepted?: number; rejected?: number };
+    users?: { total?: number; drivers?: number; passengers?: number };
+    routes?: number;
+    monthlyTrend?: { month: string; rides: number }[];
     trends?: { month: string; count: number }[];
 }
 
@@ -41,6 +42,9 @@ export default function AdminDashboardView({
     fetchWithAuthRef.current = fetchWithAuth;
     const abortRef = useRef<AbortController | null>(null);
     const requestIdRef = useRef(0);
+    const refreshingRef = useRef(false);
+    const statsRef = useRef<AdminStatsData | null>(null);
+    const isMountedRef = useRef(true);
     const { width } = useWindowDimensions();
     const isMobile = width < 768;
 
@@ -52,56 +56,56 @@ export default function AdminDashboardView({
         border: isDark ? 'rgba(255,255,255,0.08)' : '#DEE2E6',
     };
 
-    const loadStats = useCallback((isRefresh = false) => {
-        if (isRefresh && refreshing) return;
+    const loadStats = useCallback(async (isRefresh = false) => {
+        if (isRefresh && refreshingRef.current) return;
         abortRef.current?.abort();
-        const controller = new AbortController();
+        const { controller, cleanup, didTimeout } = createRequestAbort(10000);
         abortRef.current = controller;
         const reqId = ++requestIdRef.current;
-        const timeout = setTimeout(() => controller.abort(), 10000);
 
-        if (isRefresh && stats) {
+        if (isRefresh && statsRef.current) {
+            refreshingRef.current = true;
             setRefreshing(true);
         } else {
             setLoading(true);
         }
         setError(null);
 
-        fetchWithAuthRef.current(`${API_BASE}/api/admin/stats`, { signal: controller.signal })
-            .then(r => {
-                clearTimeout(timeout);
-                if (!r.ok) throw new Error(`Server error: ${r.status}`);
-                return r.json();
-            })
-            .then((d: AdminStatsData) => {
-                if (reqId !== requestIdRef.current) return;
-                setStats(d);
-            })
-            .catch((err: any) => {
-                clearTimeout(timeout);
-                if (reqId !== requestIdRef.current) return;
-                if (err?.name === 'AbortError') {
-                    setError('Backend not responding. Is the server running?');
-                } else {
-                    setError(`Could not load stats (${err?.message ?? 'network error'})`);
-                }
-            })
-            .finally(() => {
-                clearTimeout(timeout);
-                if (reqId === requestIdRef.current) {
-                    setLoading(false);
-                    setRefreshing(false);
-                }
-            });
-    }, [refreshing, stats]);
+        try {
+            const res = await fetchWithAuthRef.current(`${API_BASE}/api/admin/stats`, { signal: controller.signal });
+            if (!res.ok) throw new Error(`Server error: ${res.status}`);
+            const parsed = await parseJsonSafe<AdminStatsData>(res);
+            if (!parsed) throw new Error('Invalid dashboard response');
+            if (!isMountedRef.current || reqId !== requestIdRef.current) return;
+            statsRef.current = parsed;
+            setStats(parsed);
+        } catch (err: any) {
+            if (!isMountedRef.current || reqId !== requestIdRef.current) return;
+            if (err?.name === 'AbortError' && !didTimeout()) return;
+            if (err?.name === 'AbortError' || didTimeout()) {
+                setError('Backend not responding. Is the server running?');
+            } else {
+                setError(`Could not load stats (${err?.message ?? 'network error'})`);
+            }
+        } finally {
+            cleanup();
+            if (isMountedRef.current && reqId === requestIdRef.current) {
+                refreshingRef.current = false;
+                setLoading(false);
+                setRefreshing(false);
+            }
+        }
+    }, []);
 
     useEffect(() => {
+        isMountedRef.current = true;
         loadStats(false);
         return () => {
+            isMountedRef.current = false;
             requestIdRef.current += 1;
             abortRef.current?.abort();
         };
-    }, []);
+    }, [loadStats]);
 
     // Calendar
     const currentMonthLabel = viewDate.toLocaleString('default', { month: 'long' });
@@ -114,9 +118,9 @@ export default function AdminDashboardView({
     const nextMonth = () => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1));
     const prevMonth = () => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1));
 
-    if (loading) return <ActivityIndicator color="#3B7DDD" size="large" style={{ marginTop: 60 }} />;
+    if (loading && !stats) return <ActivityIndicator color="#3B7DDD" size="large" style={{ marginTop: 60 }} />;
 
-    if (error) return (
+    if (error && !stats) return (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 }}>
             <Text style={{ fontSize: 40, marginBottom: 16 }}>⚠️</Text>
             <Text style={{ color: '#DC3545', fontSize: 16, fontWeight: 'bold', marginBottom: 8, textAlign: 'center' }}>
@@ -194,6 +198,29 @@ export default function AdminDashboardView({
                 </View>
             </View>
 
+            {error && (
+                <View style={{
+                    backgroundColor: 'rgba(220,53,69,0.12)',
+                    borderWidth: 1,
+                    borderColor: 'rgba(220,53,69,0.35)',
+                    borderRadius: 8,
+                    paddingHorizontal: 14,
+                    paddingVertical: 10,
+                    marginBottom: 16,
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: 12,
+                }}>
+                    <Text style={{ color: '#DC3545', fontSize: 13, fontWeight: '600', flex: 1 }}>
+                        Refresh failed: {error}
+                    </Text>
+                    <TouchableOpacity onPress={() => loadStats(true)}>
+                        <Text style={{ color: '#3B7DDD', fontSize: 13, fontWeight: 'bold' }}>Retry</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
+
             <View style={[styles.mainGrid, isMobile && styles.mainGridMobile]}>
                 {/* KPI Cards */}
                 <View style={[styles.statsColumn, isMobile && { width: '100%' }]}>
@@ -244,12 +271,12 @@ export default function AdminDashboardView({
                 <View style={[styles.detailCard, !isMobile && { flex: 1.5 }, isMobile && styles.detailCardMobile, { backgroundColor: T.card }]}>
                     <Text style={[styles.detailTitle, { color: T.text }]}>Booking Breakdown</Text>
                     {[
-                        { label: 'Pending', count: stats?.bookings.pending ?? 0, color: '#FCB92C' },
-                        { label: 'Accepted', count: stats?.bookings.accepted ?? 0, color: '#28A745' },
-                        { label: 'Rejected', count: stats?.bookings.rejected ?? 0, color: '#DC3545' },
+                        { label: 'Pending', count: stats?.bookings?.pending ?? 0, color: '#FCB92C' },
+                        { label: 'Accepted', count: stats?.bookings?.accepted ?? 0, color: '#28A745' },
+                        { label: 'Rejected', count: stats?.bookings?.rejected ?? 0, color: '#DC3545' },
                     ].map(item => {
-                        const total = stats?.bookings.total || 1;
-                        const pct = Math.round((item.count / total) * 100);
+                        const total = stats?.bookings?.total || 1;
+                        const pct = Math.min(100, Math.round((item.count / total) * 100));
                         return (
                             <View key={item.label} style={{ marginBottom: 14 }}>
                                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
@@ -266,11 +293,11 @@ export default function AdminDashboardView({
                     <View style={{ marginTop: 12, borderTopWidth: 1, borderTopColor: T.border, paddingTop: 12 }}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                             <Text style={{ color: T.subtext, fontSize: 12 }}>Drivers</Text>
-                            <Text style={{ color: T.text, fontWeight: 'bold', fontSize: 12 }}>{stats?.users.drivers ?? 0}</Text>
+                            <Text style={{ color: T.text, fontWeight: 'bold', fontSize: 12 }}>{stats?.users?.drivers ?? 0}</Text>
                         </View>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 }}>
                             <Text style={{ color: T.subtext, fontSize: 12 }}>Passengers</Text>
-                            <Text style={{ color: T.text, fontWeight: 'bold', fontSize: 12 }}>{stats?.users.passengers ?? 0}</Text>
+                            <Text style={{ color: T.text, fontWeight: 'bold', fontSize: 12 }}>{stats?.users?.passengers ?? 0}</Text>
                         </View>
                     </View>
                 </View>

@@ -14,7 +14,8 @@ import { useAuth } from '../context/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE } from '../apiConfig';
 import { useLanguage } from '../context/LanguageContext';
-import { apiRequest } from '../utils/api';
+import { apiRequest, getAuthSessionGeneration } from '../utils/api';
+import { parseJsonSafe, getApiErrorMessage, createRequestAbort } from '../utils/json';
 import { notify } from '../utils/notify';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useIsFocused } from '@react-navigation/native';
@@ -23,7 +24,14 @@ import AvailableRidesScreen from './AvailableRidesScreen';
 import BookRideScreen from './BookRideScreen';
 import ParcelBookingView from './ParcelBookingView';
 import LocationInput from '../components/LocationInput';
-import { saveFormDraft, loadFormDraft, clearFormDraft } from '../utils/formDraftStorage';
+import {
+    saveFormDraft,
+    loadFormDraft,
+    clearFormDraft,
+    getTodayDisplayDate,
+    isTodayOrFutureDisplayDate,
+    resolveDraftDate,
+} from '../utils/formDraftStorage';
 import { pushSubViewHistory, popSubViewHistory, useBrowserBack } from '../utils/browserHistory';
 import ResubmitDocsView from './ResubmitDocsView';
 
@@ -58,21 +66,17 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
 
     const isDriver = user?.role === 'driver';
     const isParceller = user?.role === 'parceller';
+    const draftScope = user?.id || null;
+    const prevDraftScopeRef = useRef(draftScope);
+    const isMountedRef = useRef(true);
 
     const [view, setView] = useState<HomeView>('home');
     const [selectedRide, setSelectedRide] = useState<Ride | null>(null);
-    const [pickup, setPickup] = useState(() => loadFormDraft('home_pickup', ''));
-    const [dropoff, setDropoff] = useState(() => loadFormDraft('home_dropoff', ''));
-    const [date, setDate] = useState(() => {
-        const defaultDate = (() => {
-            const today = new Date();
-            const dd = String(today.getDate()).padStart(2, '0');
-            const mm = String(today.getMonth() + 1).padStart(2, '0');
-            const yyyy = today.getFullYear();
-            return `${dd}/${mm}/${yyyy}`;
-        })();
-        return loadFormDraft('home_date', defaultDate);
-    });
+    const [pickup, setPickup] = useState(() => loadFormDraft('home_pickup', '', draftScope));
+    const [dropoff, setDropoff] = useState(() => loadFormDraft('home_dropoff', '', draftScope));
+    const [date, setDate] = useState(() =>
+        resolveDraftDate(loadFormDraft('home_date', getTodayDisplayDate(), draftScope))
+    );
 
     // Convert display date DD/MM/YYYY → API format YYYY-MM-DD
     const toApiDate = (displayDate: string): string => {
@@ -83,8 +87,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
         }
         return displayDate; // fallback: return as-is
     };
-    const [departureTime, setDepartureTime] = useState(() => loadFormDraft('home_departureTime', ''));
-    const [timePeriod, setTimePeriod] = useState<'AM' | 'PM'>(() => loadFormDraft('home_timePeriod', 'AM'));
+    const [departureTime, setDepartureTime] = useState(() => loadFormDraft('home_departureTime', '', draftScope));
+    const [timePeriod, setTimePeriod] = useState<'AM' | 'PM'>(() => loadFormDraft('home_timePeriod', 'AM', draftScope));
     const [showCalendar, setShowCalendar] = useState(false);
     const [showTimePeriodDropdown, setShowTimePeriodDropdown] = useState(false);
     const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
@@ -100,23 +104,36 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
     const [totalDistanceKm, setTotalDistanceKm] = useState<number | null>(null);
     const [postingRide, setPostingRide] = useState(false);
     const [findingRides, setFindingRides] = useState(false);
-    const [pricePerSeat, setPricePerSeat] = useState(() => loadFormDraft('home_pricePerSeat', ''));
+    const [pricePerSeat, setPricePerSeat] = useState(() => loadFormDraft('home_pricePerSeat', '', draftScope));
     const [hideVerificationBanner, setHideVerificationBanner] = useState(false);
 
     const findingRidesRef = useRef(false);
     const postingRideRef = useRef(false);
     const routePreviewAbortRef = useRef<AbortController | null>(null);
     const landmarksAbortRef = useRef<AbortController | null>(null);
+    const recentRidesAbortRef = useRef<AbortController | null>(null);
     const authStateRef = useRef({ token, refreshToken, user, logout, setAuth });
     authStateRef.current = { token, refreshToken, user, logout, setAuth };
 
-    // Save draft state to sessionStorage
-    useEffect(() => { saveFormDraft('home_pickup', pickup); }, [pickup]);
-    useEffect(() => { saveFormDraft('home_dropoff', dropoff); }, [dropoff]);
-    useEffect(() => { saveFormDraft('home_date', date); }, [date]);
-    useEffect(() => { saveFormDraft('home_departureTime', departureTime); }, [departureTime]);
-    useEffect(() => { saveFormDraft('home_timePeriod', timePeriod); }, [timePeriod]);
-    useEffect(() => { saveFormDraft('home_pricePerSeat', pricePerSeat); }, [pricePerSeat]);
+    useEffect(() => {
+        if (prevDraftScopeRef.current !== draftScope) {
+            prevDraftScopeRef.current = draftScope;
+            setPickup(loadFormDraft('home_pickup', '', draftScope));
+            setDropoff(loadFormDraft('home_dropoff', '', draftScope));
+            setDate(resolveDraftDate(loadFormDraft('home_date', getTodayDisplayDate(), draftScope)));
+            setDepartureTime(loadFormDraft('home_departureTime', '', draftScope));
+            setTimePeriod(loadFormDraft('home_timePeriod', 'AM', draftScope));
+            setPricePerSeat(loadFormDraft('home_pricePerSeat', '', draftScope));
+        }
+    }, [draftScope]);
+
+    // Save draft state to sessionStorage (scoped by user ID)
+    useEffect(() => { saveFormDraft('home_pickup', pickup, draftScope); }, [pickup, draftScope]);
+    useEffect(() => { saveFormDraft('home_dropoff', dropoff, draftScope); }, [dropoff, draftScope]);
+    useEffect(() => { saveFormDraft('home_date', date, draftScope); }, [date, draftScope]);
+    useEffect(() => { saveFormDraft('home_departureTime', departureTime, draftScope); }, [departureTime, draftScope]);
+    useEffect(() => { saveFormDraft('home_timePeriod', timePeriod, draftScope); }, [timePeriod, draftScope]);
+    useEffect(() => { saveFormDraft('home_pricePerSeat', pricePerSeat, draftScope); }, [pricePerSeat, draftScope]);
 
     const navigateToView = (newView: HomeView) => {
         if (newView === 'book' && !selectedRide) return;
@@ -137,11 +154,14 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
 
 
     useEffect(() => {
+        isMountedRef.current = true;
         fetchRecentRides();
         if (isDriver) refreshDriverProfile();
         return () => {
+            isMountedRef.current = false;
             routePreviewAbortRef.current?.abort();
             landmarksAbortRef.current?.abort();
+            recentRidesAbortRef.current?.abort();
         };
     }, []);
 
@@ -151,43 +171,60 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
     }, [isFocused, isDriver]);
 
     const refreshDriverProfile = async () => {
+        const startGeneration = getAuthSessionGeneration();
         try {
-            const { token: curToken, refreshToken: curRefresh, user: curUser, logout: curLogout, setAuth: curSetAuth } = authStateRef.current;
+            const { refreshToken: curRefresh, logout: curLogout, setAuth: curSetAuth } = authStateRef.current;
             const response = await apiRequest('/api/user/profile', {}, curLogout);
-            if (response.ok) {
-                const fresh = await response.json();
-                if (fresh.verification_status !== curUser?.verification_status ||
-                    fresh.rejection_reason !== curUser?.rejection_reason) {
-                    const latestToken = (await AsyncStorage.getItem('auth_token').catch(() => null)) || curToken;
-                    const latestRefresh = (await AsyncStorage.getItem('auth_refresh_token').catch(() => null)) || curRefresh;
-                    await curSetAuth(latestToken, latestRefresh, {
-                        ...curUser,
-                        verification_status: fresh.verification_status,
-                        rejection_reason: fresh.rejection_reason,
-                    } as any);
-                }
+            if (!isMountedRef.current || getAuthSessionGeneration() !== startGeneration || !response.ok) return;
+            const fresh = await parseJsonSafe(response);
+            if (!fresh || !isMountedRef.current || getAuthSessionGeneration() !== startGeneration) return;
+            const latestUser = authStateRef.current.user;
+            if (!latestUser) return;
+            if (fresh.verification_status !== latestUser.verification_status ||
+                fresh.rejection_reason !== latestUser.rejection_reason) {
+                const latestToken = await AsyncStorage.getItem('auth_token').catch(() => null);
+                if (!latestToken || !isMountedRef.current || getAuthSessionGeneration() !== startGeneration) return;
+                const latestRefresh = (await AsyncStorage.getItem('auth_refresh_token').catch(() => null)) ?? curRefresh;
+                await curSetAuth(latestToken, latestRefresh, {
+                    ...latestUser,
+                    verification_status: fresh.verification_status,
+                    rejection_reason: fresh.rejection_reason,
+                } as any);
             }
         } catch (_) { /* silent — not critical */ }
     };
 
     const fetchRecentRides = async () => {
+        recentRidesAbortRef.current?.abort();
+        const abort = createRequestAbort(10000);
+        recentRidesAbortRef.current = abort.controller;
+        const startGeneration = getAuthSessionGeneration();
         try {
             setLoading(true);
             setError(false);
             const role = isDriver ? 'driver' : 'passenger';
-            const response = await apiRequest(`/api/rides/recent?role=${role}`, {}, logout);
+            const response = await apiRequest(`/api/rides/recent?role=${role}`, { signal: abort.signal }, logout);
+            if (!isMountedRef.current || abort.signal.aborted || getAuthSessionGeneration() !== startGeneration) return;
             if (response.ok) {
-                const data = await response.json();
-                setRecentRides(Array.isArray(data) ? data : []);
+                const data = await parseJsonSafe(response);
+                if (isMountedRef.current && !abort.signal.aborted) {
+                    setRecentRides(Array.isArray(data) ? data : []);
+                }
             } else {
-                setRecentRides([]);
+                if (isMountedRef.current) {
+                    setError(true);
+                }
+            }
+        } catch (err: any) {
+            if (err?.name === 'AbortError' || (abort.signal.aborted && !abort.didTimeout())) return;
+            if (isMountedRef.current) {
                 setError(true);
             }
-        } catch {
-            setRecentRides([]);
-            setError(true);
         } finally {
-            setLoading(false);
+            abort.cleanup();
+            if (isMountedRef.current && (!abort.signal.aborted || abort.didTimeout())) {
+                setLoading(false);
+            }
         }
     };
 
@@ -207,10 +244,10 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
             );
             if (controller?.signal.aborted) return;
             if (response.ok) {
-                const data = await response.json();
+                const data = await parseJsonSafe(response);
                 if (controller?.signal.aborted) return;
-                setDiscoveredStops(data.stops || []);
-                setTotalDistanceKm(data.totalDistanceKm || null);
+                setDiscoveredStops(data?.stops || []);
+                setTotalDistanceKm(data?.totalDistanceKm || null);
             } else {
                 setDiscoveredStops([]);
                 setTotalDistanceKm(null);
@@ -223,7 +260,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
             setTotalDistanceKm(null);
             setPreviewAttempted(true);
         } finally {
-            if (!controller?.signal.aborted) {
+            if (!controller?.signal.aborted && isMountedRef.current) {
                 setPreviewLoading(false);
             }
         }
@@ -299,34 +336,29 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
     const handleFindRides = async () => {
         if (findingRidesRef.current) return;
         if (!pickup.trim() || !dropoff.trim()) {
+            notify(t('common.error'), 'Please enter pickup and dropoff locations.');
+            return;
+        }
+        if (!isTodayOrFutureDisplayDate(date)) {
+            notify(t('common.error'), 'Please select today or a future travel date.');
             return;
         }
 
         findingRidesRef.current = true;
         setFindingRides(true);
-        try {
-            const response = await apiRequest('/api/rides/recent', {
-                method: 'POST',
-                body: JSON.stringify({
-                    pickup: pickup.trim(),
-                    dropoff: dropoff.trim(),
-                    rideType: view === 'parcel' ? 'parcel' : 'seat',
-                }),
-            }, logout);
+        // Save recent-search telemetry best-effort so telemetry/network failure never blocks searching
+        apiRequest('/api/rides/recent', {
+            method: 'POST',
+            body: JSON.stringify({
+                pickup: pickup.trim(),
+                dropoff: dropoff.trim(),
+                rideType: view === 'parcel' ? 'parcel' : 'seat',
+            }),
+        }, logout).catch(() => {});
 
-            if (response.ok) {
-                navigateToView('available');
-            } else {
-                const data = await response.json().catch(() => ({}));
-                notify(t('common.error'), data.error || 'Failed to search rides.');
-            }
-        } catch (err) {
-            console.error('Failed to save recent ride:', err);
-            notify(t('common.error'), t('login.connectionError'));
-        } finally {
-            findingRidesRef.current = false;
-            setFindingRides(false);
-        }
+        navigateToView('available');
+        findingRidesRef.current = false;
+        setFindingRides(false);
     };
 
 
@@ -350,6 +382,10 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
         }
 
         if (!pickup.trim() || !dropoff.trim()) return;
+        if (!isTodayOrFutureDisplayDate(date)) {
+            notify(t('common.error'), 'Cannot post a ride for a past date.');
+            return;
+        }
         if (!departureTime.trim()) {
             notify(t('common.error'), 'Please enter a departure time.');
             return;
@@ -423,23 +459,20 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                 setPickup('');
                 setDropoff('');
                 setPricePerSeat('');
-                clearFormDraft('home_pickup');
-                clearFormDraft('home_dropoff');
-                clearFormDraft('home_departureTime');
-                clearFormDraft('home_pricePerSeat');
-                const today = new Date();
-                const dd = String(today.getDate()).padStart(2, '0');
-                const mm = String(today.getMonth() + 1).padStart(2, '0');
-                const yyyy = today.getFullYear();
-                setDate(`${dd}/${mm}/${yyyy}`);
+                clearFormDraft('home_pickup', draftScope);
+                clearFormDraft('home_dropoff', draftScope);
+                clearFormDraft('home_departureTime', draftScope);
+                clearFormDraft('home_pricePerSeat', draftScope);
+                clearFormDraft('home_date', draftScope);
+                setDate(getTodayDisplayDate());
                 setDepartureTime('');
                 setShowPostSuccess(true);
                 fetchRecentRides(); // Refresh recent list
             } else {
-                const data = await response.json();
+                const data = await parseJsonSafe(response);
                 notify(
                     response.status === 429 ? 'Please Wait' : t('common.error'),
-                    data.error || 'Failed to post ride'
+                    getApiErrorMessage(data, 'Failed to post ride', response)
                 );
             }
         } catch (err) {
@@ -447,7 +480,9 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
             notify(t('common.error'), t('login.connectionError'));
         } finally {
             postingRideRef.current = false;
-            setPostingRide(false);
+            if (isMountedRef.current) {
+                setPostingRide(false);
+            }
         }
     };
 
@@ -459,7 +494,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
     }
 
     if (isParceller || view === 'parcel') {
-        return <ParcelBookingView onBack={() => {
+        return <ParcelBookingView onBack={isParceller ? undefined : () => {
             setView('home');
             if (setParcelMode) setParcelMode(false);
             popSubViewHistory();
@@ -496,9 +531,10 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                     popSubViewHistory();
                 }}
                 onBookingComplete={() => {
-                    clearFormDraft('home_pickup');
-                    clearFormDraft('home_dropoff');
-                    clearFormDraft('home_departureTime');
+                    clearFormDraft('home_pickup', draftScope);
+                    clearFormDraft('home_dropoff', draftScope);
+                    clearFormDraft('home_departureTime', draftScope);
+                    clearFormDraft('home_date', draftScope);
                     setSelectedRide(null);
                     setView('home');
                     popSubViewHistory();
@@ -612,7 +648,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                                     logout
                                 );
                                 if (!controller?.signal.aborted && response.ok) {
-                                    const data = await response.json();
+                                    const data = await parseJsonSafe(response);
                                     if (!controller?.signal.aborted) {
                                         setPickupLandmarks(Array.isArray(data) ? data : []);
                                     }

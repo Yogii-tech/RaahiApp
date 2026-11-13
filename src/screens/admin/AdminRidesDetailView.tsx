@@ -4,6 +4,7 @@ import AdminChart from '../../components/AdminChart';
 import { downloadCSV } from '../../utils/exportUtils';
 import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
+import { parseJsonSafe, createRequestAbort } from '../../utils/json';
 
 interface RideRow {
      id: string;
@@ -45,6 +46,7 @@ export default function AdminRidesDetailView({ isDark, searchQuery = '', initial
      fetchWithAuthRef.current = fetchWithAuth;
      const abortRef = useRef<AbortController | null>(null);
      const reqIdRef = useRef(0);
+     const isMountedRef = useRef(true);
      const { width } = useWindowDimensions();
      const isMobile = width < 768;
 
@@ -57,9 +59,9 @@ export default function AdminRidesDetailView({ isDark, searchQuery = '', initial
           accent: '#3B7DDD',
      };
 
-     const fetchData = useCallback((background = false) => {
+     const fetchData = useCallback(async (background = false) => {
           abortRef.current?.abort();
-          const controller = new AbortController();
+          const { controller, cleanup, didTimeout } = createRequestAbort(12000);
           abortRef.current = controller;
           const reqId = ++reqIdRef.current;
 
@@ -70,40 +72,42 @@ export default function AdminRidesDetailView({ isDark, searchQuery = '', initial
           }
           setError(null);
 
-          Promise.all([
-               fetchWithAuthRef.current(`${API_BASE}/api/admin/rides`, { signal: controller.signal }).then(r => {
-                    if (!r.ok) throw new Error(`Rides error: ${r.status}`);
-                    return r.json();
-               }),
-               fetchWithAuthRef.current(`${API_BASE}/api/admin/stats`, { signal: controller.signal }).then(r => {
-                    if (!r.ok) throw new Error(`Stats error: ${r.status}`);
-                    return r.json();
-               }),
-          ])
-               .then(([ridesData, stats]) => {
-                    if (reqId !== reqIdRef.current) return;
-                    setRides(Array.isArray(ridesData) ? ridesData : []);
-                    setStatsData(stats);
-               })
-               .catch((err: any) => {
-                    if (err?.name === 'AbortError' || reqId !== reqIdRef.current) return;
-                    setError(err?.message || 'Could not load ride data');
-                    if (!background) {
-                         setRides([]);
-                         setStatsData(null);
-                    }
-               })
-               .finally(() => {
-                    if (reqId === reqIdRef.current) {
-                         setLoading(false);
-                         setRefreshing(false);
-                    }
-               });
+          try {
+               const [ridesRes, statsRes] = await Promise.all([
+                    fetchWithAuthRef.current(`${API_BASE}/api/admin/rides`, { signal: controller.signal }),
+                    fetchWithAuthRef.current(`${API_BASE}/api/admin/stats`, { signal: controller.signal }),
+               ]);
+               if (!ridesRes.ok) throw new Error(`Rides error: ${ridesRes.status}`);
+               if (!statsRes.ok) throw new Error(`Stats error: ${statsRes.status}`);
+               const [ridesData, stats] = await Promise.all([
+                    parseJsonSafe<RideRow[]>(ridesRes),
+                    parseJsonSafe<StatsData>(statsRes),
+               ]);
+               if (!isMountedRef.current || reqId !== reqIdRef.current) return;
+               setRides(Array.isArray(ridesData) ? ridesData : []);
+               setStatsData(stats);
+          } catch (err: any) {
+               if (!isMountedRef.current || reqId !== reqIdRef.current) return;
+               if (err?.name === 'AbortError' && !didTimeout()) return;
+               setError(didTimeout() ? 'Request timed out while loading ride data' : (err?.message || 'Could not load ride data'));
+               if (!background) {
+                    setRides([]);
+                    setStatsData(null);
+               }
+          } finally {
+               cleanup();
+               if (isMountedRef.current && reqId === reqIdRef.current) {
+                    setLoading(false);
+                    setRefreshing(false);
+               }
+          }
      }, []);
 
      useEffect(() => {
+          isMountedRef.current = true;
           fetchData(false);
           return () => {
+               isMountedRef.current = false;
                reqIdRef.current += 1;
                abortRef.current?.abort();
           };

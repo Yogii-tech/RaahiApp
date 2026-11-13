@@ -1,5 +1,6 @@
 import { API_BASE } from '../apiConfig';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { parseJsonSafe } from './json';
 
 /**
  * Enhanced fetch wrapper that handles:
@@ -102,8 +103,8 @@ export const refreshAuthToken = async (explicitRefreshToken?: string | null): Pr
                 return null;
             }
 
-            const data = await refreshResponse.json();
-            if (authSessionGeneration !== startGeneration) {
+            const data = await parseJsonSafe(refreshResponse);
+            if (authSessionGeneration !== startGeneration || !data) {
                 return null;
             }
 
@@ -150,6 +151,7 @@ export const apiRequest = async (
     options: RequestInit = {},
     logoutCallback?: () => void
 ) => {
+    const requestGeneration = authSessionGeneration;
     const token = await AsyncStorage.getItem('auth_token');
     const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
     const customHeaders = normalizeHeaders(options.headers);
@@ -169,9 +171,8 @@ export const apiRequest = async (
         credentials: 'include',
     });
 
-    // Handle 401 Unauthorized (Token expired)
-    if (response.status === 401) {
-        const requestGeneration = authSessionGeneration;
+    // Handle 401 Unauthorized (Token expired) only if request belongs to the current auth session
+    if (response.status === 401 && authSessionGeneration === requestGeneration) {
         const latestToken = await AsyncStorage.getItem('auth_token').catch(() => null);
         const newToken = (authSessionGeneration === requestGeneration && latestToken && latestToken !== token)
             ? latestToken
@@ -190,7 +191,7 @@ export const apiRequest = async (
                 credentials: 'include',
             });
 
-            if (response.status === 401 && logoutCallback) {
+            if (response.status === 401 && authSessionGeneration === requestGeneration && logoutCallback) {
                 logoutCallback();
             }
         } else if (authSessionGeneration === requestGeneration) {

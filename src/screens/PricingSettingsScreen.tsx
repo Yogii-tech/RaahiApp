@@ -12,17 +12,26 @@ import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLanguage } from '../context/LanguageContext';
-import { apiRequest } from '../utils/api';
+import { apiRequest, getAuthSessionGeneration } from '../utils/api';
+import { parseJsonSafe, getApiErrorMessage } from '../utils/json';
 import { notify } from '../utils/notify';
 import Icon from 'react-native-vector-icons/Ionicons';
 
 const PricingSettingsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
      const { colors, isDark } = useTheme();
-     const { user, token, refreshToken, setAuth, logout } = useAuth();
+     const { user, refreshToken, setAuth, logout } = useAuth();
      const { t } = useLanguage();
      const [rate, setRate] = useState<string>(user?.vehicle?.rate_per_km?.toString() || '5');
      const [loading, setLoading] = useState(false);
      const savingRef = useRef(false);
+     const isMountedRef = useRef(true);
+
+     useEffect(() => {
+          isMountedRef.current = true;
+          return () => {
+               isMountedRef.current = false;
+          };
+     }, []);
 
      useEffect(() => {
           if (user?.vehicle?.rate_per_km !== undefined && user?.vehicle?.rate_per_km !== null) {
@@ -46,6 +55,7 @@ const PricingSettingsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
 
           savingRef.current = true;
           setLoading(true);
+          const startGeneration = getAuthSessionGeneration();
           try {
                const updatedVehicle = {
                     ...user.vehicle,
@@ -61,22 +71,37 @@ const PricingSettingsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
                     }),
                }, logout);
 
+               if (getAuthSessionGeneration() !== startGeneration) {
+                    return;
+               }
+
                if (response.ok) {
-                    const latestToken = (await AsyncStorage.getItem('auth_token').catch(() => null)) || token;
-                    const latestRefresh = (await AsyncStorage.getItem('auth_refresh_token').catch(() => null)) || refreshToken;
+                    const latestToken = await AsyncStorage.getItem('auth_token').catch(() => null);
+                    if (!latestToken || getAuthSessionGeneration() !== startGeneration) {
+                         return;
+                    }
+                    const latestRefresh = (await AsyncStorage.getItem('auth_refresh_token').catch(() => null)) ?? refreshToken;
                     await setAuth(latestToken, latestRefresh, { ...user!, vehicle: updatedVehicle });
-                    notify('Success', 'Pricing rate updated successfully');
-                    onBack();
+                    if (isMountedRef.current) {
+                         notify('Success', 'Pricing rate updated successfully');
+                         onBack();
+                    }
                } else {
-                    const data = await response.json().catch(() => ({}));
-                    notify(t('common.error'), data.error || 'Failed to update rate');
+                    const data = await parseJsonSafe(response);
+                    if (isMountedRef.current) {
+                         notify(t('common.error'), getApiErrorMessage(data, 'Failed to update rate', response));
+                    }
                }
           } catch (err) {
                console.error('Update rate error:', err);
-               notify(t('common.error'), 'Connection error. Please try again.');
+               if (isMountedRef.current && getAuthSessionGeneration() === startGeneration) {
+                    notify(t('common.error'), 'Connection error. Please try again.');
+               }
           } finally {
                savingRef.current = false;
-               setLoading(false);
+               if (isMountedRef.current) {
+                    setLoading(false);
+               }
           }
      };
 

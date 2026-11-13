@@ -8,6 +8,8 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { useBrowserBack } from '../../utils/browserHistory';
+import { notify } from '../../utils/notify';
 
 export interface SignOutConfirmModalProps {
     visible: boolean;
@@ -50,16 +52,21 @@ export function useSignOutConfirmation(logout: () => Promise<void> | void) {
         setIsSigningOut(true);
         try {
             await logout();
-        } catch (err) {
+            if (mountedRef.current) {
+                setVisible(false);
+            }
+        } catch (err: any) {
             console.error('Sign out failed:', err);
+            notify('Sign Out Failed', err?.message || 'Unable to sign out right now. Please try again.');
         } finally {
             signingOutRef.current = false;
             if (mountedRef.current) {
                 setIsSigningOut(false);
-                setVisible(false);
             }
         }
     }, [logout]);
+
+    useBrowserBack(visible, cancelSignOut);
 
     return {
         visible,
@@ -113,7 +120,9 @@ export default function SignOutConfirmModal({
             visible={visible}
             transparent={true}
             animationType="fade"
-            onRequestClose={onCancel}
+            onRequestClose={() => {
+                if (!isSigningOut) onCancel();
+            }}
         >
             <View style={styles.modalBackdrop}>
                 <TouchableOpacity

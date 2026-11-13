@@ -7,6 +7,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { apiRequest } from '../utils/api';
+import { parseJsonSafe, getApiErrorMessage, createRequestAbort } from '../utils/json';
 import { notify } from '../utils/notify';
 import Icon from 'react-native-vector-icons/Ionicons';
 
@@ -97,14 +98,14 @@ const RatingModal: React.FC<RatingModalProps> = ({ visible, rideId, driverName, 
             if (res.ok) {
                 setSubmitted(true);
             } else {
-                const d = await res.json().catch(() => ({}));
+                const d = await parseJsonSafe(res);
                 let msg: string;
                 if (res.status === 429) {
                     msg = 'Too many review submissions. Please wait a minute and try again.';
                 } else if (res.status === 409) {
                     msg = 'You have already reviewed this ride.';
                 } else {
-                    msg = d.error || 'Failed to submit review. Please try again.';
+                    msg = getApiErrorMessage(d, 'Failed to submit review. Please try again.', res);
                 }
                 notify('Error', msg);
             }
@@ -209,6 +210,7 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
     const { t } = useLanguage();
     const [bookings, setBookings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [systemNotifs, setSystemNotifs] = useState<any[]>([]);
     const [notifLoading, setNotifLoading] = useState(false);
     const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -217,6 +219,16 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
     const updatingBookingsRef = useRef<Record<string, boolean>>({});
     const clearingRef = useRef(false);
     const pollAbortRef = useRef<AbortController | null>(null);
+    const fetchSeqRef = useRef(0);
+    const isMountedRef = useRef(true);
+
+    useEffect(() => {
+        isMountedRef.current = true;
+        return () => {
+            isMountedRef.current = false;
+            pollAbortRef.current?.abort();
+        };
+    }, []);
 
     // Rating modal state
     const [ratingModal, setRatingModal] = useState<{ visible: boolean; rideId: string; driverName: string }>({
@@ -248,26 +260,42 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
 
     const fetchData = async () => {
         pollAbortRef.current?.abort();
-        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-        pollAbortRef.current = controller;
+        const abort = createRequestAbort(12000);
+        pollAbortRef.current = abort.controller;
+        const seq = ++fetchSeqRef.current;
 
         try {
             const endpoint = isDriver ? '/api/rides/requests' : '/api/rides/bookings';
-            const response = await apiRequest(endpoint, controller ? { signal: controller.signal } : {}, logout);
-            if (controller?.signal.aborted) return;
+            const response = await apiRequest(endpoint, { signal: abort.signal }, logout);
+            if (!isMountedRef.current || seq !== fetchSeqRef.current || abort.signal.aborted) return;
             if (response.ok) {
-                const data = await response.json();
-                if (controller?.signal.aborted) return;
+                const data = await parseJsonSafe(response);
+                if (!isMountedRef.current || seq !== fetchSeqRef.current || abort.signal.aborted) return;
                 const list = Array.isArray(data) ? data : [];
                 const recent = list.filter((b: any) => isWithin24h(b.createdAt));
                 recent.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
                 setBookings(recent);
+                setError(null);
+            } else {
+                const errData = await parseJsonSafe(response);
+                if (isMountedRef.current && seq === fetchSeqRef.current) {
+                    setError(getApiErrorMessage(errData, 'Failed to load requests.', response));
+                }
             }
         } catch (err: any) {
-            if (err?.name === 'AbortError' || controller?.signal.aborted) return;
+            if (err?.name === 'AbortError' || abort.signal.aborted) {
+                if (abort.didTimeout() && isMountedRef.current && seq === fetchSeqRef.current) {
+                    setError('Request timed out. Please try again.');
+                }
+                return;
+            }
             console.error('Fetch error:', err);
+            if (isMountedRef.current && seq === fetchSeqRef.current) {
+                setError('Connection error while loading requests.');
+            }
         } finally {
-            if (!controller?.signal.aborted) {
+            abort.cleanup();
+            if (isMountedRef.current && seq === fetchSeqRef.current && (!abort.signal.aborted || abort.didTimeout())) {
                 setLoading(false);
             }
         }
@@ -299,20 +327,28 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
 
     const fetchSystemNotifs = async () => {
         setNotifLoading(true);
+        const abort = createRequestAbort(10000);
         try {
-            const response = await apiRequest('/api/notifications/', {}, logout);
+            const response = await apiRequest('/api/notifications/', { signal: abort.signal }, logout);
+            if (!isMountedRef.current || abort.signal.aborted) return;
             if (response.ok) {
-                const data = await response.json();
+                const data = await parseJsonSafe(response);
+                if (!isMountedRef.current || abort.signal.aborted) return;
                 const list = Array.isArray(data) ? data : [];
                 setSystemNotifs(list);
                 list.filter((n: any) => !n.read).forEach(async (n: any) => {
                     try { await apiRequest(`/api/notifications/${n.id}/read`, { method: 'PUT' }, logout); } catch (_) {}
                 });
             }
-        } catch (err) {
-            console.error('Notif fetch error:', err);
+        } catch (err: any) {
+            if (err?.name !== 'AbortError') {
+                console.error('Notif fetch error:', err);
+            }
         } finally {
-            setNotifLoading(false);
+            abort.cleanup();
+            if (isMountedRef.current) {
+                setNotifLoading(false);
+            }
         }
     };
 
@@ -328,8 +364,8 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
             if (response.ok) {
                 await fetchDataRef.current();
             } else {
-                const data = await response.json().catch(() => ({}));
-                notify(t('common.error'), data.error || 'Could not update status.');
+                const data = await parseJsonSafe(response);
+                notify(t('common.error'), getApiErrorMessage(data, 'Could not update status.', response));
             }
         } catch (err) {
             notify(t('common.error'), 'Could not update status.');
@@ -337,11 +373,13 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
             const next = { ...updatingBookingsRef.current };
             delete next[bookingId];
             updatingBookingsRef.current = next;
-            setUpdatingBookings(prev => {
-                const copy = { ...prev };
-                delete copy[bookingId];
-                return copy;
-            });
+            if (isMountedRef.current) {
+                setUpdatingBookings(prev => {
+                    const copy = { ...prev };
+                    delete copy[bookingId];
+                    return copy;
+                });
+            }
         }
     };
 
@@ -352,17 +390,21 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
         try {
             const res = await apiRequest('/api/notifications/clear', { method: 'DELETE' }, logout);
             if (res.ok) {
-                setSystemNotifs([]);
+                if (isMountedRef.current) {
+                    setSystemNotifs([]);
+                }
                 await fetchDataRef.current();
             } else {
-                const data = await res.json().catch(() => ({}));
-                notify(t('common.error'), data.error || 'Failed to clear notifications.');
+                const data = await parseJsonSafe(res);
+                notify(t('common.error'), getApiErrorMessage(data, 'Failed to clear notifications.', res));
             }
         } catch (_) {
             notify(t('common.error'), 'Failed to clear notifications.');
         } finally {
             clearingRef.current = false;
-            setClearing(false);
+            if (isMountedRef.current) {
+                setClearing(false);
+            }
         }
     };
 
@@ -375,18 +417,21 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
         if (!notif.relatedId) { toggleExpand(`notif_${notif.id}`); return; }
         try {
             const res = await apiRequest(`/api/reviews/can-review/${notif.relatedId}`, {}, logout);
+            if (!isMountedRef.current) return;
             if (res.ok) {
-                const data = await res.json();
-                if (data.canReview) {
+                const data = await parseJsonSafe(res);
+                if (data?.canReview) {
                     setRatingModal({ visible: true, rideId: notif.relatedId, driverName: data.driverName || 'your driver' });
-                } else if (data.reason === 'already_reviewed') {
-                    toggleExpand(`notif_${notif.id}`);
                 } else {
                     toggleExpand(`notif_${notif.id}`);
                 }
+            } else {
+                toggleExpand(`notif_${notif.id}`);
             }
         } catch {
-            toggleExpand(`notif_${notif.id}`);
+            if (isMountedRef.current) {
+                toggleExpand(`notif_${notif.id}`);
+            }
         }
     };
 
@@ -723,21 +768,48 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
             {/* Booking requests */}
             {loading ? (
                 <ActivityIndicator color={colors.primary} size="large" style={{ marginTop: 20 }} />
+            ) : error && bookings.length === 0 ? (
+                <View style={styles.emptyState}>
+                    <Text style={{ color: '#F44336', fontSize: 15, textAlign: 'center', marginBottom: 14 }}>
+                        {error}
+                    </Text>
+                    <TouchableOpacity
+                        onPress={() => {
+                            setLoading(true);
+                            fetchDataRef.current();
+                        }}
+                        style={{ backgroundColor: colors.primary, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 8 }}
+                    >
+                        <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Retry</Text>
+                    </TouchableOpacity>
+                </View>
             ) : (
-                <FlatList
-                    data={bookings}
-                    keyExtractor={(item) => item.id}
-                    renderItem={renderItem}
-                    contentContainerStyle={styles.list}
-                    ListEmptyComponent={
-                        <View style={styles.emptyState}>
-                            <Text style={{ fontSize: 40, marginBottom: 12 }}>🔔</Text>
-                            <Text style={[styles.empty, { color: colors.subtextColor }]}>
-                                {isDriver ? t('requests.emptyDriver') : 'No recent notifications\nin the last 24 hours'}
+                <View style={{ flex: 1 }}>
+                    {error ? (
+                        <TouchableOpacity
+                            onPress={() => fetchDataRef.current()}
+                            style={{ backgroundColor: 'rgba(244, 67, 54, 0.12)', borderRadius: 8, padding: 10, marginHorizontal: 16, marginBottom: 8 }}
+                        >
+                            <Text style={{ color: '#F44336', fontSize: 12, fontWeight: '600', textAlign: 'center' }}>
+                                ⚠️ {error} Tap to retry.
                             </Text>
-                        </View>
-                    }
-                />
+                        </TouchableOpacity>
+                    ) : null}
+                    <FlatList
+                        data={bookings}
+                        keyExtractor={(item) => item.id}
+                        renderItem={renderItem}
+                        contentContainerStyle={styles.list}
+                        ListEmptyComponent={
+                            <View style={styles.emptyState}>
+                                <Text style={{ fontSize: 40, marginBottom: 12 }}>🔔</Text>
+                                <Text style={[styles.empty, { color: colors.subtextColor }]}>
+                                    {isDriver ? t('requests.emptyDriver') : 'No recent notifications\nin the last 24 hours'}
+                                </Text>
+                            </View>
+                        }
+                    />
+                </View>
             )}
         </View>
     );

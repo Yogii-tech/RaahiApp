@@ -4,6 +4,7 @@ import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
 import { downloadCSV } from '../../utils/exportUtils';
 import { notify } from '../../utils/notify';
+import { parseJsonSafe, createRequestAbort } from '../../utils/json';
 
 interface FinancialTransaction {
     id: string;
@@ -29,6 +30,7 @@ export default function AdminFinanceView({ token: _token, searchQuery = '', isDa
     fetchWithAuthRef.current = fetchWithAuth;
     const abortRef = useRef<AbortController | null>(null);
     const reqIdRef = useRef(0);
+    const isMountedRef = useRef(true);
     const { width } = useWindowDimensions();
     const isMobile = width < 768;
 
@@ -41,9 +43,9 @@ export default function AdminFinanceView({ token: _token, searchQuery = '', isDa
         accent: '#3B7DDD',
     };
 
-    const loadRides = useCallback((background = false) => {
+    const loadRides = useCallback(async (background = false) => {
         abortRef.current?.abort();
-        const controller = new AbortController();
+        const { controller, cleanup, didTimeout } = createRequestAbort(12000);
         abortRef.current = controller;
         const reqId = ++reqIdRef.current;
 
@@ -54,31 +56,31 @@ export default function AdminFinanceView({ token: _token, searchQuery = '', isDa
         }
         setError(null);
 
-        fetchWithAuthRef.current(`${API_BASE}/api/admin/rides`, { signal: controller.signal })
-            .then(res => {
-                if (!res.ok) throw new Error(`Server error: ${res.status}`);
-                return res.json();
-            })
-            .then(rides => {
-                if (reqId !== reqIdRef.current) return;
-                setRawRides(Array.isArray(rides) ? rides : []);
-            })
-            .catch((err: any) => {
-                if (err?.name === 'AbortError' || reqId !== reqIdRef.current) return;
-                setError(err?.message || 'Failed to load financial rides ledger');
-                if (!background) setRawRides([]);
-            })
-            .finally(() => {
-                if (reqId === reqIdRef.current) {
-                    setLoading(false);
-                    setRefreshing(false);
-                }
-            });
+        try {
+            const res = await fetchWithAuthRef.current(`${API_BASE}/api/admin/rides`, { signal: controller.signal });
+            if (!res.ok) throw new Error(`Server error: ${res.status}`);
+            const rides = await parseJsonSafe<any[]>(res);
+            if (!isMountedRef.current || reqId !== reqIdRef.current) return;
+            setRawRides(Array.isArray(rides) ? rides : []);
+        } catch (err: any) {
+            if (!isMountedRef.current || reqId !== reqIdRef.current) return;
+            if (err?.name === 'AbortError' && !didTimeout()) return;
+            setError(didTimeout() ? 'Request timed out while loading ledger' : (err?.message || 'Failed to load financial rides ledger'));
+            if (!background) setRawRides([]);
+        } finally {
+            cleanup();
+            if (isMountedRef.current && reqId === reqIdRef.current) {
+                setLoading(false);
+                setRefreshing(false);
+            }
+        }
     }, []);
 
     useEffect(() => {
+        isMountedRef.current = true;
         loadRides(false);
         return () => {
+            isMountedRef.current = false;
             reqIdRef.current += 1;
             abortRef.current?.abort();
         };
@@ -195,6 +197,10 @@ export default function AdminFinanceView({ token: _token, searchQuery = '', isDa
                     </TouchableOpacity>
                 </View>
             </View>
+
+            {error && (
+                <Text style={{ color: '#DC3545', fontSize: 12, marginBottom: 12 }}>Refresh failed: {error}</Text>
+            )}
 
             <View style={[styles.previewBanner, { borderColor: '#FCB92C66', backgroundColor: isDark ? 'rgba(252, 185, 44, 0.12)' : '#FFFBEB' }]}>
                 <Text style={[styles.previewBannerTitle, { color: isDark ? '#FCD34D' : '#92400E' }]}>

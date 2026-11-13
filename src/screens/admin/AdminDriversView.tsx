@@ -7,6 +7,7 @@ import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
 import { downloadCSV } from '../../utils/exportUtils';
 import { notify } from '../../utils/notify';
+import { parseJsonSafe, getApiErrorMessage, createRequestAbort } from '../../utils/json';
 
 export interface Driver {
     id: string;
@@ -61,12 +62,14 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
     const driversReqIdRef = useRef(0);
     const reviewsAbortRef = useRef<AbortController | null>(null);
     const reviewsReqIdRef = useRef(0);
+    const isMountedRef = useRef(true);
     const { width } = useWindowDimensions();
     const isMobile = width < 768;
 
     // Driver reviews state
     const [driverReviews, setDriverReviews] = useState<{ reviews: any[]; averageRating: number; totalReviews: number } | null>(null);
     const [reviewsLoading, setReviewsLoading] = useState(false);
+    const [reviewsError, setReviewsError] = useState<string | null>(null);
 
     const selectedDriver = modalState.type === 'inspect' ? modalState.driver : null;
     const inspectModalVisible = modalState.type === 'inspect';
@@ -76,7 +79,7 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
 
     const loadDrivers = useCallback(async (background = false) => {
         driversAbortRef.current?.abort();
-        const controller = new AbortController();
+        const { controller, cleanup, didTimeout } = createRequestAbort(12000);
         driversAbortRef.current = controller;
         const reqId = ++driversReqIdRef.current;
 
@@ -88,17 +91,22 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
         setError(null);
         try {
             const res = await fetchWithAuthRef.current(`${API_BASE}/api/admin/drivers`, { signal: controller.signal });
-            if (!res.ok) throw new Error(`Server error: ${res.status}`);
-            const d = await res.json();
-            if (reqId !== driversReqIdRef.current) return;
+            if (!res.ok) {
+                const errData = await parseJsonSafe<any>(res);
+                throw new Error(getApiErrorMessage(errData, `Server error: ${res.status}`));
+            }
+            const d = await parseJsonSafe<Driver[]>(res);
+            if (!isMountedRef.current || reqId !== driversReqIdRef.current) return;
             setDrivers(Array.isArray(d) ? d : []);
         } catch (err: any) {
-            if (err?.name === 'AbortError' || reqId !== driversReqIdRef.current) return;
+            if (!isMountedRef.current || reqId !== driversReqIdRef.current) return;
+            if (err?.name === 'AbortError' && !didTimeout()) return;
             console.error('Failed to load drivers:', err);
-            setError(err?.message || 'Failed to load drivers');
+            setError(didTimeout() ? 'Request timed out while loading drivers' : (err?.message || 'Failed to load drivers'));
             if (!background) setDrivers([]);
         } finally {
-            if (reqId === driversReqIdRef.current) {
+            cleanup();
+            if (isMountedRef.current && reqId === driversReqIdRef.current) {
                 setLoading(false);
                 setRefreshing(false);
             }
@@ -106,8 +114,10 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
     }, []);
 
     useEffect(() => {
+        isMountedRef.current = true;
         loadDrivers(false);
         return () => {
+            isMountedRef.current = false;
             driversReqIdRef.current += 1;
             reviewsReqIdRef.current += 1;
             driversAbortRef.current?.abort();
@@ -122,13 +132,14 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
         setPreviewImageRaw(null);
         setRejectionReason('');
         setDriverReviews(null);
+        setReviewsError(null);
         setReviewsLoading(false);
         setModalState({ type: 'none' });
     };
 
     const handleInspect = (driver: Driver) => {
         reviewsAbortRef.current?.abort();
-        const controller = new AbortController();
+        const { controller, cleanup, didTimeout } = createRequestAbort(10000);
         reviewsAbortRef.current = controller;
         const reqId = ++reviewsReqIdRef.current;
 
@@ -136,21 +147,32 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
         setRejectionReason(driver.rejectionReason || '');
         setModalState({ type: 'inspect', driver });
         setDriverReviews(null);
+        setReviewsError(null);
         setReviewsLoading(true);
 
         fetchWithAuthRef.current(`${API_BASE}/api/admin/reviews/driver/${driver.id}`, { signal: controller.signal })
             .then(async (res: Response) => {
-                if (reqId !== reviewsReqIdRef.current) return;
-                if (res.ok) {
-                    const d = await res.json();
-                    if (reqId === reviewsReqIdRef.current) {
-                        setDriverReviews(d);
-                    }
+                if (!isMountedRef.current || reqId !== reviewsReqIdRef.current) return;
+                const d = await parseJsonSafe<any>(res);
+                if (!isMountedRef.current || reqId !== reviewsReqIdRef.current) return;
+                if (res.ok && d && typeof d === 'object') {
+                    setDriverReviews({
+                        reviews: Array.isArray(d.reviews) ? d.reviews : [],
+                        averageRating: typeof d.averageRating === 'number' ? d.averageRating : 0,
+                        totalReviews: typeof d.totalReviews === 'number' ? d.totalReviews : 0,
+                    });
+                } else {
+                    setReviewsError(getApiErrorMessage(d, `Could not load reviews (${res.status})`));
                 }
             })
-            .catch(() => {})
+            .catch((err: any) => {
+                if (!isMountedRef.current || reqId !== reviewsReqIdRef.current) return;
+                if (err?.name === 'AbortError' && !didTimeout()) return;
+                setReviewsError(didTimeout() ? 'Timed out loading reviews' : 'Could not load reviews');
+            })
             .finally(() => {
-                if (reqId === reviewsReqIdRef.current) {
+                cleanup();
+                if (isMountedRef.current && reqId === reviewsReqIdRef.current) {
                     setReviewsLoading(false);
                 }
             });
@@ -164,16 +186,20 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
         }
 
         setSubmittingAction(true);
+        const { controller, cleanup, didTimeout } = createRequestAbort(15000);
         try {
             const res = await fetchWithAuthRef.current(`${API_BASE}/api/admin/drivers/${selectedDriver.id}/verify`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                signal: controller.signal,
                 body: JSON.stringify({
                     status,
                     reason: status === 'rejected' ? rejectionReason.trim() : ''
                 })
             });
 
+            const data = await parseJsonSafe<any>(res);
+            if (!isMountedRef.current) return;
             if (res.ok) {
                 notify('Success', `Driver ${selectedDriver.name} marked as ${status.toUpperCase()}`);
                 reviewsReqIdRef.current += 1;
@@ -181,16 +207,20 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                 setPreviewImageRaw(null);
                 setRejectionReason('');
                 setDriverReviews(null);
+                setReviewsError(null);
                 setModalState({ type: 'none' });
                 loadDrivers(true);
             } else {
-                const data = await res.json();
-                notify('Error', data.error || 'Failed to update verification status');
+                notify('Error', getApiErrorMessage(data, `Failed to update verification status (${res.status})`));
             }
-        } catch (err) {
-            notify('Error', 'Connection error while updating status');
+        } catch (err: any) {
+            if (!isMountedRef.current) return;
+            notify('Error', didTimeout() ? 'Request timed out while updating status' : 'Connection error while updating status');
         } finally {
-            setSubmittingAction(false);
+            cleanup();
+            if (isMountedRef.current) {
+                setSubmittingAction(false);
+            }
         }
     };
 
@@ -218,26 +248,33 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
 
     const executeDelete = async (driver: Driver) => {
         setDeletingDriverId(driver.id);
+        const { controller, cleanup, didTimeout } = createRequestAbort(15000);
         try {
             const res = await fetchWithAuthRef.current(`${API_BASE}/api/admin/drivers/${driver.id}`, {
                 method: 'DELETE',
+                signal: controller.signal,
             });
+            const data = await parseJsonSafe<any>(res);
+            if (!isMountedRef.current) return;
             if (res.ok) {
-                const data = await res.json();
-                notify('Deleted', data.message || `Driver ${driver.name} deleted successfully`);
+                notify('Deleted', data?.message || `Driver ${driver.name} deleted successfully`);
                 setPreviewImageRaw(null);
                 setRejectionReason('');
                 setDriverReviews(null);
+                setReviewsError(null);
                 setModalState({ type: 'none' });
                 loadDrivers(true);
             } else {
-                const data = await res.json();
-                notify('Error', data.error || 'Failed to delete driver');
+                notify('Error', getApiErrorMessage(data, `Failed to delete driver (${res.status})`));
             }
-        } catch (err) {
-            notify('Error', 'Connection error while deleting driver');
+        } catch {
+            if (!isMountedRef.current) return;
+            notify('Error', didTimeout() ? 'Request timed out while deleting driver' : 'Connection error while deleting driver');
         } finally {
-            setDeletingDriverId(null);
+            cleanup();
+            if (isMountedRef.current) {
+                setDeletingDriverId(null);
+            }
         }
     };
 
@@ -259,30 +296,38 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
     const handleExecuteReKYC = async () => {
         if (!rekycDriver || rekycLoading) return;
         setRekycLoading(true);
+        const { controller, cleanup, didTimeout } = createRequestAbort(15000);
         try {
             const res = await fetchWithAuthRef.current(`${API_BASE}/api/admin/drivers/${rekycDriver.id}/rekyc`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                signal: controller.signal,
                 body: JSON.stringify({
                     reason: rekycReason.trim()
                 })
             });
 
+            const data = await parseJsonSafe<any>(res);
+            if (!isMountedRef.current) return;
             if (res.ok) {
                 notify('Notification Sent', `Re-KYC request sent to ${rekycDriver.name} (${rekycDriver.phone}). The driver will be notified to re-upload documents.`);
                 setPreviewImageRaw(null);
                 setRejectionReason('');
                 setDriverReviews(null);
+                setReviewsError(null);
                 setModalState({ type: 'none' });
                 loadDrivers(true);
             } else {
-                const data = await res.json();
-                notify('Error', data.error || 'Failed to request Re-KYC');
+                notify('Error', getApiErrorMessage(data, `Failed to request Re-KYC (${res.status})`));
             }
-        } catch (err) {
-            notify('Error', 'Connection error while requesting Re-KYC');
+        } catch {
+            if (!isMountedRef.current) return;
+            notify('Error', didTimeout() ? 'Request timed out while requesting Re-KYC' : 'Connection error while requesting Re-KYC');
         } finally {
-            setRekycLoading(false);
+            cleanup();
+            if (isMountedRef.current) {
+                setRekycLoading(false);
+            }
         }
     };
 
@@ -370,6 +415,10 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                     </TouchableOpacity>
                 </View>
             </View>
+
+            {error && (
+                <Text style={{ color: '#EF4444', fontSize: 12, marginBottom: 12 }}>Refresh failed: {error}</Text>
+            )}
 
             {/* Filter Tabs */}
             <View style={[styles.filterRow, { flexWrap: 'wrap' }]}>
@@ -618,7 +667,13 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                     visible={inspectModalVisible}
                     transparent={true}
                     animationType="fade"
-                    onRequestClose={closeInspectModal}
+                    onRequestClose={() => {
+                        if (previewImage) {
+                            setPreviewImageRaw(null);
+                            return;
+                        }
+                        closeInspectModal();
+                    }}
                 >
                     <View style={[styles.modalBackdrop, isMobile && { padding: 12 }]}>
                         <View style={styles.inspectModalCard}>
@@ -693,37 +748,46 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                                 <Text style={[styles.sectionHeader, { marginTop: 20 }]}>PASSENGER REVIEWS</Text>
                                 {reviewsLoading ? (
                                     <ActivityIndicator color="#3B7DDD" style={{ marginVertical: 16 }} />
+                                ) : reviewsError ? (
+                                    <View style={{ backgroundColor: 'rgba(239,68,68,0.12)', borderRadius: 10, padding: 14, marginBottom: 12 }}>
+                                        <Text style={{ color: '#FCA5A5', fontSize: 13, textAlign: 'center' }}>
+                                            {reviewsError}
+                                        </Text>
+                                    </View>
                                 ) : driverReviews && driverReviews.totalReviews > 0 ? (
                                     <View style={{ backgroundColor: '#F0F4FF', borderRadius: 12, padding: 14, marginBottom: 12 }}>
                                         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
                                             <Text style={{ fontSize: 28, fontWeight: '900', color: '#FFB300' }}>
-                                                {driverReviews.averageRating.toFixed(1)}
+                                                {(driverReviews.averageRating ?? 0).toFixed(1)}
                                             </Text>
                                             <Text style={{ fontSize: 24, marginLeft: 4 }}>⭐</Text>
                                             <Text style={{ marginLeft: 8, color: '#6B7280', fontSize: 13 }}>
                                                 {driverReviews.totalReviews} {driverReviews.totalReviews === 1 ? 'review' : 'reviews'}
                                             </Text>
                                         </View>
-                                        {driverReviews.reviews.map((rev: any, idx: number) => (
-                                            <View key={idx} style={{ borderTopWidth: idx > 0 ? 1 : 0, borderTopColor: '#E5E7EB', paddingTop: idx > 0 ? 10 : 0, marginTop: idx > 0 ? 10 : 0 }}>
-                                                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                                                    <Text style={{ fontWeight: '700', color: '#1F2937', fontSize: 13 }}>
-                                                        {rev.passengerName || 'Passenger'}
-                                                    </Text>
-                                                    <Text style={{ color: '#FFB300', fontSize: 13, fontWeight: '700' }}>
-                                                        {'⭐'.repeat(rev.rating)} {rev.rating}/5
+                                        {driverReviews.reviews.map((rev: any, idx: number) => {
+                                            const ratingVal = Math.max(0, Math.min(5, Math.round(Number(rev.rating) || 0)));
+                                            return (
+                                                <View key={idx} style={{ borderTopWidth: idx > 0 ? 1 : 0, borderTopColor: '#E5E7EB', paddingTop: idx > 0 ? 10 : 0, marginTop: idx > 0 ? 10 : 0 }}>
+                                                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                        <Text style={{ fontWeight: '700', color: '#1F2937', fontSize: 13 }}>
+                                                            {rev.passengerName || 'Passenger'}
+                                                        </Text>
+                                                        <Text style={{ color: '#FFB300', fontSize: 13, fontWeight: '700' }}>
+                                                            {'⭐'.repeat(ratingVal)} {rev.rating}/5
+                                                        </Text>
+                                                    </View>
+                                                    {rev.comment ? (
+                                                        <Text style={{ color: '#374151', fontSize: 12, marginTop: 4, lineHeight: 18 }}>
+                                                            "{rev.comment}"
+                                                        </Text>
+                                                    ) : null}
+                                                    <Text style={{ color: '#9CA3AF', fontSize: 11, marginTop: 4 }}>
+                                                        {rev.createdAt ? new Date(rev.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}
                                                     </Text>
                                                 </View>
-                                                {rev.comment ? (
-                                                    <Text style={{ color: '#374151', fontSize: 12, marginTop: 4, lineHeight: 18 }}>
-                                                        "{rev.comment}"
-                                                    </Text>
-                                                ) : null}
-                                                <Text style={{ color: '#9CA3AF', fontSize: 11, marginTop: 4 }}>
-                                                    {new Date(rev.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                                                </Text>
-                                            </View>
-                                        ))}
+                                            );
+                                        })}
                                     </View>
                                 ) : (
                                     <View style={{ backgroundColor: '#F9FAFB', borderRadius: 10, padding: 16, alignItems: 'center', marginBottom: 12 }}>

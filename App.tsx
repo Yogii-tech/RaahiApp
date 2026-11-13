@@ -25,6 +25,7 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { LanguageProvider, useLanguage } from './src/context/LanguageContext';
 // API_BASE is imported per-screen from './src/config/api' — not needed here
 import { apiRequest } from './src/utils/api';
+import { parseJsonSafe } from './src/utils/json';
 import LoginScreen from './src/screens/LoginScreen';
 import AdminDashboardScreen from './src/screens/admin/AdminDashboardScreen';
 import HomeScreen from './src/screens/HomeScreen';
@@ -399,25 +400,46 @@ function MainTabs() {
   }, [user, openOverlay]);
 
   const fcmRegisteredTokenRef = useRef<string | null>(null);
+  const fcmRegisteredUserIdRef = useRef<string | null>(null);
   const activeTokenRef = useRef<string | null>(token);
   activeTokenRef.current = token;
+  const userId = user?.id ?? null;
 
   useEffect(() => {
-    if (token && !fcmRegisteredTokenRef.current) {
-      fcmRegisteredTokenRef.current = token;
-      registerFCM(token, handleFCMNavigate);
+    if (token) {
+      const registeredUserChanged =
+        fcmRegisteredUserIdRef.current !== null && fcmRegisteredUserIdRef.current !== userId;
+      if (registeredUserChanged && fcmRegisteredTokenRef.current) {
+        const prevToken = fcmRegisteredTokenRef.current;
+        fcmRegisteredTokenRef.current = token;
+        fcmRegisteredUserIdRef.current = userId;
+        unregisterFCM(prevToken).finally(() => {
+          if (isMountedRef.current && activeTokenRef.current === token) {
+            registerFCM(token, handleFCMNavigate);
+          }
+        });
+      } else if (!fcmRegisteredTokenRef.current) {
+        fcmRegisteredTokenRef.current = token;
+        fcmRegisteredUserIdRef.current = userId;
+        registerFCM(token, handleFCMNavigate);
+      } else {
+        // Same user after access-token refresh: track latest bearer token without teardown
+        fcmRegisteredTokenRef.current = token;
+      }
     } else if (!token && fcmRegisteredTokenRef.current) {
       const lastToken = fcmRegisteredTokenRef.current;
       fcmRegisteredTokenRef.current = null;
+      fcmRegisteredUserIdRef.current = null;
       unregisterFCM(lastToken);
     }
-  }, [token, handleFCMNavigate]);
+  }, [token, userId, handleFCMNavigate]);
 
   useEffect(() => {
     return () => {
       if (fcmRegisteredTokenRef.current) {
         const lastToken = activeTokenRef.current || fcmRegisteredTokenRef.current;
         fcmRegisteredTokenRef.current = null;
+        fcmRegisteredUserIdRef.current = null;
         unregisterFCM(lastToken);
       }
     };
@@ -443,7 +465,7 @@ function MainTabs() {
       let unreadChatTotal = 0;
 
       if (response.ok) {
-        const data = await response.json() || [];
+        const data = (await parseJsonSafe<any[]>(response)) || [];
         // Filter: Driver sees UNVIEWED 'pending' reqs, Passenger sees UNVIEWED 'accepted' or 'rejected'
         reqCount = data.filter((b: any) =>
           driver
@@ -460,7 +482,7 @@ function MainTabs() {
       try {
         const notifResponse = await apiRequest('/api/notifications/', {}, logoutRef.current);
         if (notifResponse.ok) {
-          const notifs = await notifResponse.json() || [];
+          const notifs = (await parseJsonSafe<any[]>(notifResponse)) || [];
           systemNotifCount = notifs.filter((n: any) => !n.read).length;
         }
       } catch (_) { /* ignore */ }
@@ -488,11 +510,14 @@ function MainTabs() {
   const handleMarkViewed = async () => {
     try {
       if (!tokenRef.current) return;
-      notifEpochRef.current += 1;
-      setNotificationCount(0);
-      await apiRequest(`/api/rides/viewed?role=${isDriverRef.current ? 'driver' : 'passenger'}`, {
+      const startEpoch = notifEpochRef.current;
+      const res = await apiRequest(`/api/rides/viewed?role=${isDriverRef.current ? 'driver' : 'passenger'}`, {
         method: 'POST'
       }, logoutRef.current);
+      if (res.ok && isMountedRef.current && notifEpochRef.current === startEpoch) {
+        notifEpochRef.current += 1;
+        setNotificationCount(0);
+      }
     } catch (err) {
       console.error('Mark viewed fail:', err);
     }

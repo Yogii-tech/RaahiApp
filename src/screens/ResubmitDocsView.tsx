@@ -15,7 +15,8 @@ import { useAuth } from '../context/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
-import { apiRequest } from '../utils/api';
+import { apiRequest, getAuthSessionGeneration } from '../utils/api';
+import { parseJsonSafe, getApiErrorMessage } from '../utils/json';
 import { pickAndUploadDocument, notify } from '../utils/documentUpload';
 import { useBrowserBack } from '../utils/browserHistory';
 
@@ -32,6 +33,7 @@ const ResubmitDocsView: React.FC<ResubmitDocsViewProps> = ({ onClose, disableBro
     const [loading, setLoading] = useState(false);
     const [showDocSubmittedModal, setShowDocSubmittedModal] = useState(false);
     const isMountedRef = useRef(true);
+    const submittingRef = useRef(false);
     const userRef = useRef(user);
     userRef.current = user;
 
@@ -59,6 +61,7 @@ const ResubmitDocsView: React.FC<ResubmitDocsViewProps> = ({ onClose, disableBro
 
     const handleFileUpload = (type: keyof typeof vehicleDocs) => {
         if (loading) return;
+        const startGeneration = getAuthSessionGeneration();
         if (Platform.OS === 'web' || typeof document !== 'undefined') {
             pickAndUploadDocument(
                 token,
@@ -66,14 +69,25 @@ const ResubmitDocsView: React.FC<ResubmitDocsViewProps> = ({ onClose, disableBro
                 () => { if (isMountedRef.current) setLoading(false); },
                 {
                     refreshToken,
-                    onTokenRefreshed: async (newToken: string) => {
-                        // Keep context + storage in sync so later requests don't reuse the stale token
-                        const latestRefresh = (await AsyncStorage.getItem('auth_refresh_token')) || refreshToken;
-                        await setAuth(newToken, latestRefresh, userRef.current);
+                    onTokenRefreshed: async (newToken: string, newRefreshToken?: string | null) => {
+                        if (getAuthSessionGeneration() !== startGeneration) return;
+                        const latestStoredToken = await AsyncStorage.getItem('auth_token').catch(() => null);
+                        const latestUser = userRef.current;
+                        if (!latestStoredToken || !latestUser || getAuthSessionGeneration() !== startGeneration) return;
+                        const latestRefresh =
+                            newRefreshToken ??
+                            (await AsyncStorage.getItem('auth_refresh_token').catch(() => null)) ??
+                            refreshToken;
+                        await setAuth(newToken, latestRefresh, latestUser);
+                    },
+                    onAuthFailure: () => {
+                        if (getAuthSessionGeneration() === startGeneration) {
+                            logout();
+                        }
                     },
                 },
             ).then(url => {
-                if (url && isMountedRef.current) {
+                if (url && isMountedRef.current && getAuthSessionGeneration() === startGeneration) {
                     setVehicleDocs(prev => ({ ...prev, [type]: url }));
                 }
             }).catch(() => {
@@ -106,7 +120,7 @@ const ResubmitDocsView: React.FC<ResubmitDocsViewProps> = ({ onClose, disableBro
     };
 
     const handleCompleteRegistration = async () => {
-        if (loading) return;
+        if (loading || submittingRef.current) return;
         if (!vehicleDocs.name || !vehicleDocs.type || !vehicleDocs.seats || !vehicleDocs.number) {
             notify(t('common.error'), 'Please fill in all vehicle details (Name, Type, Seats, Number).');
             return;
@@ -121,7 +135,9 @@ const ResubmitDocsView: React.FC<ResubmitDocsViewProps> = ({ onClose, disableBro
             return;
         }
 
+        submittingRef.current = true;
         setLoading(true);
+        const startGeneration = getAuthSessionGeneration();
         try {
             const activeUser = userRef.current;
             const body: any = {
@@ -146,26 +162,39 @@ const ResubmitDocsView: React.FC<ResubmitDocsViewProps> = ({ onClose, disableBro
                 body: JSON.stringify(body),
             }, logout);
 
+            if (getAuthSessionGeneration() !== startGeneration) {
+                return;
+            }
+
             if (response.ok) {
+                const latestToken = await AsyncStorage.getItem('auth_token').catch(() => null);
+                const latestUser = userRef.current;
+                if (!latestToken || !latestUser || getAuthSessionGeneration() !== startGeneration) {
+                    return;
+                }
                 const updatedUser = {
-                    ...userRef.current,
+                    ...latestUser,
                     vehicle: body.vehicle,
                     verification_status: 'pending',
                     rejection_reason: '',
                 };
-                // apiRequest may have silently refreshed the token in storage; don't overwrite it with a stale one
-                const latestToken = (await AsyncStorage.getItem('auth_token')) || token;
-                const latestRefresh = (await AsyncStorage.getItem('auth_refresh_token')) || refreshToken;
+                const latestRefresh = (await AsyncStorage.getItem('auth_refresh_token').catch(() => null)) ?? refreshToken;
                 await setAuth(latestToken, latestRefresh, updatedUser as any);
                 if (isMountedRef.current) {
                     setShowDocSubmittedModal(true);
                 }
             } else {
-                notify(t('common.error'), t('login.failProfile'));
+                const errData = await parseJsonSafe(response);
+                if (isMountedRef.current) {
+                    notify(t('common.error'), getApiErrorMessage(errData, t('login.failProfile'), response));
+                }
             }
         } catch {
-            notify(t('common.error'), t('login.connectionError'));
+            if (isMountedRef.current && getAuthSessionGeneration() === startGeneration) {
+                notify(t('common.error'), t('login.connectionError'));
+            }
         } finally {
+            submittingRef.current = false;
             if (isMountedRef.current) {
                 setLoading(false);
             }

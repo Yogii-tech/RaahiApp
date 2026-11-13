@@ -12,10 +12,12 @@ import {
     ScrollView,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
 import { API_BASE } from '../apiConfig';
 import { refreshAuthToken } from '../utils/api';
+import { parseJsonSafe, getApiErrorMessage } from '../utils/json';
 import { pickAndUploadDocument } from '../utils/documentUpload';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { pushSubViewHistory, popSubViewHistory, useBrowserBack } from '../utils/browserHistory';
@@ -115,6 +117,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
         refreshToken: string | null;
         user: any;
     } | null>(null);
+    const dismissingDocModalRef = useRef(false);
     const { token, refreshToken, user, setAuth } = useAuth();
     const { colors, isDark } = useTheme();
     const { t } = useLanguage();
@@ -402,8 +405,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                     phone_number: phoneNumber.trim()
                 }),
             });
-            const data = await response.json();
-            if (!response.ok) { setAuthError(data.error || 'Invalid OTP code.'); return; }
+            const data = await parseJsonSafe(response);
+            if (!response.ok || !data) {
+                setAuthError(getApiErrorMessage(data, 'Invalid OTP code.', response));
+                return;
+            }
             setAdminTempToken(data.token || null);
             setAdminTempRefreshToken(data.refresh_token || null);
             setAdminTempUser(data.user);
@@ -415,6 +421,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
     };
 
     const handleAdminPromote = async () => {
+        if (loading) return;
         setAuthError(null);
         if (!adminSecretKey.trim()) { setAuthError('Please enter the admin secret key.'); return; }
         setLoading(true);
@@ -422,14 +429,18 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
             const promoteRes = await fetch(`${API_BASE}/api/auth/promote-admin`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminTempToken}` },
+                credentials: 'include',
                 body: JSON.stringify({ secret_key: adminSecretKey.trim() }),
             });
-            const promoteData = await promoteRes.json();
+            const promoteData = await parseJsonSafe(promoteRes);
             if (!promoteRes.ok) {
-                setAuthError(promoteData.error || 'Invalid secret key.');
+                setAuthError(getApiErrorMessage(promoteData, 'Invalid secret key.', promoteRes));
                 return;
             }
-            await setAuth(adminTempToken, adminTempRefreshToken, { ...adminTempUser, role: 'admin' });
+            const finalToken = promoteData?.token || adminTempToken;
+            const finalRefresh = promoteData?.refresh_token ?? adminTempRefreshToken;
+            const finalUser = { ...(adminTempUser || {}), ...(promoteData?.user || {}), role: 'admin' };
+            await setAuth(finalToken, finalRefresh, finalUser);
             onAuthenticated();
         } catch {
             setAuthError('Promotion failed. Please check secret key.');
@@ -463,10 +474,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 }),
             });
 
-            const data = await response.json();
+            const data = await parseJsonSafe(response);
 
-            if (!response.ok) {
-                setAuthError(data.error || 'Backend token verification failed.');
+            if (!response.ok || !data?.user) {
+                setAuthError(getApiErrorMessage(data, 'Backend token verification failed.', response));
                 return;
             }
 
@@ -520,7 +531,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 () => setLoading(false),
                 {
                     refreshToken: tempRefreshToken,
-                    onTokenRefreshed: (newToken: string) => setTempToken(newToken),
+                    onTokenRefreshed: async (newToken: string, newRefreshToken?: string | null) => {
+                        setTempToken(newToken);
+                        const rotatedRefresh =
+                            newRefreshToken ?? (await AsyncStorage.getItem('auth_refresh_token').catch(() => null));
+                        if (rotatedRefresh) {
+                            setTempRefreshToken(rotatedRefresh);
+                        }
+                    },
                 },
             ).then(url => {
                 if (url) {
@@ -550,6 +568,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 'plain-text',
                 'https://via.placeholder.com/600x400.png?text=Document+Uploaded'
             );
+        } else {
+            setAuthError('Document upload is currently supported on web browsers.');
         }
     };
 
@@ -557,7 +577,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
         if (loading) return;
         setAuthError(null);
         let activeToken = tempToken || token;
-        const activeRefreshToken = tempRefreshToken || refreshToken;
+        let activeRefreshToken = tempRefreshToken || refreshToken;
 
         let parsedSeats = 0;
         if (role === 'driver') {
@@ -615,6 +635,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 if (refreshed) {
                     activeToken = refreshed;
                     setTempToken(refreshed);
+                    const rotatedRefresh = await AsyncStorage.getItem('auth_refresh_token').catch(() => null);
+                    if (rotatedRefresh) {
+                        activeRefreshToken = rotatedRefresh;
+                        setTempRefreshToken(rotatedRefresh);
+                    }
                     response = await sendProfileUpdate(refreshed);
                 }
             }
@@ -641,7 +666,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                     onAuthenticated();
                 }
             } else {
-                setAuthError(t('login.failProfile') || 'Failed to update profile. Please try again.');
+                const errData = await parseJsonSafe(response);
+                setAuthError(getApiErrorMessage(errData, t('login.failProfile') || 'Failed to update profile. Please try again.', response));
             }
         } catch {
             setAuthError(t('login.connectionError') || 'Network error updating profile.');
@@ -651,16 +677,25 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
     };
 
     const handleDismissDocSubmitted = useCallback(async () => {
-        if (pendingDriverAuth) {
-            await setAuth(
-                pendingDriverAuth.token,
-                pendingDriverAuth.refreshToken,
-                pendingDriverAuth.user,
-            );
-            setPendingDriverAuth(null);
+        if (dismissingDocModalRef.current) return;
+        dismissingDocModalRef.current = true;
+        try {
+            if (pendingDriverAuth) {
+                await setAuth(
+                    pendingDriverAuth.token,
+                    pendingDriverAuth.refreshToken,
+                    pendingDriverAuth.user,
+                );
+                setPendingDriverAuth(null);
+            }
+            setShowDocSubmittedModal(false);
+            onAuthenticated();
+        } catch (err) {
+            console.error('Failed to finalize driver auth:', err);
+            setAuthError('Failed to save session. Please try again.');
+        } finally {
+            dismissingDocModalRef.current = false;
         }
-        setShowDocSubmittedModal(false);
-        onAuthenticated();
     }, [pendingDriverAuth, setAuth, onAuthenticated]);
 
     useBrowserBack(showDocSubmittedModal, () => {

@@ -64,7 +64,12 @@ const onPopState = (_e: PopStateEvent) => {
 };
 
 const ensurePopstateListener = () => {
-  if (Platform.OS === 'web' && typeof window !== 'undefined' && !listenerAttached) {
+  if (
+    Platform.OS === 'web' &&
+    typeof window !== 'undefined' &&
+    typeof window.addEventListener === 'function' &&
+    !listenerAttached
+  ) {
     window.addEventListener('popstate', onPopState);
     listenerAttached = true;
   }
@@ -78,7 +83,7 @@ ensurePopstateListener();
  */
 export const pushSubViewHistory = (viewName: string) => {
   ensurePopstateListener();
-  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof window.history?.pushState === 'function') {
     window.history.pushState(
       { subView: viewName, timestamp: Date.now() },
       '',
@@ -94,8 +99,8 @@ export const pushSubViewHistory = (viewName: string) => {
  */
 export const replaceSubViewHistory = (viewName: string) => {
   ensurePopstateListener();
-  if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    if (window.history.state?.subView) {
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.history) {
+    if (window.history.state?.subView && typeof window.history.replaceState === 'function') {
       window.history.replaceState(
         { subView: viewName, timestamp: Date.now() },
         '',
@@ -117,7 +122,7 @@ export const popSubViewHistory = () => {
   if (isHandlingPopState) {
     return;
   }
-  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof window.history?.back === 'function') {
     if (window.history.state?.subView) {
       pendingProgrammaticPops += 1;
       clearDecayTimer();
@@ -174,7 +179,7 @@ export const _resetBrowserHistoryForTests = () => {
   pendingProgrammaticPops = 0;
   isHandlingPopState = false;
   clearDecayTimer();
-  if (listenerAttached && typeof window !== 'undefined') {
+  if (listenerAttached && typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {
     window.removeEventListener('popstate', onPopState);
   }
   listenerAttached = false;

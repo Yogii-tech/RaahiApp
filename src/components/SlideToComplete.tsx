@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, Animated, PanResponder, TouchableOpacity, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, Animated, PanResponder, useWindowDimensions } from 'react-native';
 
 const SLIDER_HEIGHT = 50;
 const THUMB_SIZE = 40;
@@ -27,14 +27,24 @@ const SlideToComplete: React.FC<SlideToCompleteProps> = ({
     const disabledRef = useRef(disabled);
     const sliderWidthRef = useRef(sliderWidth);
     const onCompleteRef = useRef(onComplete);
+    const isMountedRef = useRef(true);
 
     disabledRef.current = disabled;
     sliderWidthRef.current = sliderWidth;
     onCompleteRef.current = onComplete;
 
+    useEffect(() => {
+        isMountedRef.current = true;
+        return () => {
+            isMountedRef.current = false;
+        };
+    }, []);
+
     const resetSlider = useCallback(() => {
         triggeredRef.current = false;
-        setTriggered(false);
+        if (isMountedRef.current) {
+            setTriggered(false);
+        }
         Animated.spring(pan, {
             toValue: { x: 0, y: 0 },
             useNativeDriver: false,
@@ -50,7 +60,9 @@ const SlideToComplete: React.FC<SlideToCompleteProps> = ({
     const handleTrigger = useCallback(() => {
         if (triggeredRef.current || disabledRef.current) return;
         triggeredRef.current = true;
-        setTriggered(true);
+        if (isMountedRef.current) {
+            setTriggered(true);
+        }
         const maxX = sliderWidthRef.current - THUMB_SIZE - 10;
         Animated.timing(pan, {
             toValue: { x: maxX, y: 0 },
@@ -59,11 +71,17 @@ const SlideToComplete: React.FC<SlideToCompleteProps> = ({
         }).start(async () => {
             try {
                 const result = await onCompleteRef.current();
-                if (result === false) {
+                if (result === false && isMountedRef.current) {
                     resetSlider();
+                } else if (result === false) {
+                    triggeredRef.current = false;
                 }
             } catch {
-                resetSlider();
+                if (isMountedRef.current) {
+                    resetSlider();
+                } else {
+                    triggeredRef.current = false;
+                }
             }
         });
     }, [pan, resetSlider]);
@@ -99,10 +117,7 @@ const SlideToComplete: React.FC<SlideToCompleteProps> = ({
 
     return (
         <View style={styles.container}>
-            <TouchableOpacity
-                activeOpacity={0.85}
-                onPress={handleTrigger}
-                disabled={triggered || disabled}
+            <View
                 style={[styles.track, { width: sliderWidth }, triggered && styles.trackCompleted, disabled && { opacity: 0.6 }]}
             >
                 <Text style={styles.text}>{triggered ? "COMPLETED ✓" : title}</Text>
@@ -113,7 +128,7 @@ const SlideToComplete: React.FC<SlideToCompleteProps> = ({
                 >
                     <Text style={styles.thumbArrow}>{triggered ? "✓" : ">>"}</Text>
                 </Animated.View>
-            </TouchableOpacity>
+            </View>
         </View>
     );
 };

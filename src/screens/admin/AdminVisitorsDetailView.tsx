@@ -4,6 +4,7 @@ import { downloadCSV } from '../../utils/exportUtils';
 import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
 import { confirmAction, notify } from '../../utils/notify';
+import { parseJsonSafe, getApiErrorMessage, createRequestAbort } from '../../utils/json';
 
 interface UserStats {
      total: number;
@@ -38,6 +39,7 @@ export default function AdminVisitorsDetailView({ isDark, searchQuery = '' }: { 
      fetchWithAuthRef.current = fetchWithAuth;
      const abortRef = useRef<AbortController | null>(null);
      const reqIdRef = useRef(0);
+     const isMountedRef = useRef(true);
      const { width } = useWindowDimensions();
      const isMobile = width < 768;
 
@@ -52,7 +54,7 @@ export default function AdminVisitorsDetailView({ isDark, searchQuery = '' }: { 
 
      const fetchData = useCallback(async (background = false) => {
           abortRef.current?.abort();
-          const controller = new AbortController();
+          const { controller, cleanup, didTimeout } = createRequestAbort(12000);
           abortRef.current = controller;
           const reqId = ++reqIdRef.current;
 
@@ -70,19 +72,24 @@ export default function AdminVisitorsDetailView({ isDark, searchQuery = '' }: { 
                ]);
                if (!statsRes.ok) throw new Error(`Stats error: ${statsRes.status}`);
                if (!usersRes.ok) throw new Error(`Users error: ${usersRes.status}`);
-               const [stats, usersData] = await Promise.all([statsRes.json(), usersRes.json()]);
-               if (reqId !== reqIdRef.current) return;
+               const [stats, usersData] = await Promise.all([
+                    parseJsonSafe<any>(statsRes),
+                    parseJsonSafe<UserRow[]>(usersRes),
+               ]);
+               if (!isMountedRef.current || reqId !== reqIdRef.current) return;
                setUserStats(stats?.users ?? null);
                setUsers(Array.isArray(usersData) ? usersData : []);
           } catch (err: any) {
-               if (err?.name === 'AbortError' || reqId !== reqIdRef.current) return;
-               setError(err?.message || 'Could not load users');
+               if (!isMountedRef.current || reqId !== reqIdRef.current) return;
+               if (err?.name === 'AbortError' && !didTimeout()) return;
+               setError(didTimeout() ? 'Request timed out while loading users' : (err?.message || 'Could not load users'));
                if (!background) {
                     setUserStats(null);
                     setUsers([]);
                }
           } finally {
-               if (reqId === reqIdRef.current) {
+               cleanup();
+               if (isMountedRef.current && reqId === reqIdRef.current) {
                     setLoading(false);
                     setRefreshing(false);
                }
@@ -90,8 +97,10 @@ export default function AdminVisitorsDetailView({ isDark, searchQuery = '' }: { 
      }, []);
 
      useEffect(() => {
+          isMountedRef.current = true;
           fetchData(false);
           return () => {
+               isMountedRef.current = false;
                reqIdRef.current += 1;
                abortRef.current?.abort();
           };
@@ -119,21 +128,28 @@ export default function AdminVisitorsDetailView({ isDark, searchQuery = '' }: { 
      const executeCleanupIncomplete = async () => {
           if (cleaningUp) return;
           setCleaningUp(true);
+          const { controller, cleanup, didTimeout } = createRequestAbort(15000);
           try {
                const res = await fetchWithAuthRef.current(`${API_BASE}/api/admin/users/incomplete`, {
                     method: 'DELETE',
+                    signal: controller.signal,
                });
-               const data = await res.json();
+               const data = await parseJsonSafe<any>(res);
+               if (!isMountedRef.current) return;
                if (res.ok) {
-                    notify('Cleanup Complete', `Cleaned up ${data.deletedCount ?? 0} abandoned incomplete user registrations (older than 24h).`);
+                    notify('Cleanup Complete', `Cleaned up ${data?.deletedCount ?? 0} abandoned incomplete user registrations (older than 24h).`);
                     await fetchData(true);
                } else {
-                    notify('Error', data.error || 'Failed to cleanup incomplete users.');
+                    notify('Error', getApiErrorMessage(data, `Failed to cleanup incomplete users (${res.status}).`));
                }
           } catch {
-               notify('Error', 'Network error while cleaning up incomplete users.');
+               if (!isMountedRef.current) return;
+               notify('Error', didTimeout() ? 'Request timed out while cleaning up incomplete users.' : 'Network error while cleaning up incomplete users.');
           } finally {
-               setCleaningUp(false);
+               cleanup();
+               if (isMountedRef.current) {
+                    setCleaningUp(false);
+               }
           }
      };
 

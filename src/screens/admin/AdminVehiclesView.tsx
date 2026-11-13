@@ -4,6 +4,7 @@ import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
 import { downloadCSV } from '../../utils/exportUtils';
 import { Driver } from './AdminDriversView';
+import { parseJsonSafe, createRequestAbort } from '../../utils/json';
 
 export default function AdminVehiclesView({ token, searchQuery = '', isDark }: { token: string; searchQuery?: string; isDark: boolean }) {
     const [vehicles, setVehicles] = useState<Driver[]>([]);
@@ -16,6 +17,7 @@ export default function AdminVehiclesView({ token, searchQuery = '', isDark }: {
     fetchWithAuthRef.current = fetchWithAuth;
     const abortRef = useRef<AbortController | null>(null);
     const reqIdRef = useRef(0);
+    const isMountedRef = useRef(true);
     const { width } = useWindowDimensions();
     const isMobile = width < 768;
 
@@ -30,7 +32,7 @@ export default function AdminVehiclesView({ token, searchQuery = '', isDark }: {
 
     const loadVehicles = useCallback(async (background = false) => {
         abortRef.current?.abort();
-        const controller = new AbortController();
+        const { controller, cleanup, didTimeout } = createRequestAbort(12000);
         abortRef.current = controller;
         const reqId = ++reqIdRef.current;
 
@@ -43,17 +45,19 @@ export default function AdminVehiclesView({ token, searchQuery = '', isDark }: {
         try {
             const res = await fetchWithAuthRef.current(`${API_BASE}/api/admin/drivers`, { signal: controller.signal });
             if (!res.ok) throw new Error(`Server error: ${res.status}`);
-            const data = await res.json();
-            if (reqId !== reqIdRef.current) return;
+            const data = await parseJsonSafe<Driver[]>(res);
+            if (!isMountedRef.current || reqId !== reqIdRef.current) return;
             const withVehicles = Array.isArray(data) ? data.filter(d => d.vehicleNumber || d.vehicleName) : [];
             setVehicles(withVehicles);
         } catch (err: any) {
-            if (err?.name === 'AbortError' || reqId !== reqIdRef.current) return;
+            if (!isMountedRef.current || reqId !== reqIdRef.current) return;
+            if (err?.name === 'AbortError' && !didTimeout()) return;
             console.error('Failed to load vehicles:', err);
-            setError(err?.message || 'Failed to load vehicles');
+            setError(didTimeout() ? 'Request timed out while loading vehicles' : (err?.message || 'Failed to load vehicles'));
             if (!background) setVehicles([]);
         } finally {
-            if (reqId === reqIdRef.current) {
+            cleanup();
+            if (isMountedRef.current && reqId === reqIdRef.current) {
                 setLoading(false);
                 setRefreshing(false);
             }
@@ -61,8 +65,10 @@ export default function AdminVehiclesView({ token, searchQuery = '', isDark }: {
     }, []);
 
     useEffect(() => {
+        isMountedRef.current = true;
         loadVehicles(false);
         return () => {
+            isMountedRef.current = false;
             reqIdRef.current += 1;
             abortRef.current?.abort();
         };
@@ -141,6 +147,10 @@ export default function AdminVehiclesView({ token, searchQuery = '', isDark }: {
                     </TouchableOpacity>
                 </View>
             </View>
+
+            {error && (
+                <Text style={{ color: '#DC3545', fontSize: 12, marginBottom: 12 }}>Refresh failed: {error}</Text>
+            )}
 
             {/* KPI Row */}
             <View style={[styles.kpiRow, { flexWrap: 'wrap' }, isMobile && { gap: 12 }]}>

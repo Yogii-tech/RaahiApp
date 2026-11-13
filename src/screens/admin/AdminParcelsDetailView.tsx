@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity
 import { downloadCSV } from '../../utils/exportUtils';
 import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
+import { parseJsonSafe, createRequestAbort } from '../../utils/json';
 
 interface ParcelStats {
      total: number;
@@ -40,6 +41,7 @@ export default function AdminParcelsDetailView({ isDark, searchQuery = '' }: { i
      fetchWithAuthRef.current = fetchWithAuth;
      const abortRef = useRef<AbortController | null>(null);
      const reqIdRef = useRef(0);
+     const isMountedRef = useRef(true);
      const { width } = useWindowDimensions();
      const isMobile = width < 768;
 
@@ -52,9 +54,9 @@ export default function AdminParcelsDetailView({ isDark, searchQuery = '' }: { i
           accent: '#3B7DDD',
      };
 
-     const fetchData = useCallback((background = false) => {
+     const fetchData = useCallback(async (background = false) => {
           abortRef.current?.abort();
-          const controller = new AbortController();
+          const { controller, cleanup, didTimeout } = createRequestAbort(12000);
           abortRef.current = controller;
           const reqId = ++reqIdRef.current;
 
@@ -65,40 +67,42 @@ export default function AdminParcelsDetailView({ isDark, searchQuery = '' }: { i
           }
           setError(null);
 
-          Promise.all([
-               fetchWithAuthRef.current(`${API_BASE}/api/admin/stats`, { signal: controller.signal }).then(r => {
-                    if (!r.ok) throw new Error(`Stats error: ${r.status}`);
-                    return r.json();
-               }),
-               fetchWithAuthRef.current(`${API_BASE}/api/admin/parcels`, { signal: controller.signal }).then(r => {
-                    if (!r.ok) throw new Error(`Parcels error: ${r.status}`);
-                    return r.json();
-               }),
-          ])
-               .then(([stats, parcelsData]) => {
-                    if (reqId !== reqIdRef.current) return;
-                    setParcelStats(stats?.parcels ?? null);
-                    setParcels(Array.isArray(parcelsData) ? parcelsData : []);
-               })
-               .catch((err: any) => {
-                    if (err?.name === 'AbortError' || reqId !== reqIdRef.current) return;
-                    setError(err?.message || 'Could not load parcel data');
-                    if (!background) {
-                         setParcelStats(null);
-                         setParcels([]);
-                    }
-               })
-               .finally(() => {
-                    if (reqId === reqIdRef.current) {
-                         setLoading(false);
-                         setRefreshing(false);
-                    }
-               });
+          try {
+               const [statsRes, parcelsRes] = await Promise.all([
+                    fetchWithAuthRef.current(`${API_BASE}/api/admin/stats`, { signal: controller.signal }),
+                    fetchWithAuthRef.current(`${API_BASE}/api/admin/parcels`, { signal: controller.signal }),
+               ]);
+               if (!statsRes.ok) throw new Error(`Stats error: ${statsRes.status}`);
+               if (!parcelsRes.ok) throw new Error(`Parcels error: ${parcelsRes.status}`);
+               const [stats, parcelsData] = await Promise.all([
+                    parseJsonSafe<any>(statsRes),
+                    parseJsonSafe<ParcelRow[]>(parcelsRes),
+               ]);
+               if (!isMountedRef.current || reqId !== reqIdRef.current) return;
+               setParcelStats(stats?.parcels ?? null);
+               setParcels(Array.isArray(parcelsData) ? parcelsData : []);
+          } catch (err: any) {
+               if (!isMountedRef.current || reqId !== reqIdRef.current) return;
+               if (err?.name === 'AbortError' && !didTimeout()) return;
+               setError(didTimeout() ? 'Request timed out while loading parcel data' : (err?.message || 'Could not load parcel data'));
+               if (!background) {
+                    setParcelStats(null);
+                    setParcels([]);
+               }
+          } finally {
+               cleanup();
+               if (isMountedRef.current && reqId === reqIdRef.current) {
+                    setLoading(false);
+                    setRefreshing(false);
+               }
+          }
      }, []);
 
      useEffect(() => {
+          isMountedRef.current = true;
           fetchData(false);
           return () => {
+               isMountedRef.current = false;
                reqIdRef.current += 1;
                abortRef.current?.abort();
           };

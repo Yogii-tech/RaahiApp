@@ -81,14 +81,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Load credentials on startup
     useEffect(() => {
         const loadCredentials = async () => {
+            const startGeneration = getAuthSessionGeneration();
             try {
                 const storedToken = await AsyncStorage.getItem('auth_token');
                 const storedRefresh = await AsyncStorage.getItem('auth_refresh_token');
                 const storedUser = await AsyncStorage.getItem('auth_user');
 
+                if (getAuthSessionGeneration() !== startGeneration) {
+                    return;
+                }
+
                 // Only require token + user to restore session; refreshToken is optional
                 if (storedToken && storedUser) {
                     const parsedUser = JSON.parse(storedUser);
+                    tokenRef.current = storedToken;
+                    userRef.current = parsedUser;
                     setToken(storedToken);
                     if (storedRefresh) setRefreshToken(storedRefresh);
                     setUser(parsedUser);
@@ -99,7 +106,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 }
             } catch (e) {
                 console.error('Failed to load credentials', e);
-                await clearStorageCredentials().catch(() => {});
+                if (getAuthSessionGeneration() === startGeneration) {
+                    await clearStorageCredentials().catch(() => {});
+                }
             } finally {
                 setIsInitialLoading(false);
             }
@@ -165,12 +174,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return logoutPromiseRef.current;
         }
 
+        // Synchronously invalidate any in-flight refreshes/requests and clear local React auth state
+        const logoutGeneration = bumpAuthSessionGeneration();
+        const capturedRefToken = tokenRef.current;
+        tokenRef.current = null;
+        userRef.current = null;
+        setToken(null);
+        setRefreshToken(null);
+        setUser(null);
+        setGlobalAuthenticated(false);
+
         const run = (async () => {
-            // Invalidate any in-flight token refreshes immediately
-            bumpAuthSessionGeneration();
-            const currentToken = (await AsyncStorage.getItem('auth_token').catch(() => null)) || tokenRef.current;
+            const currentToken = capturedRefToken || (await AsyncStorage.getItem('auth_token').catch(() => null));
+            if (getAuthSessionGeneration() === logoutGeneration) {
+                await clearStorageCredentials().catch(() => {});
+            }
             try {
-                // Unregister FCM while the Bearer token is still valid and before clearing storage
+                // Unregister FCM while the captured Bearer token is still valid server-side
                 await unregisterFCM(currentToken || undefined);
             } catch (e) {
                 console.warn('FCM unregister on logout failed:', e);
@@ -187,7 +207,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             } catch (e) {
                 console.error('Logout error:', e);
             }
-            await setAuth(null, null, null);
         })().finally(() => {
             logoutPromiseRef.current = null;
         });
@@ -203,6 +222,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // A fetch wrapper that auto-refreshes token on 401 using the shared mutex
     const fetchWithAuth = async (url: string, options: RequestInit = {}): Promise<Response> => {
+        const requestGeneration = getAuthSessionGeneration();
         const currentToken = await AsyncStorage.getItem('auth_token');
         const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
         const customHeaders = normalizeHeaders(options.headers);
@@ -220,8 +240,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             credentials: 'include',
         });
 
-        if (res.status === 401) {
-            const requestGeneration = getAuthSessionGeneration();
+        if (res.status === 401 && getAuthSessionGeneration() === requestGeneration) {
             // Access token expired — check if another concurrent request already rotated it, else refresh
             const latestToken = await AsyncStorage.getItem('auth_token').catch(() => null);
             const newToken = (getAuthSessionGeneration() === requestGeneration && latestToken && latestToken !== currentToken)

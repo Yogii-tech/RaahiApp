@@ -9,6 +9,7 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE } from '../apiConfig';
 import { firebaseWebConfig, VAPID_KEY } from '../config/firebaseWebConfig';
+import { getAuthSessionGeneration, refreshAuthToken } from '../utils/api';
 
 // ─── Type Definitions ──────────────────────────────────────────────────────────
 
@@ -60,18 +61,42 @@ const PENDING_FCM_TOKEN_KEY = 'pending_fcm_token';
 
 let currentFCMToken: string | null = null;
 
-async function uploadToken(fcmToken: string, authToken: string): Promise<void> {
+async function uploadToken(fcmToken: string, authToken: string, expectedGeneration?: number): Promise<void> {
   try {
+    if (expectedGeneration !== undefined && getAuthSessionGeneration() !== expectedGeneration) {
+      return;
+    }
     currentFCMToken = fcmToken;
     await AsyncStorage.setItem(ACTIVE_FCM_TOKEN_KEY, fcmToken).catch(() => {});
-    const res = await fetch(`${API_BASE}/api/user/fcm-token`, {
-      method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${authToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ fcmToken }),
-    });
+    const sendPut = async (bearer: string) =>
+      fetch(`${API_BASE}/api/user/fcm-token`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${bearer}`,
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ fcmToken }),
+      });
+
+    let res = await sendPut(authToken);
+    if (res.status === 401 && (expectedGeneration === undefined || getAuthSessionGeneration() === expectedGeneration)) {
+      const latestToken = await AsyncStorage.getItem('auth_token').catch(() => null);
+      const nextToken =
+        (expectedGeneration === undefined || getAuthSessionGeneration() === expectedGeneration) &&
+        latestToken &&
+        latestToken !== authToken
+          ? latestToken
+          : await refreshAuthToken();
+      if (nextToken && (expectedGeneration === undefined || getAuthSessionGeneration() === expectedGeneration)) {
+        res = await sendPut(nextToken);
+      }
+    }
+
+    if (expectedGeneration !== undefined && getAuthSessionGeneration() !== expectedGeneration) {
+      return;
+    }
+
     if (res.ok) {
       console.log('[FCM] Token uploaded to backend successfully');
       await AsyncStorage.removeItem(PENDING_FCM_TOKEN_KEY);
@@ -81,16 +106,21 @@ async function uploadToken(fcmToken: string, authToken: string): Promise<void> {
     }
   } catch (e) {
     console.warn('[FCM] Failed to upload token (network error). Caching for retry:', e);
-    await AsyncStorage.setItem(PENDING_FCM_TOKEN_KEY, fcmToken);
+    if (expectedGeneration === undefined || getAuthSessionGeneration() === expectedGeneration) {
+      await AsyncStorage.setItem(PENDING_FCM_TOKEN_KEY, fcmToken);
+    }
   }
 }
 
-async function syncPendingToken(authToken: string): Promise<void> {
+async function syncPendingToken(authToken: string, expectedGeneration?: number): Promise<void> {
   try {
+    if (expectedGeneration !== undefined && getAuthSessionGeneration() !== expectedGeneration) {
+      return;
+    }
     const pendingToken = await AsyncStorage.getItem(PENDING_FCM_TOKEN_KEY);
-    if (pendingToken) {
+    if (pendingToken && (expectedGeneration === undefined || getAuthSessionGeneration() === expectedGeneration)) {
       console.log('[FCM] Found pending token, syncing...');
-      await uploadToken(pendingToken, authToken);
+      await uploadToken(pendingToken, authToken, expectedGeneration);
     }
   } catch (e) {
     console.warn('[FCM] Failed to sync pending token:', e);
@@ -116,22 +146,24 @@ let nativeOpenedAppUnsubscribe: (() => void) | null = null;
 let nativeTokenRefreshUnsubscribe: (() => void) | null = null;
 
 export async function registerFCM(authToken: string, onNavigate: NavigateToScreen): Promise<void> {
+  const startGen = getAuthSessionGeneration();
   activeNavigateCallback = onNavigate;
   const dispatchNavigate: NavigateToScreen = (type, data) => {
     activeNavigateCallback?.(type, data);
   };
 
-  await syncPendingToken(authToken);
+  await syncPendingToken(authToken, startGen);
+  if (getAuthSessionGeneration() !== startGen) return;
 
   if (Platform.OS === 'web') {
-    await registerWebFCM(authToken, dispatchNavigate);
+    await registerWebFCM(authToken, dispatchNavigate, startGen);
   } else if (Platform.OS === 'android' || Platform.OS === 'ios') {
-    await registerNativeFCM(authToken, dispatchNavigate);
+    await registerNativeFCM(authToken, dispatchNavigate, startGen);
   }
 }
 
 // ─── Native (Android / iOS) Registration Logic ────────────────────────────────
-async function registerNativeFCM(authToken: string, onNavigate: NavigateToScreen): Promise<void> {
+async function registerNativeFCM(authToken: string, onNavigate: NavigateToScreen, startGen: number): Promise<void> {
   try {
     // Dynamically import @react-native-firebase/messaging modular API (not available on web build)
     const {
@@ -180,13 +212,16 @@ async function registerNativeFCM(authToken: string, onNavigate: NavigateToScreen
     }
 
     // Get the native device FCM token
+    if (getAuthSessionGeneration() !== startGen) return;
     const token = await getToken(messagingInstance);
+    if (getAuthSessionGeneration() !== startGen) return;
     if (token) {
       console.log('[FCM Native] Got device token, uploading...');
-      await uploadToken(token, authToken);
+      await uploadToken(token, authToken, startGen);
     } else {
       console.warn('[FCM Native] Empty token — check google-services.json / APNs configuration.');
     }
+    if (getAuthSessionGeneration() !== startGen) return;
 
     // Handle foreground messages (app is open and in focus)
     if (nativeForegroundUnsubscribe) nativeForegroundUnsubscribe();
@@ -215,9 +250,11 @@ async function registerNativeFCM(authToken: string, onNavigate: NavigateToScreen
     // Listen for token refreshes and re-upload to keep backend in sync
     if (nativeTokenRefreshUnsubscribe) nativeTokenRefreshUnsubscribe();
     nativeTokenRefreshUnsubscribe = onTokenRefresh(messagingInstance, async (newToken: string) => {
+      if (getAuthSessionGeneration() !== startGen) return;
       console.log('[FCM Native] Token refreshed, uploading...');
-      const latestAuthToken = (await AsyncStorage.getItem('auth_token').catch(() => null)) || authToken;
-      await uploadToken(newToken, latestAuthToken);
+      const latestAuthToken = await AsyncStorage.getItem('auth_token').catch(() => null);
+      if (!latestAuthToken || getAuthSessionGeneration() !== startGen) return;
+      await uploadToken(newToken, latestAuthToken, startGen);
     });
 
     console.log('[FCM Native] Registration complete.');
@@ -227,19 +264,21 @@ async function registerNativeFCM(authToken: string, onNavigate: NavigateToScreen
 }
 
 // ─── Web Registration Logic ────────────────────────────────────────────────────
-async function registerWebFCM(authToken: string, onNavigate: NavigateToScreen): Promise<void> {
+async function registerWebFCM(authToken: string, onNavigate: NavigateToScreen, startGen: number): Promise<void> {
   const messaging = await getWebMessaging();
-  if (!messaging) return;
+  if (!messaging || getAuthSessionGeneration() !== startGen) return;
 
   try {
     // 1. Request notification permission from the browser
     const permission = await Notification.requestPermission();
+    if (getAuthSessionGeneration() !== startGen) return;
     if (permission !== 'granted') {
       console.warn('[FCM Web] Notification permission denied. Lock screen notifications will not work.');
       return;
     }
 
     const { getToken, onMessage } = await import('firebase/messaging');
+    if (getAuthSessionGeneration() !== startGen) return;
 
     // 2. Register & activate the service worker BEFORE getting the FCM token.
     //    The SW MUST be active for the FCM token to be tied to it — otherwise
@@ -271,17 +310,20 @@ async function registerWebFCM(authToken: string, onNavigate: NavigateToScreen): 
 
     // 3. Get the FCM registration token tied to this SW + VAPID key combination.
     //    This token is what the backend uses to send push notifications.
+    if (getAuthSessionGeneration() !== startGen) return;
     const token = await getToken(messaging, {
       vapidKey: VAPID_KEY,
       serviceWorkerRegistration: swRegistration,
     });
+    if (getAuthSessionGeneration() !== startGen) return;
 
     if (token) {
       console.log('[FCM Web] Got web push token');
-      await uploadToken(token, authToken);
+      await uploadToken(token, authToken, startGen);
     } else {
       console.warn('[FCM Web] Empty token — check VAPID key and SW registration. Notifications will not work.');
     }
+    if (getAuthSessionGeneration() !== startGen) return;
 
     // 4. Foreground message handler: when the tab is open and visible, Firebase
     //    suppresses the system notification and calls this handler instead.
