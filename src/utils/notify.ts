@@ -19,48 +19,75 @@ const showWebToast = (title: string, message?: string, onOk?: () => void) => {
     const container = document.createElement('div');
     container.id = 'raahi-web-toast';
     container.style.position = 'fixed';
-    container.style.bottom = '24px';
+    container.style.top = '16px';
     container.style.left = '50%';
-    container.style.transform = 'translateX(-50%)';
-    container.style.backgroundColor = '#1F2937';
+    container.style.transform = 'translateX(-50%) translateY(-10px)';
+    container.style.backgroundColor = 'rgba(17, 24, 39, 0.95)';
     container.style.color = '#FFFFFF';
-    container.style.padding = '12px 20px';
-    container.style.borderRadius = '10px';
-    container.style.boxShadow = '0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.2)';
+    container.style.padding = '8px 16px';
+    container.style.borderRadius = '9999px';
+    container.style.boxShadow = '0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.15)';
     container.style.zIndex = '999999';
-    container.style.maxWidth = '90vw';
-    container.style.minWidth = '280px';
+    container.style.maxWidth = '92vw';
+    container.style.width = 'max-content';
     container.style.display = 'flex';
-    container.style.flexDirection = 'column';
-    container.style.gap = '4px';
+    container.style.flexDirection = 'row';
+    container.style.alignItems = 'center';
+    container.style.gap = '10px';
     container.style.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
-    container.style.fontSize = '14px';
-    container.style.border = '1px solid rgba(255, 255, 255, 0.1)';
-    container.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
+    container.style.fontSize = '13px';
+    container.style.border = '1px solid rgba(255, 255, 255, 0.12)';
+    container.style.backdropFilter = 'blur(8px)';
+    container.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
     container.style.opacity = '0';
-    container.style.pointerEvents = 'none';
+    container.style.pointerEvents = 'auto';
+    container.style.cursor = 'default';
 
-    const titleEl = document.createElement('div');
+    const textWrap = document.createElement('div');
+    textWrap.style.display = 'flex';
+    textWrap.style.flexDirection = 'row';
+    textWrap.style.alignItems = 'center';
+    textWrap.style.gap = '6px';
+    textWrap.style.flexWrap = 'wrap';
+
+    const titleEl = document.createElement('span');
     titleEl.style.fontWeight = '600';
     titleEl.style.color = '#F9FAFB';
     titleEl.innerText = title;
-    container.appendChild(titleEl);
+    textWrap.appendChild(titleEl);
 
     if (message) {
-        const msgEl = document.createElement('div');
+        const msgEl = document.createElement('span');
         msgEl.style.color = '#D1D5DB';
-        msgEl.style.fontSize = '13px';
-        msgEl.style.lineHeight = '18px';
-        msgEl.innerText = message;
-        container.appendChild(msgEl);
+        msgEl.style.fontSize = '12px';
+        msgEl.innerText = `• ${message}`;
+        textWrap.appendChild(msgEl);
     }
+    container.appendChild(textWrap);
+
+    const closeBtn = document.createElement('button');
+    closeBtn.innerText = '✕';
+    closeBtn.style.background = 'transparent';
+    closeBtn.style.border = 'none';
+    closeBtn.style.color = 'rgba(255, 255, 255, 0.6)';
+    closeBtn.style.cursor = 'pointer';
+    closeBtn.style.fontSize = '12px';
+    closeBtn.style.padding = '0 0 0 4px';
+    closeBtn.style.display = 'flex';
+    closeBtn.style.alignItems = 'center';
+    closeBtn.onclick = () => {
+        container.style.opacity = '0';
+        container.style.transform = 'translateX(-50%) translateY(-10px)';
+        setTimeout(() => { if (container.parentNode) container.remove(); }, 200);
+    };
+    container.appendChild(closeBtn);
 
     document.body.appendChild(container);
 
     // Fade in
     requestAnimationFrame(() => {
         container.style.opacity = '1';
-        container.style.transform = 'translateX(-50%) translateY(-4px)';
+        container.style.transform = 'translateX(-50%) translateY(0)';
     });
 
     onOk?.();
@@ -68,10 +95,10 @@ const showWebToast = (title: string, message?: string, onOk?: () => void) => {
     // Auto fade out after 3.2 seconds
     toastTimeout = setTimeout(() => {
         container.style.opacity = '0';
-        container.style.transform = 'translateX(-50%) translateY(4px)';
+        container.style.transform = 'translateX(-50%) translateY(-10px)';
         setTimeout(() => {
             if (container.parentNode) container.remove();
-        }, 300);
+        }, 200);
     }, 3200);
 };
 

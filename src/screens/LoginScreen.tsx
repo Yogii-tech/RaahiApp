@@ -15,7 +15,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
 import { API_BASE } from '../apiConfig';
-import { pickAndUploadDocument, notify } from '../utils/documentUpload';
+import { pickAndUploadDocument } from '../utils/documentUpload';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { pushSubViewHistory, popSubViewHistory, useBrowserBack } from '../utils/browserHistory';
 
@@ -61,6 +61,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
     const [resendTimer, setResendTimer] = useState<number>(119);
     const otpRefs = useRef<(any)[]>([]);
     const [otpRowWidth, setOtpRowWidth] = useState(0);
+    const [authError, setAuthError] = useState<string | null>(null);
 
     const handleOtpChange = (value: string, index: number) => {
         const digit = value.replace(/[^0-9]/g, '').slice(-1);
@@ -207,8 +208,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
     }, [token, user]);
 
     const handleSendOtp = async (isAdmin = false) => {
+        setAuthError(null);
         if (phoneNumber.trim().length !== 10) {
-            notify(t('common.error'), t('login.invalidPhone'));
+            setAuthError(t('login.invalidPhone') || 'Please enter a valid 10-digit phone number.');
             return;
         }
 
@@ -233,9 +235,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 console.log('[Firebase OTP] Confirmation object received successfully!');
                 
                 setResendTimer(119);
+                setAuthError(null);
                 navigateToStep(isAdmin ? 'admin_otp' : 'otp');
             } else {
-                notify('Error', 'Firebase Web Auth is supported on Web browsers.');
+                setAuthError('Firebase Web Auth is supported on Web browsers.');
             }
         } catch (err: any) {
             console.error('[Firebase OTP Send Error]', err);
@@ -252,17 +255,19 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
             const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'goraahi.in';
             
             if (errCode === 'auth/unauthorized-domain' || errMsg.includes('auth/captcha-check-failed') || errMsg.includes('Hostname match not found')) {
-                notify(
-                    'Domain Not Authorized in Firebase Console',
-                    `Firebase error: Hostname match not found for '${currentHost}'.\n\nHow to Fix in 30 Seconds:\n1. Open Firebase Console (project-4e312d2c-0d4c-4929-860).\n2. Go to Authentication -> Settings -> Authorized domains.\n3. Click 'Add domain', type '${currentHost}', and click Save.\n4. Also add 'www.${currentHost.replace('www.', '')}'.`
-                );
-            } else if (errCode === 'auth/captcha-check-failed' || errCode === 'auth/invalid-app-credential' || errCode === 'auth/quota-exceeded' || errCode === 'auth/too-many-requests') {
-                notify(
-                    'Firebase SMS Request Error',
-                    `Firebase error (${errCode}): ${errMsg}\n\nPlease check Firebase Console -> Authentication -> Sign-in method -> Phone to verify SMS settings and quotas.`
-                );
+                setAuthError(`Domain unauthorized: '${currentHost}' is not in Firebase authorized domains.`);
+            } else if (errCode === 'auth/quota-exceeded') {
+                setAuthError('Daily SMS limit reached. Please try again tomorrow or contact support.');
+            } else if (errCode === 'auth/too-many-requests') {
+                setAuthError('Too many attempts. Requests to this number are temporarily paused. Please try again in a few minutes.');
+            } else if (errCode === 'auth/billing-not-enabled') {
+                setAuthError('SMS delivery requires Firebase Blaze plan enabled.');
+            } else if (errCode === 'auth/invalid-phone-number') {
+                setAuthError('Invalid phone number format. Please check the digits.');
+            } else if (errCode === 'auth/captcha-check-failed') {
+                setAuthError('Verification check failed. Please refresh the page and try again.');
             } else {
-                notify('Firebase SMS Error', `${errMsg} (${errCode || 'Unknown'})`);
+                setAuthError(`${errMsg} (${errCode || 'error'})`);
             }
         } finally {
             setLoading(false);
@@ -270,9 +275,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
     };
 
     const handleAdminVerifyOtp = async () => {
-        if (!otp.trim()) { notify('Error', 'Enter OTP'); return; }
+        setAuthError(null);
+        if (!otp.trim()) { setAuthError('Please enter the 6-digit OTP code.'); return; }
         if (!confirmationResult) {
-            notify('Error', 'No active Firebase OTP session found. Request a new OTP.');
+            setAuthError('No active OTP session found. Please request a new OTP.');
             return;
         }
         setLoading(true);
@@ -289,18 +295,20 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 }),
             });
             const data = await response.json();
-            if (!response.ok) { notify('Error', data.error || 'Invalid OTP'); return; }
+            if (!response.ok) { setAuthError(data.error || 'Invalid OTP code.'); return; }
             setAdminTempToken(data.token || null);
             setAdminTempRefreshToken(data.refresh_token || null);
             setAdminTempUser(data.user);
+            setAuthError(null);
             navigateToStep('admin_secret');
         } catch (fbErr: any) {
-            notify('Error', fbErr?.message || 'Invalid Firebase OTP code');
+            setAuthError(fbErr?.message || 'Invalid or expired OTP code.');
         } finally { setLoading(false); }
     };
 
     const handleAdminPromote = async () => {
-        if (!adminSecretKey.trim()) { notify('Error', 'Enter secret key'); return; }
+        setAuthError(null);
+        if (!adminSecretKey.trim()) { setAuthError('Please enter the admin secret key.'); return; }
         setLoading(true);
         try {
             const promoteRes = await fetch(`${API_BASE}/api/auth/promote-admin`, {
@@ -310,24 +318,25 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
             });
             const promoteData = await promoteRes.json();
             if (!promoteRes.ok) {
-                notify('Access Denied', promoteData.error || 'Invalid secret key');
+                setAuthError(promoteData.error || 'Invalid secret key.');
                 return;
             }
             await setAuth(adminTempToken, adminTempRefreshToken, { ...adminTempUser, role: 'admin' });
             onAuthenticated();
         } catch {
-            notify('Error', 'Promotion failed. Check secret key.');
+            setAuthError('Promotion failed. Please check secret key.');
         } finally { setLoading(false); }
     };
 
     const handleVerifyOtp = async () => {
+        setAuthError(null);
         if (!otp.trim()) {
-            notify(t('common.error'), t('login.enterOtpError'));
+            setAuthError(t('login.enterOtpError') || 'Please enter the 6-digit OTP code.');
             return;
         }
 
         if (!confirmationResult) {
-            notify(t('common.error'), 'No active Firebase OTP session found. Please request a new OTP.');
+            setAuthError('No active OTP session found. Please request a new OTP.');
             return;
         }
 
@@ -349,7 +358,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
             const data = await response.json();
 
             if (!response.ok) {
-                notify(t('common.error'), data.error || 'Backend token verification failed');
+                setAuthError(data.error || 'Backend token verification failed.');
                 return;
             }
 
@@ -369,15 +378,16 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 onAuthenticated();
             }
         } catch (err: any) {
-            notify(t('common.error'), err?.message || t('login.connectionError'));
+            setAuthError(err?.message || t('login.connectionError') || 'Incorrect OTP code or expired session.');
         } finally {
             setLoading(false);
         }
     };
 
     const handleSaveName = () => {
+        setAuthError(null);
         if (!name.trim()) {
-            notify(t('common.error'), t('login.enterNameError'));
+            setAuthError(t('login.enterNameError') || 'Please enter your name.');
             return;
         }
         navigateToStep('consent');
@@ -434,15 +444,16 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
     };
 
     const handleCompleteRegistration = async (role: 'passenger' | 'driver' | 'parceller') => {
+        setAuthError(null);
         const activeToken = tempToken || token;
 
         if (role === 'driver') {
             if (!vehicleDocs.name || !vehicleDocs.type || !vehicleDocs.seats || !vehicleDocs.number) {
-                notify(t('common.error'), 'Please fill in all vehicle details (Name, Type, Seats, Number).');
+                setAuthError('Please fill in all vehicle details (Name, Type, Seats, Number).');
                 return;
             }
             if (!vehicleDocs.dl || !vehicleDocs.rc || !vehicleDocs.pollution || !vehicleDocs.image) {
-                notify(t('common.error'), t('login.uploadError'));
+                setAuthError(t('login.uploadError') || 'Please upload all required vehicle documents.');
                 return;
             }
         }
@@ -494,10 +505,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                     onAuthenticated();
                 }
             } else {
-                notify(t('common.error'), t('login.failProfile'));
+                setAuthError(t('login.failProfile') || 'Failed to update profile. Please try again.');
             }
         } catch {
-            notify(t('common.error'), t('login.connectionError'));
+            setAuthError(t('login.connectionError') || 'Network error updating profile.');
         } finally {
             setLoading(false);
         }
@@ -792,6 +803,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                         </View>
 
                         {/* Submit */}
+                        {authError ? (
+                            <View style={[styles.errorContainer, { marginBottom: 16 }]}>
+                                <Text style={styles.errorText}>⚠️  {authError}</Text>
+                            </View>
+                        ) : null}
+
                         <TouchableOpacity
                             style={[
                                 kycStyles.submitBtn,
@@ -852,16 +869,25 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                             style={[styles.input, {
                                 backgroundColor: colors.inputFillColor,
                                 color: colors.textColor,
-                                borderColor: colors.inputBorderColor
+                                borderColor: authError ? '#EF4444' : colors.inputBorderColor
                             }]}
                             placeholder={t('login.phonePlaceholder')}
                             placeholderTextColor={isDark ? 'rgba(255,255,255,0.24)' : 'rgba(34,34,96,0.3)'}
                             keyboardType="phone-pad"
                             autoCapitalize="none"
                             value={phoneNumber}
-                            onChangeText={(text) => setPhoneNumber(text.replace(/[^0-9]/g, '').slice(0, 10))}
+                            onChangeText={(text) => {
+                                if (authError) setAuthError(null);
+                                setPhoneNumber(text.replace(/[^0-9]/g, '').slice(0, 10));
+                            }}
                             maxLength={10}
                         />
+
+                        {authError ? (
+                            <View style={styles.errorContainer}>
+                                <Text style={styles.errorText}>⚠️  {authError}</Text>
+                            </View>
+                        ) : null}
 
                         <View style={styles.spacer24} />
 
@@ -912,7 +938,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                                             }
                                         ]}
                                         value={otp[i] || ''}
-                                        onChangeText={(v) => handleOtpChange(v, i)}
+                                        onChangeText={(v) => {
+                                            if (authError) setAuthError(null);
+                                            handleOtpChange(v, i);
+                                        }}
                                         onKeyPress={(e) => handleOtpKeyPress(e, i)}
                                         keyboardType="number-pad"
                                         maxLength={1}
@@ -923,6 +952,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                                 );
                             })}
                         </View>
+
+                        {authError ? (
+                            <View style={styles.errorContainer}>
+                                <Text style={styles.errorText}>⚠️  {authError}</Text>
+                            </View>
+                        ) : null}
 
                         <View style={styles.spacer16} />
 
@@ -975,14 +1010,23 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                             style={[styles.input, {
                                 backgroundColor: colors.inputFillColor,
                                 color: colors.textColor,
-                                borderColor: colors.inputBorderColor
+                                borderColor: authError ? '#EF4444' : colors.inputBorderColor
                             }]}
                             placeholder={t('login.fullName')}
                             placeholderTextColor={isDark ? 'rgba(255,255,255,0.24)' : 'rgba(34,34,96,0.3)'}
                             autoCapitalize="words"
                             value={name}
-                            onChangeText={setName}
+                            onChangeText={(text) => {
+                                if (authError) setAuthError(null);
+                                setName(text);
+                            }}
                         />
+
+                        {authError ? (
+                            <View style={styles.errorContainer}>
+                                <Text style={styles.errorText}>⚠️  {authError}</Text>
+                            </View>
+                        ) : null}
 
                         <View style={styles.spacer24} />
 
@@ -1188,14 +1232,22 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                         </View>
                         <View style={styles.spacer16} />
                         <TextInput
-                            style={[styles.input, { backgroundColor: colors.inputFillColor, color: colors.textColor, borderColor: '#1FAF63' }]}
+                            style={[styles.input, { backgroundColor: colors.inputFillColor, color: colors.textColor, borderColor: authError ? '#EF4444' : '#1FAF63' }]}
                             placeholder="Admin phone number"
                             placeholderTextColor="rgba(31,175,99,0.4)"
                             keyboardType="phone-pad"
                             value={phoneNumber}
-                            onChangeText={(text) => setPhoneNumber(text.replace(/[^0-9]/g, '').slice(0, 10))}
+                            onChangeText={(text) => {
+                                if (authError) setAuthError(null);
+                                setPhoneNumber(text.replace(/[^0-9]/g, '').slice(0, 10));
+                            }}
                             maxLength={10}
                         />
+                        {authError ? (
+                            <View style={styles.errorContainer}>
+                                <Text style={styles.errorText}>⚠️  {authError}</Text>
+                            </View>
+                        ) : null}
                         <View style={styles.spacer24} />
                         <TouchableOpacity
                             style={[styles.button, { backgroundColor: '#1FAF63' }, loading && styles.buttonDisabled]}
@@ -1244,7 +1296,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                                             }
                                         ]}
                                         value={otp[i] || ''}
-                                        onChangeText={(v) => handleOtpChange(v, i)}
+                                        onChangeText={(v) => {
+                                            if (authError) setAuthError(null);
+                                            handleOtpChange(v, i);
+                                        }}
                                         onKeyPress={(e) => handleOtpKeyPress(e, i)}
                                         keyboardType="number-pad"
                                         maxLength={1}
@@ -1255,6 +1310,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                                 );
                             })}
                         </View>
+                        {authError ? (
+                            <View style={styles.errorContainer}>
+                                <Text style={styles.errorText}>⚠️  {authError}</Text>
+                            </View>
+                        ) : null}
                         <View style={styles.spacer16} />
                         <TouchableOpacity onPress={() => handleBackStep('admin_phone')} style={{ alignItems: 'center' }}>
                             <Text style={[styles.switchText, { color: colors.subtextColor }]}>← Change number</Text>
@@ -1297,14 +1357,22 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                         <View style={styles.spacer16} />
                         <Text style={{ color: colors.subtextColor, fontSize: 13, marginBottom: 10 }}>Enter the admin secret key provided by your system administrator.</Text>
                         <TextInput
-                            style={[styles.input, { backgroundColor: colors.inputFillColor, color: colors.textColor, borderColor: '#1FAF63' }]}
+                            style={[styles.input, { backgroundColor: colors.inputFillColor, color: colors.textColor, borderColor: authError ? '#EF4444' : '#1FAF63' }]}
                             placeholder="Secret key"
                             placeholderTextColor="rgba(31,175,99,0.4)"
                             autoCapitalize="none"
                             secureTextEntry
                             value={adminSecretKey}
-                            onChangeText={setAdminSecretKey}
+                            onChangeText={(text) => {
+                                if (authError) setAuthError(null);
+                                setAdminSecretKey(text);
+                            }}
                         />
+                        {authError ? (
+                            <View style={styles.errorContainer}>
+                                <Text style={styles.errorText}>⚠️  {authError}</Text>
+                            </View>
+                        ) : null}
                         <View style={styles.spacer24} />
                         <TouchableOpacity
                             style={[styles.button, { backgroundColor: '#1FAF63' }, loading && styles.buttonDisabled]}
@@ -1373,6 +1441,22 @@ const styles = StyleSheet.create({
     },
     disclaimer: {
         fontSize: 12,
+        textAlign: 'center',
+    },
+    errorContainer: {
+        marginTop: 10,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 8,
+        backgroundColor: 'rgba(239, 68, 68, 0.12)',
+        borderWidth: 1,
+        borderColor: 'rgba(239, 68, 68, 0.3)',
+    },
+    errorText: {
+        color: '#EF4444',
+        fontSize: 13,
+        fontWeight: '500',
+        lineHeight: 18,
         textAlign: 'center',
     },
     roleContainer: {
