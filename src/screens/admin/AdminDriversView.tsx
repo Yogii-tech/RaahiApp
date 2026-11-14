@@ -8,6 +8,14 @@ import { useAuth } from '../../context/AuthContext';
 import { downloadCSV } from '../../utils/exportUtils';
 import { notify } from '../../utils/notify';
 import { parseJsonSafe, getApiErrorMessage, createRequestAbort } from '../../utils/json';
+import {
+    MIN_REQUIRED_DRIVER_DOCS,
+    TOTAL_DRIVER_DOC_SLOTS,
+    DriverDocEntry,
+    getDriverDocCount,
+    getDriverDocEntries,
+    hasMinimumDriverDocs,
+} from '../../utils/driverDocuments';
 
 export interface Driver {
     id: string;
@@ -27,6 +35,7 @@ export interface Driver {
     pollutionUrl?: string;
     vehicleImageUrl?: string;
     ownershipUrl?: string;
+    documentCount?: number;
     totalRides?: number;
 }
 
@@ -73,6 +82,9 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
 
     const selectedDriver = modalState.type === 'inspect' ? modalState.driver : null;
     const inspectModalVisible = modalState.type === 'inspect';
+    const inspectDocCount = selectedDriver ? getDriverDocCount(selectedDriver) : 0;
+    const inspectCanApprove = selectedDriver ? hasMinimumDriverDocs(selectedDriver) : false;
+    const inspectDocEntries = selectedDriver ? getDriverDocEntries(selectedDriver) : [];
     const rekycDriver = modalState.type === 'rekyc' ? modalState.driver : null;
     const rekycModalVisible = modalState.type === 'rekyc';
     const deleteConfirmDriver = modalState.type === 'delete' ? modalState.driver : null;
@@ -180,6 +192,14 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
 
     const handleVerifyAction = async (status: 'verified' | 'rejected') => {
         if (!selectedDriver || submittingAction) return;
+        if (status === 'verified' && !hasMinimumDriverDocs(selectedDriver)) {
+            const uploadedCount = getDriverDocCount(selectedDriver);
+            notify(
+                'Insufficient Documents',
+                `Driver has ${uploadedCount}/${TOTAL_DRIVER_DOC_SLOTS} uploaded documents. At least ${MIN_REQUIRED_DRIVER_DOCS} documents are required before verification.`
+            );
+            return;
+        }
         if (status === 'rejected' && !rejectionReason.trim()) {
             notify('Reason Required', 'Please enter a rejection reason (e.g. RC document photo is unclear).');
             return;
@@ -398,7 +418,7 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                 <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={[styles.pageTitle, isMobile && { fontSize: 22 }]}>Driver Onboarding & Verification</Text>
                     <Text style={styles.pageSubtitle}>
-                        Drivers must pass 100% document review before receiving ride-posting privileges.
+                        Drivers must have at least {MIN_REQUIRED_DRIVER_DOCS} of {TOTAL_DRIVER_DOC_SLOTS} distinct documents uploaded before approval and ride-posting privileges.
                     </Text>
                 </View>
                 <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
@@ -462,11 +482,6 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                         contentContainerStyle={{ paddingBottom: 20 }}
                         renderItem={({ item, index }) => {
                             const status = item.verificationStatus || 'pending';
-                            const hasDL = !!item.dlUrl;
-                            const hasRC = !!item.rcUrl;
-                            const hasPollution = !!item.pollutionUrl;
-                            const hasPhoto = !!item.vehicleImageUrl;
-                            const hasOwnership = !!item.ownershipUrl;
 
                             return (
                                 <View style={[styles.mobileDriverCard, index % 2 === 1 && styles.tableRowAlt]}>
@@ -499,13 +514,7 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                                         </Text>
                                     </View>
 
-                                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                                        <DocBadge label="DL" isUploaded={hasDL} />
-                                        <DocBadge label="RC" isUploaded={hasRC} />
-                                        <DocBadge label="PUC" isUploaded={hasPollution} />
-                                        <DocBadge label="Photo" isUploaded={hasPhoto} />
-                                        {hasOwnership && <DocBadge label="Ownership" isUploaded={true} />}
-                                    </View>
+                                    <DriverDocBadgesList driver={item} />
 
                                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
                                         <TouchableOpacity
@@ -563,11 +572,6 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                             keyExtractor={item => item.id}
                             renderItem={({ item, index }) => {
                                 const status = item.verificationStatus || 'pending';
-                                const hasDL = !!item.dlUrl;
-                                const hasRC = !!item.rcUrl;
-                                const hasPollution = !!item.pollutionUrl;
-                                const hasPhoto = !!item.vehicleImageUrl;
-                                const hasOwnership = !!item.ownershipUrl;
 
                                 return (
                                     <View style={[styles.tableRow, index % 2 === 1 && styles.tableRowAlt]}>
@@ -589,12 +593,8 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                                         </View>
 
                                         {/* Documents Badges */}
-                                        <View style={{ flex: 2.5, flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-                                            <DocBadge label="Driving Licence" isUploaded={hasDL} />
-                                            <DocBadge label="Vehicle RC" isUploaded={hasRC} />
-                                            <DocBadge label="Pollution Cert" isUploaded={hasPollution} />
-                                            <DocBadge label="Vehicle Photo" isUploaded={hasPhoto} />
-                                            {hasOwnership && <DocBadge label="Ownership Proof" isUploaded={true} />}
+                                        <View style={{ flex: 2.5, justifyContent: 'center' }}>
+                                            <DriverDocBadgesList driver={item} showLongLabels />
                                         </View>
 
                                         {/* Submitted Date */}
@@ -716,35 +716,42 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                                 </View>
 
                                 {/* Document Cards List */}
-                                <Text style={styles.sectionHeader}>SUBMITTED KYC DOCUMENTS</Text>
+                                <View style={styles.sectionHeaderRow}>
+                                    <Text style={styles.sectionHeader}>
+                                        SUBMITTED KYC DOCUMENTS ({inspectDocCount}/{TOTAL_DRIVER_DOC_SLOTS})
+                                    </Text>
+                                    <View
+                                        testID="admin-inspect-doc-eligibility"
+                                        style={[
+                                            styles.eligibilityPill,
+                                            inspectCanApprove ? styles.eligibilityPillReady : styles.eligibilityPillBlocked,
+                                        ]}
+                                    >
+                                        <Text
+                                            style={[
+                                                styles.eligibilityPillText,
+                                                { color: inspectCanApprove ? '#22C55E' : '#F59E0B' },
+                                            ]}
+                                        >
+                                            {inspectCanApprove
+                                                ? `✓ Ready (${inspectDocCount}/${TOTAL_DRIVER_DOC_SLOTS})`
+                                                : `Needs ${MIN_REQUIRED_DRIVER_DOCS} Docs (${inspectDocCount}/${MIN_REQUIRED_DRIVER_DOCS})`}
+                                        </Text>
+                                    </View>
+                                </View>
 
-                                <DocInspectCard
-                                    title="1. Driving License (DL)"
-                                    url={getFullUrl(selectedDriver.dlUrl)}
-                                    onPreview={() => setPreviewImage(getFullUrl(selectedDriver.dlUrl))}
-                                />
-                                <DocInspectCard
-                                    title="2. RC Book (Registration Certificate)"
-                                    url={getFullUrl(selectedDriver.rcUrl)}
-                                    onPreview={() => setPreviewImage(getFullUrl(selectedDriver.rcUrl))}
-                                />
-                                <DocInspectCard
-                                    title="3. Pollution Certificate (PUC)"
-                                    url={getFullUrl(selectedDriver.pollutionUrl)}
-                                    onPreview={() => setPreviewImage(getFullUrl(selectedDriver.pollutionUrl))}
-                                />
-                                <DocInspectCard
-                                    title="4. Vehicle Photo (Number Plate Visible)"
-                                    url={getFullUrl(selectedDriver.vehicleImageUrl)}
-                                    onPreview={() => setPreviewImage(getFullUrl(selectedDriver.vehicleImageUrl))}
-                                />
-                                {selectedDriver.ownershipUrl ? (
-                                    <DocInspectCard
-                                        title="5. Ownership Proof"
-                                        url={getFullUrl(selectedDriver.ownershipUrl)}
-                                        onPreview={() => setPreviewImage(getFullUrl(selectedDriver.ownershipUrl))}
-                                    />
-                                ) : null}
+                                {inspectDocEntries.map((entry: DriverDocEntry) => {
+                                    const resolvedUrl = entry.url ? getFullUrl(entry.url) : '';
+                                    return (
+                                        <DocInspectCard
+                                            key={entry.slot.formKey}
+                                            title={entry.slot.adminTitle}
+                                            url={resolvedUrl}
+                                            canMeetMinDocs={inspectCanApprove}
+                                            onPreview={() => resolvedUrl && setPreviewImage(resolvedUrl)}
+                                        />
+                                    );
+                                })}
 
                                 {/* Passenger Reviews Section */}
                                 <Text style={[styles.sectionHeader, { marginTop: 20 }]}>PASSENGER REVIEWS</Text>
@@ -815,6 +822,15 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                                 </View>
                             </ScrollView>
 
+                            {/* Minimum Document Warning Banner */}
+                            {!inspectCanApprove && (
+                                <View testID="admin-verify-min-docs-warning" style={styles.approveWarningBanner}>
+                                    <Text style={styles.approveWarningText}>
+                                        ⚠ Cannot approve verification yet ({inspectDocCount}/{TOTAL_DRIVER_DOC_SLOTS} documents uploaded). At least {MIN_REQUIRED_DRIVER_DOCS} distinct documents are required.
+                                    </Text>
+                                </View>
+                            )}
+
                             {/* Modal Action Buttons */}
                             <View style={[styles.modalFooter, isMobile && { flexWrap: 'wrap', padding: 14, gap: 8 }]}>
                                 <TouchableOpacity
@@ -842,11 +858,18 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                                 </TouchableOpacity>
 
                                 <TouchableOpacity
-                                    style={[styles.actionBtn, styles.approveBtn, isMobile && { minWidth: '46%', paddingVertical: 10 }, submittingAction && { opacity: 0.6 }]}
+                                    testID="admin-inspect-approve-btn"
+                                    style={[
+                                        styles.actionBtn,
+                                        styles.approveBtn,
+                                        isMobile && { minWidth: '46%', paddingVertical: 10 },
+                                        !inspectCanApprove && styles.approveBtnDisabled,
+                                        submittingAction && { opacity: 0.6 },
+                                    ]}
                                     onPress={() => handleVerifyAction('verified')}
-                                    disabled={submittingAction}
+                                    disabled={submittingAction || !inspectCanApprove}
+                                    accessibilityState={{ disabled: submittingAction || !inspectCanApprove }}
                                 >
-
                                     {submittingAction ? (
                                         <ActivityIndicator color="#fff" size="small" />
                                     ) : (
@@ -1043,12 +1066,69 @@ const DocBadge = ({ label, isUploaded }: { label: string; isUploaded: boolean })
     </View>
 );
 
-const DocInspectCard = ({ title, url, onPreview }: { title: string; url: string; onPreview: () => void }) => (
+const DriverDocBadgesList = ({ driver, showLongLabels = false }: { driver: Driver; showLongLabels?: boolean }) => {
+    const entries = getDriverDocEntries(driver);
+    const docCount = getDriverDocCount(driver);
+    const canVerify = hasMinimumDriverDocs(driver);
+
+    return (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+            <View
+                testID={`driver-doc-count-${driver.id}`}
+                style={[
+                    styles.docBadge,
+                    canVerify ? styles.docCountChipReady : styles.docCountChipInsufficient,
+                ]}
+            >
+                <Text
+                    style={[
+                        styles.docBadgeText,
+                        { color: canVerify ? '#22C55E' : '#F87171' },
+                    ]}
+                >
+                    {docCount}/{TOTAL_DRIVER_DOC_SLOTS} Docs · {canVerify ? 'Ready' : `Needs ${MIN_REQUIRED_DRIVER_DOCS}`}
+                </Text>
+            </View>
+            {entries.map((entry) => {
+                const isUploaded = Boolean(entry.url);
+                if (entry.slot.formKey === 'ownership' && !isUploaded) {
+                    return null;
+                }
+                const label = showLongLabels
+                    ? ({
+                        dl: 'Driving Licence',
+                        rc: 'Vehicle RC',
+                        pollution: 'Pollution Cert',
+                        image: 'Vehicle Photo',
+                        ownership: 'Ownership Proof',
+                    }[entry.slot.formKey])
+                    : entry.slot.shortLabel;
+                return <DocBadge key={entry.slot.formKey} label={label} isUploaded={isUploaded} />;
+            })}
+        </View>
+    );
+};
+
+const DocInspectCard = ({
+    title,
+    url,
+    canMeetMinDocs = false,
+    onPreview,
+}: {
+    title: string;
+    url: string;
+    canMeetMinDocs?: boolean;
+    onPreview: () => void;
+}) => (
     <View style={styles.docInspectCard}>
         <View style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
             <Text style={styles.docInspectTitle}>{title}</Text>
             <Text style={styles.docInspectStatus}>
-                {url ? '✓ Document uploaded' : '⚠ Missing document'}
+                {url
+                    ? '✓ Document uploaded'
+                    : canMeetMinDocs
+                        ? 'Not uploaded (optional once 3+ docs provided)'
+                        : '⚠ Missing document'}
             </Text>
         </View>
         {url ? (
@@ -1056,7 +1136,15 @@ const DocInspectCard = ({ title, url, onPreview }: { title: string; url: string;
                 <Text style={styles.viewDocBtnText}>View Image 👁</Text>
             </TouchableOpacity>
         ) : (
-            <Text style={{ color: '#EF4444', fontSize: 12, fontWeight: 'bold' }}>Not Provided</Text>
+            <Text
+                style={{
+                    color: canMeetMinDocs ? '#94A3B8' : '#F59E0B',
+                    fontSize: 12,
+                    fontWeight: 'bold',
+                }}
+            >
+                {canMeetMinDocs ? 'Not Uploaded' : 'Missing'}
+            </Text>
         )}
     </View>
 );
@@ -1189,6 +1277,25 @@ const styles = StyleSheet.create({
     rekycConfirmBtn: { backgroundColor: '#D97706' },
     rejectBtn: { backgroundColor: '#EF4444' },
     approveBtn: { backgroundColor: '#22C55E' },
+    approveBtnDisabled: { backgroundColor: '#334155', opacity: 0.55 },
+    docCountChipReady: { backgroundColor: 'rgba(34,197,94,0.16)', borderColor: 'rgba(34,197,94,0.45)' },
+    docCountChipInsufficient: { backgroundColor: 'rgba(239,68,68,0.14)', borderColor: 'rgba(239,68,68,0.4)' },
+    sectionHeaderRow: {
+        flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+        flexWrap: 'wrap', gap: 8, marginBottom: 12,
+    },
+    eligibilityPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1 },
+    eligibilityPillReady: { backgroundColor: 'rgba(34,197,94,0.12)', borderColor: 'rgba(34,197,94,0.35)' },
+    eligibilityPillBlocked: { backgroundColor: 'rgba(245,158,11,0.12)', borderColor: 'rgba(245,158,11,0.35)' },
+    eligibilityPillText: { fontSize: 11, fontWeight: 'bold' },
+    approveWarningBanner: {
+        backgroundColor: 'rgba(245,158,11,0.12)',
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(245,158,11,0.3)',
+        paddingHorizontal: 18,
+        paddingVertical: 10,
+    },
+    approveWarningText: { color: '#FDE68A', fontSize: 12, fontWeight: '600', textAlign: 'center' },
     actionBtnText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 14 },
 
     // Re-KYC Modal

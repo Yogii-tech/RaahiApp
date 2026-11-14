@@ -17,6 +17,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { notify } from '../utils/notify';
 
 import { API_BASE } from '../apiConfig';
+import { TOTAL_DRIVER_DOC_SLOTS, getDriverDocCount } from '../utils/driverDocuments';
 
 const isPdfUrl = (url: string): boolean => {
     const lower = url.toLowerCase();
@@ -74,6 +75,7 @@ const VehicleDetailsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     ];
 
     const isCurrentPdf = currentDoc?.url ? isPdfUrl(currentDoc.url) : false;
+    const uploadedDocCount = getDriverDocCount(vehicle);
 
     return (
         <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -94,24 +96,40 @@ const VehicleDetailsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 </View>
 
                 <View style={styles.spacer24} />
-                <Text style={[styles.sectionTitle, { color: colors.textColor }]}>UPLOADED DOCUMENTS</Text>
+                <Text style={[styles.sectionTitle, { color: colors.textColor }]}>
+                    UPLOADED DOCUMENTS ({uploadedDocCount}/{TOTAL_DRIVER_DOC_SLOTS})
+                </Text>
                 <View style={styles.spacer12} />
 
-                {docs.map((doc, index) => (
-                    <TouchableOpacity
-                        key={index}
-                        style={[styles.docRow, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}
-                        onPress={() => handleViewDocument(doc.label, doc.url)}
-                    >
-                        <View style={styles.docInfo}>
-                            <Text style={[styles.docLabel, { color: colors.textColor }]}>{doc.label}</Text>
-                            <Text style={[styles.docFilename, { color: colors.subtextColor }]} numberOfLines={1}>
-                                {doc.url ? (doc.url.includes('/') ? doc.url.split('/').pop() : doc.url) : 'Not uploaded'}
-                            </Text>
-                        </View>
-                        <Text style={[styles.viewBtn, { color: colors.primary }]}>VIEW ›</Text>
-                    </TouchableOpacity>
-                ))}
+                {docs.map((doc, index) => {
+                    const trimmedUrl = typeof doc.url === 'string' ? doc.url.trim() : '';
+                    const hasDoc = trimmedUrl.length > 0;
+                    return (
+                        <TouchableOpacity
+                            key={index}
+                            testID={`vehicle-doc-row-${doc.key}`}
+                            style={[
+                                styles.docRow,
+                                { backgroundColor: colors.cardColor, borderColor: colors.borderColor },
+                                !hasDoc && { opacity: 0.65 },
+                            ]}
+                            onPress={() => hasDoc && handleViewDocument(doc.label, trimmedUrl)}
+                            disabled={!hasDoc}
+                        >
+                            <View style={styles.docInfo}>
+                                <Text style={[styles.docLabel, { color: colors.textColor }]}>{doc.label}</Text>
+                                <Text style={[styles.docFilename, { color: colors.subtextColor }]} numberOfLines={1}>
+                                    {hasDoc ? (trimmedUrl.includes('/') ? trimmedUrl.split('/').pop() : trimmedUrl) : 'Not uploaded'}
+                                </Text>
+                            </View>
+                            {hasDoc ? (
+                                <Text style={[styles.viewBtn, { color: colors.primary }]}>VIEW ›</Text>
+                            ) : (
+                                <Text style={[styles.viewBtn, { color: colors.subtextColor, opacity: 0.8 }]}>—</Text>
+                            )}
+                        </TouchableOpacity>
+                    );
+                })}
             </View>
 
             <Modal

@@ -19,6 +19,8 @@ import { API_BASE } from '../apiConfig';
 import { refreshAuthToken } from '../utils/api';
 import { parseJsonSafe, getApiErrorMessage } from '../utils/json';
 import { pickAndUploadDocument } from '../utils/documentUpload';
+import { DriverKycDocsCard } from '../components/DriverKycDocsCard';
+import { validateMinimumDriverDocs } from '../utils/driverDocuments';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { pushSubViewHistory, popSubViewHistory, useBrowserBack } from '../utils/browserHistory';
 
@@ -586,14 +588,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                             const trimmed = url ? url.trim() : '';
                             const finalUrl = /^https?:\/\//i.test(trimmed)
                                 ? trimmed
-                                : 'https://via.placeholder.com/600x400.png?text=Document+Uploaded';
+                                : `https://via.placeholder.com/600x400.png?text=${encodeURIComponent(type)}`;
                             setVehicleDocs(prev => ({ ...prev, [type]: finalUrl }));
                         }
 
                     }
                 ],
                 'plain-text',
-                'https://via.placeholder.com/600x400.png?text=Document+Uploaded'
+                `https://via.placeholder.com/600x400.png?text=${encodeURIComponent(type)}`
             );
         } else {
             setAuthError('Document upload is currently supported on web browsers.');
@@ -617,8 +619,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 setAuthError('Please enter a valid number of seats (at least 1).');
                 return;
             }
-            if (!vehicleDocs.dl || !vehicleDocs.rc || !vehicleDocs.pollution || !vehicleDocs.image) {
-                setAuthError(t('login.uploadError') || 'Please upload all required vehicle documents.');
+            const docValidationError = validateMinimumDriverDocs(vehicleDocs);
+            if (docValidationError) {
+                setAuthError(docValidationError);
                 return;
             }
         }
@@ -636,11 +639,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                     vehicle_type: vehicleDocs.type,
                     seats: parsedSeats,
                     vehicle_number: vehicleDocs.number,
-                    dl_url: vehicleDocs.dl,
-                    rc_url: vehicleDocs.rc,
-                    pollution_url: vehicleDocs.pollution,
-                    vehicle_image_url: vehicleDocs.image,
-                    ownership_url: vehicleDocs.ownership,
+                    dl_url: vehicleDocs.dl.trim(),
+                    rc_url: vehicleDocs.rc.trim(),
+                    pollution_url: vehicleDocs.pollution.trim(),
+                    vehicle_image_url: vehicleDocs.image.trim(),
+                    ownership_url: vehicleDocs.ownership.trim(),
                     seating_layout: vehicleDocs.layout
                 };
             }
@@ -957,67 +960,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                         </View>
 
                         {/* Section 3: Documents */}
-                        <View style={[kycStyles.card, { backgroundColor: isDark ? '#1E293B' : '#FFFFFF' }]}>
-                            <View style={kycStyles.cardHeader}>
-                                <Text style={kycStyles.cardIcon}>📋</Text>
-                                <Text style={[kycStyles.cardTitle, { color: colors.textColor }]}>Required Documents</Text>
-                            </View>
-                            <Text style={{ color: isDark ? '#64748B' : '#94A3B8', fontSize: 12, marginBottom: 16 }}>
-                                All documents must be clear and legible. Accepted: JPG, PNG, PDF
-                            </Text>
-
-                            {[
-                                { key: 'dl', icon: '🪪', label: 'Driving License', sub: 'Front and back of your DL', required: true },
-                                { key: 'rc', icon: '📄', label: 'RC Book', sub: 'Vehicle Registration Certificate', required: true },
-                                { key: 'pollution', icon: '🌿', label: 'Pollution Certificate', sub: 'Valid PUC Certificate', required: true },
-                                { key: 'image', icon: '📷', label: 'Vehicle Photo', sub: 'Number plate must be clearly visible', required: true },
-                                { key: 'ownership', icon: '📝', label: 'Ownership Proof', sub: 'Any document establishing owner-vehicle relation', required: false },
-                            ].map(doc => {
-                                const isUploaded = !!(vehicleDocs as any)[doc.key];
-                                return (
-                                    <TouchableOpacity
-                                        key={doc.key}
-                                        style={[
-                                            kycStyles.docRow,
-                                            {
-                                                backgroundColor: isUploaded
-                                                    ? (isDark ? 'rgba(34,197,94,0.1)' : '#F0FDF4')
-                                                    : (isDark ? '#0F172A' : '#F8FAFC'),
-                                                borderColor: isUploaded
-                                                    ? '#22C55E'
-                                                    : (isDark ? '#334155' : '#E2E8F0'),
-                                            },
-                                            loading && { opacity: 0.6 },
-                                        ]}
-                                        onPress={() => handleFileUpload(doc.key as any)}
-                                        disabled={loading}
-                                        activeOpacity={0.7}
-                                    >
-                                        <View style={[kycStyles.docIconBox, { backgroundColor: isUploaded ? '#22C55E' : colors.primary + '20' }]}>
-                                            <Text style={{ fontSize: 20 }}>{isUploaded ? '✅' : doc.icon}</Text>
-                                        </View>
-                                        <View style={{ flex: 1 }}>
-                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                                <Text style={[kycStyles.docLabel, { color: colors.textColor }]}>{doc.label}</Text>
-                                                {doc.required && !isUploaded && (
-                                                    <View style={kycStyles.reqBadge}><Text style={{ color: '#EF4444', fontSize: 9, fontWeight: '700' }}>REQUIRED</Text></View>
-                                                )}
-                                            </View>
-                                            <Text style={[kycStyles.docSub, { color: isDark ? '#64748B' : '#94A3B8' }]}>
-                                                {isUploaded ? '✓ Uploaded successfully' : doc.sub}
-                                            </Text>
-                                        </View>
-                                        <View style={[kycStyles.uploadChip, {
-                                            backgroundColor: isUploaded ? '#22C55E' : colors.primary,
-                                        }]}>
-                                            <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>
-                                                {isUploaded ? 'Change' : 'Upload'}
-                                            </Text>
-                                        </View>
-                                    </TouchableOpacity>
-                                );
-                            })}
-                        </View>
+                        <DriverKycDocsCard
+                            vehicleDocs={vehicleDocs}
+                            onUpload={handleFileUpload}
+                            loading={loading}
+                            isDark={isDark}
+                            primaryColor={colors.primary}
+                            textColor={colors.textColor}
+                        />
 
                         {/* Submit */}
                         {authError ? (
