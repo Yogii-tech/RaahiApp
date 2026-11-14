@@ -1,5 +1,6 @@
 module.exports = {
   preset: 'react-native',
+  testTimeout: 30000,
   transformIgnorePatterns: [
     'node_modules/(?!((jest-)?react-native|@react-native(-community)?|@react-native-async-storage|@react-native-firebase|@react-navigation|@sentry/react-native|react-native-vector-icons|react-native-safe-area-context|react-native-screens|react-native-maps|firebase|@firebase)/)',
   ],

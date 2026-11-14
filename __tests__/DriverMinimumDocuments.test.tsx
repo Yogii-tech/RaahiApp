@@ -140,6 +140,7 @@ describe('driverDocuments helper (3-document minimum)', () => {
 
 describe('3-document minimum flows across AdminDriversView, ResubmitDocsView, DriverKycDocsCard, and VehicleDetailsScreen', () => {
     const originalPlatformOs = Platform.OS;
+    let activeRenderer: renderer.ReactTestRenderer | null = null;
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -152,7 +153,14 @@ describe('3-document minimum flows across AdminDriversView, ResubmitDocsView, Dr
         });
     });
 
-    afterEach(() => {
+    afterEach(async () => {
+        if (activeRenderer) {
+            const toUnmount = activeRenderer;
+            activeRenderer = null;
+            await act(async () => {
+                toUnmount.unmount();
+            });
+        }
         (Platform as any).OS = originalPlatformOs;
     });
 
@@ -216,6 +224,7 @@ describe('3-document minimum flows across AdminDriversView, ResubmitDocsView, Dr
         let tree!: renderer.ReactTestRenderer;
         await act(async () => {
             tree = renderer.create(<AdminDriversView token="admin-token" />);
+            activeRenderer = tree;
             await flushMicrotasks();
         });
 
@@ -241,6 +250,7 @@ describe('3-document minimum flows across AdminDriversView, ResubmitDocsView, Dr
         const verifyCalls = mockFetchWithAuth.mock.calls.filter(([u]) => String(u).includes('/verify'));
         expect(verifyCalls).toHaveLength(0);
 
+        activeRenderer = null;
         await act(async () => {
             tree.unmount();
         });
@@ -277,6 +287,7 @@ describe('3-document minimum flows across AdminDriversView, ResubmitDocsView, Dr
         let tree!: renderer.ReactTestRenderer;
         await act(async () => {
             tree = renderer.create(<AdminDriversView token="admin-token" />);
+            activeRenderer = tree;
             await flushMicrotasks();
         });
 
@@ -334,6 +345,7 @@ describe('3-document minimum flows across AdminDriversView, ResubmitDocsView, Dr
         expect(secondVerifyCall).toBeDefined();
         expect(JSON.parse(secondVerifyCall![1].body as string)).toEqual({ status: 'verified', reason: '' });
 
+        activeRenderer = null;
         await act(async () => {
             tree.unmount();
         });
@@ -355,10 +367,16 @@ describe('3-document minimum flows across AdminDriversView, ResubmitDocsView, Dr
                     textColor="#111827"
                 />,
             );
+            activeRenderer = tree;
         });
 
         expect(flattenText(tree.root.findByProps({ testID: 'driver-docs-count-pill' }))).toBe('1/5');
         expect(flattenText(tree.root.findByProps({ testID: 'driver-docs-duplicate-warning' }))).toContain('Duplicate file URL');
+
+        activeRenderer = null;
+        await act(async () => {
+            tree.unmount();
+        });
     });
 
     test('ResubmitDocsView blocks < 3 docs and submits PUT /api/user/profile once 3 distinct docs are uploaded', async () => {
@@ -388,6 +406,7 @@ describe('3-document minimum flows across AdminDriversView, ResubmitDocsView, Dr
         let tree!: renderer.ReactTestRenderer;
         await act(async () => {
             tree = renderer.create(<ResubmitDocsView onClose={jest.fn()} disableBrowserBack />);
+            activeRenderer = tree;
             await flushMicrotasks();
         });
 
@@ -439,6 +458,7 @@ describe('3-document minimum flows across AdminDriversView, ResubmitDocsView, Dr
         expect(mockSetAuth).toHaveBeenCalledTimes(1);
         expect(flattenText(tree.root)).toContain('Documents Submitted!');
 
+        activeRenderer = null;
         await act(async () => {
             tree.unmount();
         });
@@ -468,6 +488,7 @@ describe('3-document minimum flows across AdminDriversView, ResubmitDocsView, Dr
         let tree!: renderer.ReactTestRenderer;
         await act(async () => {
             tree = renderer.create(<VehicleDetailsScreen onBack={jest.fn()} />);
+            activeRenderer = tree;
             await flushMicrotasks();
         });
 
@@ -486,6 +507,7 @@ describe('3-document minimum flows across AdminDriversView, ResubmitDocsView, Dr
         expect(missingOwnerRow.props.disabled).toBe(true);
         expect(flattenText(missingOwnerRow)).toContain('Not uploaded');
 
+        activeRenderer = null;
         await act(async () => {
             tree.unmount();
         });

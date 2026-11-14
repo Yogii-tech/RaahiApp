@@ -29,7 +29,7 @@ jobs:
       run: npx tsc --noEmit
 
     - name: Run Tests
-      run: npm test -- --watchAll=false --forceExit
+      run: npm test -- --watchAll=false --runInBand
 
     - name: Build
       run: |
