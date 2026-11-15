@@ -13,30 +13,30 @@ export interface ThemeColors {
   inputBorderColor: string;
 }
 
-export const darkColors: ThemeColors = {
+const darkColors: ThemeColors = {
   primary: '#1E90FF',
   secondary: '#00BFFF',
   background: '#181F2A',
-  cardColor: 'rgba(22, 32, 50, 0.58)',
-  borderColor: 'rgba(255, 255, 255, 0.16)',
+  cardColor: '#162032',
+  borderColor: 'rgba(30,144,255,0.2)',
   textColor: '#FFFFFF',
   subtextColor: 'rgba(255,255,255,0.7)',
   accentColor: '#00FFFF',
-  inputFillColor: 'rgba(15, 23, 42, 0.55)',
-  inputBorderColor: 'rgba(255, 255, 255, 0.16)',
+  inputFillColor: '#181F2A',
+  inputBorderColor: 'rgba(30,144,255,0.12)',
 };
 
-export const lightColors: ThemeColors = {
+const lightColors: ThemeColors = {
   primary: '#5B4FFF',
   secondary: '#00BFFF',
-  background: '#F4F7FF',
-  cardColor: 'rgba(255, 255, 255, 0.56)',
-  borderColor: 'rgba(255, 255, 255, 0.85)',
+  background: '#F8F9FF',
+  cardColor: '#FFFFFF',
+  borderColor: 'rgba(91,79,255,0.12)',
   textColor: '#222260',
-  subtextColor: 'rgba(34,34,96,0.72)',
+  subtextColor: 'rgba(34,34,96,0.7)',
   accentColor: '#00BFFF',
-  inputFillColor: 'rgba(255, 255, 255, 0.62)',
-  inputBorderColor: 'rgba(255, 255, 255, 0.85)',
+  inputFillColor: '#F8F9FF',
+  inputBorderColor: 'rgba(91,79,255,0.10)',
 };
 
 interface ThemeContextType {

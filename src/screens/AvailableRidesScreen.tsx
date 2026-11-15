@@ -13,7 +13,6 @@ import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { API_BASE } from '../apiConfig';
 import BackButton from '../components/BackButton';
-import { GLASS_TOKENS, getGlassSurfaceStyle } from '../styles/glassmorphism';
 
 // Hardcoded coordinates for villages missing from OSM/Nominatim
 const KNOWN_LOCATIONS: Record<string, { lat: string; lon: string }> = {
@@ -223,7 +222,7 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ searchPicku
         return (
             <View>
                 {showCommonPointDivider && (
-                    <View style={[styles.sectionHeader, { borderTopColor: GLASS_TOKENS[isDark ? 'dark' : 'light'].hairlineDivider }]}>
+                    <View style={[styles.sectionHeader, { borderTopColor: colors.borderColor }]}>
                         <Text style={[styles.sectionHeaderTitle, { color: colors.textColor }]}>
                             Other Drivers from Common Point
                         </Text>
@@ -233,7 +232,7 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ searchPicku
                     </View>
                 )}
                 <TouchableOpacity
-                    style={[styles.rideCard, getGlassSurfaceStyle(isDark, 'card')]}
+                    style={[styles.rideCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}
                     onPress={() => onSelectRide(item)}>
                     {item.isPartialMatch && (
                         <View
@@ -276,7 +275,7 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ searchPicku
                     </View>
 
                     {Array.isArray(item.route) && item.route.length > 2 && (
-                        <View style={[styles.stopsPreview, { borderTopColor: GLASS_TOKENS[isDark ? 'dark' : 'light'].hairlineDivider }]}>
+                        <View style={[styles.stopsPreview, { borderTopColor: colors.borderColor }]}>
                             <Text style={[styles.stopsPreviewText, { color: colors.subtextColor }]}>
                                 {item.route.filter(Boolean).join(' → ')}
                             </Text>
@@ -285,25 +284,16 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ searchPicku
 
                     {/* Date & Time Row */}
                     <View style={styles.dateTimeRow}>
-                        <View style={[styles.dateTimeChip, getGlassSurfaceStyle(isDark, 'pill')]}>
+                        <View style={styles.dateTimeChip}>
                             <Text style={styles.dateTimeChipIcon}>📅</Text>
                             <Text style={[styles.dateTimeChipText, { color: colors.textColor }]}>{item.date || t('available.noDate')}</Text>
                         </View>
-                        <View style={[styles.dateTimeChip, getGlassSurfaceStyle(isDark, 'pill'), { marginLeft: 10 }]}>
+                        <View style={[styles.dateTimeChip, { marginLeft: 10 }]}>
                             <Text style={styles.dateTimeChipIcon}>🕒</Text>
                             <Text style={[styles.dateTimeChipText, { color: colors.textColor }]}>{item.departureTime || '—'}</Text>
                         </View>
                         {item.segmentDistanceKm && item.segmentDistanceKm > 0 ? (
-                            <View
-                                style={[
-                                    styles.dateTimeChip,
-                                    getGlassSurfaceStyle(isDark, 'pill'),
-                                    {
-                                        marginLeft: 10,
-                                        backgroundColor: isDark ? 'rgba(0, 200, 83, 0.16)' : 'rgba(0, 200, 83, 0.12)',
-                                        borderColor: 'rgba(0, 200, 83, 0.35)',
-                                    },
-                                ]}>
+                            <View style={[styles.dateTimeChip, { marginLeft: 10, backgroundColor: 'rgba(0, 200, 83, 0.12)' }]}>
                                 <Text style={styles.dateTimeChipIcon}>📏</Text>
                                 <Text style={[styles.dateTimeChipText, { color: '#00C853' }]}>~ {Math.round(item.segmentDistanceKm)} km</Text>
                             </View>
@@ -322,7 +312,7 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ searchPicku
                         </View>
                         <View style={styles.seatsInfo}>
                             <Text style={[styles.seatsLeft, { color: '#00C853' }]}>{Math.max(0, (item.seatsTotal || 0) - (item.takenSeats?.length || 0))} {t('available.seatsLeft')}</Text>
-                            <View style={[styles.arrowBtn, getGlassSurfaceStyle(isDark, 'pill'), { marginTop: 4 }]}>
+                            <View style={[styles.arrowBtn, { backgroundColor: colors.borderColor, marginTop: 4 }]}>
                                 <Text style={[styles.arrowText, { color: colors.textColor }]}>›</Text>
                             </View>
                         </View>
@@ -333,7 +323,7 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ searchPicku
     };
 
     return (
-        <View style={[styles.container, { backgroundColor: 'transparent' }]}>
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
             <View style={styles.header}>
                 <BackButton onPress={onBack} variant="pill" />
                 <Text style={[styles.routeDetails, { color: colors.subtextColor }]}>{t('available.routeDetails')}</Text>
@@ -344,7 +334,6 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ searchPicku
                     <View
                         style={[
                             styles.sortBadge,
-                            getGlassSurfaceStyle(isDark, 'pill'),
                             {
                                 backgroundColor: isDark ? 'rgba(0, 200, 83, 0.14)' : 'rgba(0, 200, 83, 0.1)',
                                 borderColor: 'rgba(0, 200, 83, 0.35)',
@@ -380,7 +369,6 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ searchPicku
                             <View
                                 style={[
                                     styles.commonPointBanner,
-                                    getGlassSurfaceStyle(isDark, 'card'),
                                     {
                                         backgroundColor: isDark ? 'rgba(255, 179, 0, 0.12)' : 'rgba(255, 143, 0, 0.1)',
                                         borderColor: '#FFB300',

@@ -4,7 +4,6 @@ import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
 import { notify } from '../../utils/notify';
 import { parseJsonSafe, getApiErrorMessage, createRequestAbort } from '../../utils/json';
-import { getGlassSurfaceStyle } from '../../styles/glassmorphism';
 
 const REPORTS = [
     { label: 'Daily Bookings', type: 'daily_bookings', icon: '📋' },
@@ -77,7 +76,7 @@ export default function AdminReportsView({ token: _token }: { token: string }) {
                     const isDownloading = downloadingReport === report.type;
                     const isBusy = downloadingReport !== null;
                     return (
-                        <View key={report.type} style={[styles.card, isMobile && { minWidth: '100%', padding: 20 }, getGlassSurfaceStyle(true, 'card')]}>
+                        <View key={report.type} style={[styles.card, isMobile && { minWidth: '100%', padding: 20 }]}>
                             <Text style={styles.cardIcon}>{report.icon}</Text>
                             <Text style={styles.cardLabel}>{report.label}</Text>
                             <TouchableOpacity

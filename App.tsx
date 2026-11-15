@@ -33,11 +33,6 @@ import RequestsOverlay from './src/screens/RequestsOverlay';
 import AccountScreen from './src/screens/AccountScreen';
 import MapScreen from './src/screens/MapScreen';
 import BrandLogo from './src/components/BrandLogo';
-import {
-  GLASS_TOKENS,
-  GlassBackdrop,
-  getGlassSurfaceStyle,
-} from './src/styles/glassmorphism';
 import ChatScreen from './src/screens/ChatScreen';
 import ResubmitDocsView from './src/screens/ResubmitDocsView';
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -95,9 +90,9 @@ export function AppHeader({ onToggleNotifications, notificationCount = 0, onPres
     <View
       style={[
         headerStyles.container,
-        getGlassSurfaceStyle(isDark, 'header'),
         {
           paddingTop: insets.top + 12,
+          backgroundColor: colors.background,
         },
       ]}>
       {/* Clickable Logo and Title */}
@@ -115,8 +110,11 @@ export function AppHeader({ onToggleNotifications, notificationCount = 0, onPres
       <TouchableOpacity
         onPress={toggleTheme}
         style={[
-          getGlassSurfaceStyle(isDark, 'pill'),
           headerStyles.themeButton,
+          {
+            backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(91, 79, 255, 0.05)',
+            borderColor: 'transparent',
+          },
         ]}
         activeOpacity={0.7}>
         <Icon name={isDark ? 'sunny-outline' : 'moon-outline'} size={22} color={isDark ? '#FBC02D' : '#5B4FFF'} />
@@ -127,8 +125,11 @@ export function AppHeader({ onToggleNotifications, notificationCount = 0, onPres
       <TouchableOpacity
         onPress={onToggleNotifications}
         style={[
-          getGlassSurfaceStyle(isDark, 'pill'),
           headerStyles.themeButton,
+          {
+            backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(91, 79, 255, 0.05)',
+            borderColor: 'transparent',
+          },
         ]}
         activeOpacity={0.7}>
         <View>
@@ -150,7 +151,6 @@ const headerStyles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingBottom: 16,
-    zIndex: 20,
   },
   spacer: {
     flex: 1,
@@ -159,8 +159,12 @@ const headerStyles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
+    borderWidth: 1.5,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 3,
   },
   themeIcon: {
     fontSize: 18,
@@ -486,11 +490,8 @@ function MainTabs() {
     }
   };
 
-  const backdropPalette = isDark ? GLASS_TOKENS.dark : GLASS_TOKENS.light;
-
   return (
-    <View style={{ flex: 1, backgroundColor: backdropPalette.canvas }}>
-      <GlassBackdrop isDark={isDark} />
+    <View style={{ flex: 1 }}>
       {(
         <AppHeader
           notificationCount={notificationCount}
@@ -519,7 +520,6 @@ function MainTabs() {
         }}
         screenOptions={({ route }) => ({
           headerShown: false,
-          sceneStyle: { backgroundColor: 'transparent' },
           tabBarIcon: ({ focused }) => {
             const isParcelMode = user?.role === 'parceller' || parcelMode;
             const isParcelTrips = route.name === 'Trips' && isParcelMode;
@@ -546,10 +546,11 @@ function MainTabs() {
           tabBarActiveTintColor: colors.primary,
           tabBarInactiveTintColor: colors.subtextColor,
           tabBarStyle: {
-            ...getGlassSurfaceStyle(isDark, 'tabBar'),
             height: 60,
             paddingBottom: 8,
-            display: notificationsVisible || activeChat || rekycVisible ? 'none' : 'flex',
+            backgroundColor: colors.background,
+            borderTopColor: colors.borderColor,
+            display: notificationsVisible || activeChat || rekycVisible ? 'none' : 'flex'
           },
         })}
       >
@@ -588,20 +589,7 @@ function MainTabs() {
       </Tab.Navigator>
 
       {notificationsVisible && (
-        <View
-          style={[
-            StyleSheet.absoluteFill,
-            getGlassSurfaceStyle(isDark, 'modal'),
-            {
-              top: insets.top + 64,
-              bottom: 0,
-              backgroundColor: backdropPalette.backdropOverlay,
-              borderWidth: 0,
-              zIndex: 100,
-              elevation: 10,
-            },
-          ]}
-        >
+        <View style={[StyleSheet.absoluteFill, { top: insets.top + 64, bottom: 0, backgroundColor: colors.background, zIndex: 100, elevation: 10 }]}>
           <RequestsOverlay
             onClose={() => closeAllOverlays(true)}
             onOpenChat={(booking) => openOverlay('chat', booking)}
@@ -628,16 +616,7 @@ function MainTabs() {
       )}
 
       {rekycVisible && (
-        <View
-          style={[
-            StyleSheet.absoluteFill,
-            {
-              zIndex: 1100,
-              elevation: 1100,
-              backgroundColor: backdropPalette.canvas,
-            },
-          ]}
-        >
+        <View style={[StyleSheet.absoluteFill, { zIndex: 1100, elevation: 1100, backgroundColor: colors.background }]}>
           <ResubmitDocsView
             disableBrowserBack
             onClose={() => closeAllOverlays(true)}

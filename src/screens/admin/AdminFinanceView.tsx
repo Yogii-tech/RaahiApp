@@ -5,7 +5,6 @@ import { useAuth } from '../../context/AuthContext';
 import { downloadCSV } from '../../utils/exportUtils';
 import { notify } from '../../utils/notify';
 import { parseJsonSafe, createRequestAbort } from '../../utils/json';
-import { getGlassSurfaceStyle } from '../../styles/glassmorphism';
 
 interface FinancialTransaction {
     id: string;
@@ -174,7 +173,7 @@ export default function AdminFinanceView({ token: _token, searchQuery = '', isDa
     }
 
     return (
-        <ScrollView style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: 'transparent' }]} contentContainerStyle={{ paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
+        <ScrollView style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: T.bg }]} contentContainerStyle={{ paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
             <View style={[styles.headerRow, isMobile && { flexDirection: 'column', alignItems: 'flex-start', gap: 12 }]}>
                 <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={[styles.sectionTitle, { color: T.text }]}>Commission & Settlement</Text>
@@ -184,7 +183,7 @@ export default function AdminFinanceView({ token: _token, searchQuery = '', isDa
                 </View>
                 <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
                     <TouchableOpacity
-                        style={[getGlassSurfaceStyle(isDark, 'pill'), styles.optBtn, refreshing && { opacity: 0.6 }]}
+                        style={[styles.optBtn, { backgroundColor: T.card, borderColor: T.border }, refreshing && { opacity: 0.6 }]}
                         onPress={() => loadRides(true)}
                         disabled={refreshing}
                     >
@@ -220,7 +219,7 @@ export default function AdminFinanceView({ token: _token, searchQuery = '', isDa
                     { label: 'Settled Driver Payouts', amount: `₹${settledPayouts.toLocaleString()}`, color: '#3B7DDD', bg: T.card },
                     { label: 'Pending Settlement Balance', amount: `₹${pendingSettlements.toLocaleString()}`, color: '#FCB92C', bg: T.card },
                 ].map((card, i) => (
-                    <View key={i} style={[getGlassSurfaceStyle(isDark, 'card'), styles.summaryCard, isMobile && { minWidth: 140, padding: 14 }]}>
+                    <View key={i} style={[styles.summaryCard, isMobile && { minWidth: 140, padding: 14 }, { backgroundColor: card.bg, borderColor: T.border }]}>
                         <Text style={[styles.summaryLabel, { color: T.subtext }]}>{card.label}</Text>
                         <Text style={[styles.summaryAmount, isMobile && { fontSize: 18 }, { color: card.color }]}>{card.amount}</Text>
                     </View>
@@ -230,7 +229,7 @@ export default function AdminFinanceView({ token: _token, searchQuery = '', isDa
             {/* Row 2: Settings + Quick Settlement Action */}
             <View style={[styles.rowLayout, isMobile && { gap: 14 }]}>
                 {/* Commission Rates config */}
-                <View style={[getGlassSurfaceStyle(isDark, 'card'), styles.configCard, isMobile && { minWidth: '100%', padding: 16 }]}>
+                <View style={[styles.configCard, isMobile && { minWidth: '100%', padding: 16 }, { backgroundColor: T.card, borderColor: T.border }]}>
                     <Text style={[styles.cardTitle, { color: T.text }]}>Platform Rate configuration</Text>
                     <Text style={[styles.cardSubtitle, { color: T.subtext }]}>
                         This percentage is deducted from driver fare amounts for system usage.
@@ -238,7 +237,7 @@ export default function AdminFinanceView({ token: _token, searchQuery = '', isDa
                     <View style={[styles.inputRow, { flexWrap: 'wrap' }]}>
                         <View style={styles.inputWrapper}>
                             <TextInput
-                                style={[getGlassSurfaceStyle(isDark, 'input'), styles.input, { color: T.text }]}
+                                style={[styles.input, { color: T.text, borderColor: T.border }]}
                                 value={commissionRate}
                                 onChangeText={setCommissionRate}
                                 keyboardType="numeric"
@@ -257,7 +256,7 @@ export default function AdminFinanceView({ token: _token, searchQuery = '', isDa
                 </View>
 
                 {/* Auto Settlement Config */}
-                <View style={[getGlassSurfaceStyle(isDark, 'card'), styles.configCard, isMobile && { minWidth: '100%', padding: 16 }]}>
+                <View style={[styles.configCard, isMobile && { minWidth: '100%', padding: 16 }, { backgroundColor: T.card, borderColor: T.border }]}>
                     <Text style={[styles.cardTitle, { color: T.text }]}>Settlement Schedule (Preview Only)</Text>
                     <Text style={[styles.cardSubtitle, { color: T.subtext }]}>
                         Demo UI only — automated bank settlement triggers are not connected to a backend payout service.
@@ -303,7 +302,7 @@ export default function AdminFinanceView({ token: _token, searchQuery = '', isDa
                 <Text style={{ fontSize: 13, color: T.subtext }}>Showing {filteredTx.length} items</Text>
             </View>
 
-            <View style={[getGlassSurfaceStyle(isDark, 'card'), styles.tableCard]}>
+            <View style={[styles.tableCard, { backgroundColor: T.card, borderColor: T.border }]}>
                 {isMobile ? (
                     filteredTx.length === 0 ? (
                         <Text style={{ color: T.subtext, textAlign: 'center', padding: 40 }}>

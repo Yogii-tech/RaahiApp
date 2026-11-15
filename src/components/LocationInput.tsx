@@ -18,7 +18,6 @@ import {
     FORM_INPUT_TEXT_TYPOGRAPHY,
     FORM_INPUT_BOX_METRICS,
 } from '../styles/formTypography';
-import { GLASS_TOKENS, getGlassSurfaceStyle } from '../styles/glassmorphism';
 
 interface GeoResult {
     place_id: string | number;
@@ -300,9 +299,6 @@ const LocationInput: React.FC<LocationInputProps> = ({
 
     const displayList = suggestions.length > 0 ? suggestions : popular;
     const shouldShow = showDropdown && (displayList.length > 0 || loading);
-    const hairlineDivider = isDark
-        ? GLASS_TOKENS.dark.hairlineDivider
-        : GLASS_TOKENS.light.hairlineDivider;
 
     return (
         <View style={[styles.container, { zIndex: containerZIndex !== undefined ? containerZIndex : 100 }]}>
@@ -311,7 +307,6 @@ const LocationInput: React.FC<LocationInputProps> = ({
             </Text>
             <View style={styles.spacer6} />
             <View style={[
-                getGlassSurfaceStyle(isDark, 'input'),
                 styles.inputWrapper,
                 {
                     backgroundColor: colors.inputFillColor,
@@ -353,10 +348,11 @@ const LocationInput: React.FC<LocationInputProps> = ({
             {shouldShow && (
                 <View
                     style={[
-                        getGlassSurfaceStyle(isDark, 'elevated'),
                         styles.dropdown,
                         {
-                            shadowColor: isDark ? '#000' : colors.primary,
+                            backgroundColor: colors.cardColor,
+                            borderColor: colors.borderColor,
+                            shadowColor: isDark ? '#000' : colors.primary
                         }
                     ]}
                     // Web-only: track mousedown so blur doesn't close dropdown before click fires
@@ -391,7 +387,7 @@ const LocationInput: React.FC<LocationInputProps> = ({
                         keyExtractor={(item, index) => item.place_id?.toString() || index.toString()}
                         renderItem={({ item }) => (
                             <TouchableOpacity
-                                style={[styles.item, { borderBottomColor: hairlineDivider }]}
+                                style={[styles.item, { borderBottomColor: colors.borderColor }]}
                                 onPress={() => handleSelect(item)}>
                                 <View style={styles.itemIconContainer}>
                                     <Text style={styles.itemIcon}>{suggestions.length > 0 ? '📍' : '✨'}</Text>

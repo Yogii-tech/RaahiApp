@@ -22,7 +22,6 @@ import { parseJsonSafe, getApiErrorMessage, createRequestAbort } from '../utils/
 import { notify, confirmAction } from '../utils/notify';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import BackButton from '../components/BackButton';
-import { GlassBackdrop, getGlassSurfaceStyle } from '../styles/glassmorphism';
 
 interface Message {
     id: string;
@@ -263,7 +262,7 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
                     styles.bubble,
                     isMe ?
                         { backgroundColor: colors.primary, borderBottomRightRadius: 4 } :
-                        [getGlassSurfaceStyle(isDark, 'card'), { borderBottomLeftRadius: 4 }]
+                        { backgroundColor: isDark ? '#2C3E50' : '#F1F3F4', borderBottomLeftRadius: 4 }
                 ]}>
                     <Text style={[styles.messageText, { color: isMe ? '#FFFFFF' : colors.textColor }]}>
                         {item.text}
@@ -288,7 +287,6 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
 
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
-            <GlassBackdrop isDark={isDark} />
             {/* Header */}
             <View style={[styles.header, { backgroundColor: colors.primary }]}>
                 <BackButton
@@ -339,11 +337,7 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
             </View>
 
             {/* Sub-header */}
-            <View style={[
-                getGlassSurfaceStyle(isDark, 'header'),
-                styles.subHeader,
-                { backgroundColor: isDark ? 'rgba(28, 41, 57, 0.72)' : 'rgba(232, 240, 254, 0.72)' },
-            ]}>
+            <View style={[styles.subHeader, { backgroundColor: isDark ? '#1C2939' : '#E8F0FE', borderBottomColor: colors.borderColor }]}>
                 <Text style={[styles.subHeaderText, { color: colors.primary }]}>
                     ● {user?.role === 'driver' ? `${t('chat.passenger')}: ` : `${t('chat.driver')}: `}{recipientName}  •  {seatInfo || 'Seat 2A'}  •  Dep. {departureTime}
                 </Text>
@@ -401,7 +395,7 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
                         data={quickReplies}
                         renderItem={({ item }) => (
                             <TouchableOpacity
-                                style={[getGlassSurfaceStyle(isDark, 'pill'), styles.quickReplyPill, isSending && { opacity: 0.5 }]}
+                                style={[styles.quickReplyPill, { borderColor: colors.borderColor }, isSending && { opacity: 0.5 }]}
                                 disabled={isSending}
                                 onPress={() => handleSend(item.text)}>
                                 <Text style={[styles.quickReplyText, { color: colors.textColor }]}>{item.label}</Text>
@@ -411,10 +405,10 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
                 </View>
 
                 {/* Input Bar */}
-                <View style={[getGlassSurfaceStyle(isDark, 'tabBar'), styles.inputBar]}>
+                <View style={[styles.inputBar, { backgroundColor: isDark ? '#1C2939' : '#FFFFFF', borderTopColor: colors.borderColor }]}>
 
                     <TextInput
-                        style={[getGlassSurfaceStyle(isDark, 'input'), styles.input, { color: colors.textColor }]}
+                        style={[styles.input, { color: colors.textColor, backgroundColor: isDark ? '#2C3E50' : '#F1F3F4' }]}
                         placeholder={t('chat.typePlaceholder')}
                         placeholderTextColor={colors.subtextColor}
                         value={inputText}

@@ -11,7 +11,6 @@ import {
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
-import { GLASS_TOKENS, getGlassSurfaceStyle } from '../styles/glassmorphism';
 
 export type BackButtonVariant = 'pill' | 'icon' | 'link';
 export type BackButtonTone = 'default' | 'inverted';
@@ -62,13 +61,6 @@ export const BackButton: React.FC<BackButtonProps> = ({
     const borderColor =
         colors.borderColor || (isDark ? DEFAULT_DARK_BORDER : DEFAULT_LIGHT_BORDER);
 
-    const glassPill = getGlassSurfaceStyle(isDark, 'pill');
-    const isSolidPill = tone === 'default' && variant !== 'link';
-    const basePillBg =
-        colors.cardColor && colors.cardColor !== '#FFFFFF' && colors.cardColor !== '#162032'
-            ? glassPill.backgroundColor
-            : cardBg;
-
     let backgroundColor = 'transparent';
     let resolvedBorderColor = 'transparent';
     let foregroundColor = primaryColor;
@@ -95,14 +87,10 @@ export const BackButton: React.FC<BackButtonProps> = ({
     } else {
         backgroundColor = isInteractive
             ? isDark
-                ? 'rgba(30, 144, 255, 0.24)'
-                : 'rgba(243, 241, 255, 0.92)'
-            : (basePillBg as string);
-        resolvedBorderColor = isInteractive
-            ? primaryColor
-            : isDark
-              ? GLASS_TOKENS.dark.specularBorder
-              : GLASS_TOKENS.light.hairlineDivider;
+                ? 'rgba(30, 144, 255, 0.16)'
+                : '#F3F1FF'
+            : cardBg;
+        resolvedBorderColor = isInteractive ? primaryColor : borderColor;
         foregroundColor = isInteractive ? primaryColor : textColor;
     }
 
@@ -161,10 +149,6 @@ export const BackButton: React.FC<BackButtonProps> = ({
             style={[
                 styles.base,
                 surfaceStyle,
-                isSolidPill ? glassPill : undefined,
-                variant !== 'link' && tone === 'inverted' && Platform.OS === 'web'
-                    ? ({ backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' } as any)
-                    : undefined,
                 elevationStyle,
                 {
                     backgroundColor,

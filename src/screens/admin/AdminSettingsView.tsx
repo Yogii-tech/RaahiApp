@@ -3,7 +3,6 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, TextInput
 import { useAuth } from '../../context/AuthContext';
 import { notify } from '../../utils/notify';
 import SignOutConfirmModal, { useSignOutConfirmation } from './SignOutConfirmModal';
-import { getGlassSurfaceStyle } from '../../styles/glassmorphism';
 
 interface AdminUserEntry {
     id: string;
@@ -106,7 +105,7 @@ export default function AdminSettingsView({ isDark, activeTab: initialTab = 'adm
 
     const renderAdminsTab = () => (
         <View>
-            <View style={[getGlassSurfaceStyle(isDark, 'card'), styles.tabCard, isMobile && { padding: 16 }]}>
+            <View style={[styles.tabCard, isMobile && { padding: 16 }, { backgroundColor: T.card, borderColor: T.border }]}>
                 <View style={[styles.tabCardHeader, isMobile && { flexDirection: 'column', alignItems: 'flex-start', gap: 12 }]}>
                     <View style={{ flex: 1, minWidth: 0, paddingRight: isMobile ? 0 : 12 }}>
                         <Text style={[styles.tabCardTitle, { color: T.text }]}>Admin User Accounts</Text>
@@ -160,7 +159,7 @@ export default function AdminSettingsView({ isDark, activeTab: initialTab = 'adm
     );
 
     const renderPermissionsTab = () => (
-        <View style={[getGlassSurfaceStyle(isDark, 'card'), styles.tabCard, isMobile && { padding: 16 }]}>
+        <View style={[styles.tabCard, isMobile && { padding: 16 }, { backgroundColor: T.card, borderColor: T.border }]}>
             <View style={[styles.tabCardHeader, isMobile && { flexDirection: 'column', alignItems: 'flex-start', gap: 12 }]}>
                 <View style={{ flex: 1, minWidth: 0, paddingRight: isMobile ? 0 : 12 }}>
                     <Text style={[styles.tabCardTitle, { color: T.text }]}>Module Access Permissions (Admin Role)</Text>
@@ -202,7 +201,7 @@ export default function AdminSettingsView({ isDark, activeTab: initialTab = 'adm
     const renderSettingsTab = () => (
         <View style={{ gap: 24 }}>
             {/* Platform Config */}
-            <View style={[getGlassSurfaceStyle(isDark, 'card'), styles.tabCard, isMobile && { padding: 16 }]}>
+            <View style={[styles.tabCard, isMobile && { padding: 16 }, { backgroundColor: T.card, borderColor: T.border }]}>
                 <Text style={[styles.tabCardTitle, { color: T.text, marginBottom: 4 }]}>Platform Configuration</Text>
                 <Text style={[styles.tabCardSubtitle, { color: T.subtext, marginBottom: 20 }]}>Core system settings for the GoRaahi platform.</Text>
 
@@ -217,7 +216,7 @@ export default function AdminSettingsView({ isDark, activeTab: initialTab = 'adm
                         <Text style={[styles.settingLabel, { color: T.subtext }]}>{setting.label}</Text>
                         {setting.editable ? (
                             <TextInput
-                                style={[getGlassSurfaceStyle(isDark, 'input'), styles.settingInput, isMobile && { width: '100%' }, { color: T.text }]}
+                                style={[styles.settingInput, isMobile && { width: '100%' }, { color: T.text, borderColor: T.border, backgroundColor: T.input }]}
                                 value={setting.value}
                                 onChangeText={val => setPlatformConfig(prev => ({ ...prev, [setting.key]: val }))}
                             />
@@ -229,7 +228,7 @@ export default function AdminSettingsView({ isDark, activeTab: initialTab = 'adm
             </View>
 
             {/* Route Pricing Multipliers */}
-            <View style={[getGlassSurfaceStyle(isDark, 'card'), styles.tabCard, isMobile && { padding: 16 }]}>
+            <View style={[styles.tabCard, isMobile && { padding: 16 }, { backgroundColor: T.card, borderColor: T.border }]}>
                 <Text style={[styles.tabCardTitle, { color: T.text, marginBottom: 4 }]}>Route Pricing Multipliers</Text>
                 <Text style={[styles.tabCardSubtitle, { color: T.subtext, marginBottom: 20 }]}>Adjust the fare multiplier per corridor to account for seasonality or demand surges.</Text>
 
@@ -238,7 +237,7 @@ export default function AdminSettingsView({ isDark, activeTab: initialTab = 'adm
                         <Text style={[styles.settingLabel, { color: T.text, minWidth: 140 }]}>{route}</Text>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                             <TextInput
-                                style={[getGlassSurfaceStyle(isDark, 'input'), styles.settingInput, { color: T.text, width: 72 }]}
+                                style={[styles.settingInput, { color: T.text, borderColor: T.border, backgroundColor: T.input, width: 72 }]}
                                 value={multiplier}
                                 onChangeText={val => setRouteMultipliers(prev => ({ ...prev, [route]: val }))}
                                 keyboardType="numeric"
@@ -250,7 +249,7 @@ export default function AdminSettingsView({ isDark, activeTab: initialTab = 'adm
             </View>
 
             {/* Danger Zone */}
-            <View style={[getGlassSurfaceStyle(isDark, 'card'), styles.tabCard, isMobile && { padding: 16 }, { borderColor: '#DC354520' }]}>
+            <View style={[styles.tabCard, isMobile && { padding: 16 }, { backgroundColor: T.card, borderColor: '#DC354520' }]}>
                 <Text style={[styles.tabCardTitle, { color: '#DC3545', marginBottom: 4 }]}>Danger Zone</Text>
                 <Text style={[styles.tabCardSubtitle, { color: T.subtext, marginBottom: 20 }]}>
                     Destructive admin actions are disabled in Preview / Demo Mode. Sign Out remains active.
@@ -281,7 +280,7 @@ export default function AdminSettingsView({ isDark, activeTab: initialTab = 'adm
 
     return (
         <>
-            <ScrollView style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: 'transparent' }]} contentContainerStyle={{ paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
+            <ScrollView style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: T.bg }]} contentContainerStyle={{ paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
             {/* Page Header */}
             <View style={styles.pageHeader}>
                 <Text style={[styles.pageTitle, { color: T.text }]}>System Administration</Text>

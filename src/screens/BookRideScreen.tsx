@@ -21,7 +21,6 @@ import { parseJsonSafe, getApiErrorMessage, createRequestAbort } from '../utils/
 import { notify } from '../utils/notify';
 import { useBrowserBack } from '../utils/browserHistory';
 import ScreenHeader from '../components/ScreenHeader';
-import { getGlassSurfaceStyle } from '../styles/glassmorphism';
 
 interface BookRideScreenProps {
     ride: {
@@ -257,7 +256,7 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
     };
 
     return (
-        <ScrollView style={[styles.container, { backgroundColor: 'transparent' }]}>
+        <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
             <ScreenHeader
                 title={t('book.bookMySeat')}
                 onBack={onBack}
@@ -271,8 +270,10 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
                     <View
                         style={[
                             styles.headerInfoRow,
-                            getGlassSurfaceStyle(isDark, 'card'),
                             {
+                                backgroundColor: colors.cardColor,
+                                borderWidth: 1,
+                                borderColor: colors.borderColor,
                                 justifyContent: 'space-between',
                             },
                         ]}>
@@ -292,7 +293,6 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
                     <View
                         style={[
                             styles.partialSegmentNotice,
-                            getGlassSurfaceStyle(isDark, 'card'),
                             {
                                 backgroundColor: isDark ? 'rgba(255, 179, 0, 0.12)' : 'rgba(255, 143, 0, 0.1)',
                                 borderColor: '#FFB300',
@@ -318,7 +318,7 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
                     departureTime={ride.departureTime}
                 />
 
-                <View style={[styles.logisticsCard, getGlassSurfaceStyle(isDark, 'card')]}>
+                <View style={[styles.logisticsCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}>
                     <Text style={[styles.logisticsTitle, { color: colors.subtextColor }]}>{t('book.hillLogistics')}</Text>
                     <View style={styles.toggleRow}>
                         <Text style={styles.toggleIcon}>🧳</Text>
@@ -348,7 +348,7 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
                 animationType="fade"
                 onRequestClose={dismissSuccessModal}>
                 <View style={styles.modalOverlay}>
-                    <View style={[styles.modalContent, getGlassSurfaceStyle(isDark, 'modal')]}>
+                    <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
                         <View style={styles.successIconContainer}>
                             <Text style={styles.successIcon}>✓</Text>
                         </View>
@@ -572,9 +572,7 @@ const styles = StyleSheet.create({
         marginBottom: 30,
     },
     bookingIdCard: {
-        backgroundColor: 'rgba(17, 24, 34, 0.92)',
-        borderWidth: 1,
-        borderColor: 'rgba(0, 191, 165, 0.3)',
+        backgroundColor: '#111822',
         width: '100%',
         borderRadius: 16,
         padding: 20,

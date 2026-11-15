@@ -5,7 +5,6 @@ import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
 import { confirmAction, notify } from '../../utils/notify';
 import { parseJsonSafe, getApiErrorMessage, createRequestAbort } from '../../utils/json';
-import { getGlassSurfaceStyle } from '../../styles/glassmorphism';
 
 interface UserStats {
      total: number;
@@ -166,7 +165,7 @@ export default function AdminVisitorsDetailView({ isDark, searchQuery = '' }: { 
      };
 
      return (
-          <ScrollView style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: 'transparent' }]} showsVerticalScrollIndicator={false}>
+          <ScrollView style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: T.bg }]} showsVerticalScrollIndicator={false}>
                <View style={[styles.header, isMobile && { flexDirection: 'column', alignItems: 'flex-start', gap: 12 }]}>
                     <Text style={[styles.headerTitle, { color: T.text }]}>Visitors / Users Overview</Text>
                     <View style={[styles.headerButtons, { flexWrap: 'wrap', gap: 8 }]}>
@@ -200,7 +199,7 @@ export default function AdminVisitorsDetailView({ isDark, searchQuery = '' }: { 
                          { label: 'Drivers', count: userStats?.drivers ?? 0, icon: '🚗', color: '#28A745' },
                          { label: 'Passengers', count: userStats?.passengers ?? 0, icon: '🧳', color: '#FCB92C' },
                     ].map(card => (
-                         <View key={card.label} style={[getGlassSurfaceStyle(isDark, 'card'), styles.statCard, isMobile && { minWidth: 140, padding: 16 }]}>
+                         <View key={card.label} style={[styles.statCard, isMobile && { minWidth: 140, padding: 16 }, { backgroundColor: T.card, borderColor: T.border }]}>
                               <Text style={{ fontSize: 28, marginBottom: 12 }}>{card.icon}</Text>
                               <Text style={{ color: card.color, fontSize: 28, fontWeight: 'bold', marginBottom: 4 }}>
                                    {card.count.toLocaleString()}
@@ -211,7 +210,7 @@ export default function AdminVisitorsDetailView({ isDark, searchQuery = '' }: { 
                </View>
 
                {/* User Table */}
-               <View style={[getGlassSurfaceStyle(isDark, 'card'), styles.tablePanel, isMobile && { padding: 16 }]}>
+               <View style={[styles.tablePanel, isMobile && { padding: 16 }, { backgroundColor: T.card, borderColor: T.border }]}>
                     <Text style={[styles.tableTitle, { color: T.text }]}>User Registry</Text>
 
                     {!isMobile && (

@@ -25,7 +25,6 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import { pushSubViewHistory, popSubViewHistory, useBrowserBack } from '../utils/browserHistory';
 import BackButton from '../components/BackButton';
 import ScreenHeader from '../components/ScreenHeader';
-import { GlassBackdrop, getGlassSurfaceStyle } from '../styles/glassmorphism';
 
 export type LoginStep =
     | 'phone'
@@ -738,8 +737,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
     // ─── Document Submitted Success Screen ─────────────────────────────
     if (showDocSubmittedModal) {
         return (
-            <View style={[styles.container, { backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center', padding: 28 }]}>
-                <GlassBackdrop isDark={isDark} />
+            <View style={[styles.container, { backgroundColor: isDark ? '#0A1628' : '#F0F7FF', justifyContent: 'center', alignItems: 'center', padding: 28 }]}>
                 {/* Glow ring */}
                 <View style={{
                     width: 140, height: 140, borderRadius: 70,
@@ -831,9 +829,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
     if (step === 'vehicle') {
         return (
             <KeyboardAvoidingView
-                style={[styles.container, { backgroundColor: colors.background }]}
+                style={[styles.container, { backgroundColor: isDark ? '#0F172A' : '#F8FAFC' }]}
                 behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-                <GlassBackdrop isDark={isDark} />
                 <ScrollView
                     style={{ flex: 1 }}
                     contentContainerStyle={{ paddingBottom: 48 }}
@@ -867,35 +864,29 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                         </View>
 
                         {/* Section 1: Vehicle Info */}
-                        <View style={[getGlassSurfaceStyle(isDark, 'card'), kycStyles.card]}>
+                        <View style={[kycStyles.card, { backgroundColor: isDark ? '#1E293B' : '#FFFFFF' }]}>
                             <View style={kycStyles.cardHeader}>
                                 <Text style={kycStyles.cardIcon}>🚗</Text>
                                 <Text style={[kycStyles.cardTitle, { color: colors.textColor }]}>Vehicle Information</Text>
                             </View>
 
                             <TextInput
-                                style={[
-                                    getGlassSurfaceStyle(isDark, 'input'),
-                                    kycStyles.kycInput,
-                                    {
-                                        color: colors.textColor,
-                                        borderColor: vehicleDocs.name ? colors.primary : (isDark ? 'rgba(255, 255, 255, 0.16)' : 'rgba(255, 255, 255, 0.85)')
-                                    }
-                                ]}
+                                style={[kycStyles.kycInput, {
+                                    backgroundColor: isDark ? '#0F172A' : '#F1F5F9',
+                                    color: colors.textColor,
+                                    borderColor: vehicleDocs.name ? colors.primary : (isDark ? '#334155' : '#E2E8F0')
+                                }]}
                                 placeholder="Vehicle Name (e.g. Tata Sumo Gold)"
                                 placeholderTextColor={isDark ? '#475569' : '#94A3B8'}
                                 value={vehicleDocs.name}
                                 onChangeText={text => setVehicleDocs(p => ({ ...p, name: text }))}
                             />
                             <TextInput
-                                style={[
-                                    getGlassSurfaceStyle(isDark, 'input'),
-                                    kycStyles.kycInput,
-                                    {
-                                        color: colors.textColor,
-                                        borderColor: vehicleDocs.type ? colors.primary : (isDark ? 'rgba(255, 255, 255, 0.16)' : 'rgba(255, 255, 255, 0.85)')
-                                    }
-                                ]}
+                                style={[kycStyles.kycInput, {
+                                    backgroundColor: isDark ? '#0F172A' : '#F1F5F9',
+                                    color: colors.textColor,
+                                    borderColor: vehicleDocs.type ? colors.primary : (isDark ? '#334155' : '#E2E8F0')
+                                }]}
                                 placeholder="Vehicle Type (e.g. SUV, Van, Sedan, Bus)"
                                 placeholderTextColor={isDark ? '#475569' : '#94A3B8'}
                                 autoCapitalize="words"
@@ -904,15 +895,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                             />
                             <View style={{ flexDirection: 'row', gap: 12 }}>
                                 <TextInput
-                                    style={[
-                                        getGlassSurfaceStyle(isDark, 'input'),
-                                        kycStyles.kycInput,
-                                        {
-                                            flex: 1,
-                                            color: colors.textColor,
-                                            borderColor: vehicleDocs.seats ? colors.primary : (isDark ? 'rgba(255, 255, 255, 0.16)' : 'rgba(255, 255, 255, 0.85)')
-                                        }
-                                    ]}
+                                    style={[kycStyles.kycInput, {
+                                        flex: 1,
+                                        backgroundColor: isDark ? '#0F172A' : '#F1F5F9',
+                                        color: colors.textColor,
+                                        borderColor: vehicleDocs.seats ? colors.primary : (isDark ? '#334155' : '#E2E8F0')
+                                    }]}
                                     placeholder="Seats"
                                     placeholderTextColor={isDark ? '#475569' : '#94A3B8'}
                                     keyboardType="number-pad"
@@ -920,15 +908,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                                     onChangeText={text => setVehicleDocs(p => ({ ...p, seats: text.replace(/[^0-9]/g, '') }))}
                                 />
                                 <TextInput
-                                    style={[
-                                        getGlassSurfaceStyle(isDark, 'input'),
-                                        kycStyles.kycInput,
-                                        {
-                                            flex: 2,
-                                            color: colors.textColor,
-                                            borderColor: vehicleDocs.number ? colors.primary : (isDark ? 'rgba(255, 255, 255, 0.16)' : 'rgba(255, 255, 255, 0.85)')
-                                        }
-                                    ]}
+                                    style={[kycStyles.kycInput, {
+                                        flex: 2,
+                                        backgroundColor: isDark ? '#0F172A' : '#F1F5F9',
+                                        color: colors.textColor,
+                                        borderColor: vehicleDocs.number ? colors.primary : (isDark ? '#334155' : '#E2E8F0')
+                                    }]}
                                     placeholder="Vehicle Number (e.g. HP12AB3456)"
                                     placeholderTextColor={isDark ? '#475569' : '#94A3B8'}
                                     autoCapitalize="characters"
@@ -939,7 +924,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                         </View>
 
                         {/* Section 2: Seating Layout */}
-                        <View style={[getGlassSurfaceStyle(isDark, 'card'), kycStyles.card]}>
+                        <View style={[kycStyles.card, { backgroundColor: isDark ? '#1E293B' : '#FFFFFF' }]}>
                             <View style={kycStyles.cardHeader}>
                                 <Text style={kycStyles.cardIcon}>💺</Text>
                                 <Text style={[kycStyles.cardTitle, { color: colors.textColor }]}>Seating Arrangement</Text>
@@ -953,11 +938,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                                     <TouchableOpacity
                                         key={layout.id}
                                         style={[
-                                            getGlassSurfaceStyle(isDark, 'pill'),
                                             kycStyles.layoutCard,
-                                            vehicleDocs.layout === layout.id && {
-                                                backgroundColor: colors.primary,
-                                                borderColor: colors.primary,
+                                            {
+                                                backgroundColor: vehicleDocs.layout === layout.id
+                                                    ? colors.primary
+                                                    : (isDark ? '#0F172A' : '#F1F5F9'),
+                                                borderColor: vehicleDocs.layout === layout.id
+                                                    ? colors.primary
+                                                    : (isDark ? '#334155' : '#E2E8F0'),
                                             }
                                         ]}
                                         onPress={() => setVehicleDocs(p => ({ ...p, layout: layout.id as any }))}
@@ -1018,7 +1006,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
         <KeyboardAvoidingView
             style={[styles.container, { backgroundColor: colors.background }]}
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-            <GlassBackdrop isDark={isDark} />
             <View style={styles.inner}>
                 <Text style={[styles.title, { color: colors.textColor }]}>
                     {step === 'name' ? t('login.enterName') :
@@ -1047,14 +1034,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 {step === 'phone' && (
                     <>
                         <TextInput
-                            style={[
-                                getGlassSurfaceStyle(isDark, 'input'),
-                                styles.input,
-                                {
-                                    color: colors.textColor,
-                                    borderColor: authError ? '#EF4444' : colors.inputBorderColor
-                                }
-                            ]}
+                            style={[styles.input, {
+                                backgroundColor: colors.inputFillColor,
+                                color: colors.textColor,
+                                borderColor: authError ? '#EF4444' : colors.inputBorderColor
+                            }]}
                             placeholder={t('login.phonePlaceholder')}
                             placeholderTextColor={isDark ? 'rgba(255,255,255,0.24)' : 'rgba(34,34,96,0.3)'}
                             keyboardType="phone-pad"
@@ -1106,10 +1090,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                                         testID={`otp-input-${i}`}
                                         ref={(ref) => { otpRefs.current[i] = ref; }}
                                         style={[
-                                            getGlassSurfaceStyle(isDark, 'input'),
                                             styles.otpBox,
                                             {
                                                 width: boxW,
+                                                backgroundColor: colors.inputFillColor,
                                                 color: colors.textColor,
                                                 borderColor: otpDigits[i]
                                                     ? colors.primary
@@ -1188,14 +1172,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 {step === 'name' && (
                     <>
                         <TextInput
-                            style={[
-                                getGlassSurfaceStyle(isDark, 'input'),
-                                styles.input,
-                                {
-                                    color: colors.textColor,
-                                    borderColor: authError ? '#EF4444' : colors.inputBorderColor
-                                }
-                            ]}
+                            style={[styles.input, {
+                                backgroundColor: colors.inputFillColor,
+                                color: colors.textColor,
+                                borderColor: authError ? '#EF4444' : colors.inputBorderColor
+                            }]}
                             placeholder={t('login.fullName')}
                             placeholderTextColor={isDark ? 'rgba(255,255,255,0.24)' : 'rgba(34,34,96,0.3)'}
                             autoCapitalize="words"
@@ -1231,7 +1212,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                 {step === 'role' && (
                     <View style={styles.roleContainer}>
                         <TouchableOpacity
-                            style={[getGlassSurfaceStyle(isDark, 'card'), styles.roleCard, loading && styles.buttonDisabled]}
+                            style={[styles.roleCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }, loading && styles.buttonDisabled]}
                             onPress={() => handleRoleSelect('passenger')}
                             disabled={loading}>
                             <Text style={styles.roleEmoji}>🏠</Text>
@@ -1244,7 +1225,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                         <View style={styles.spacer16} />
 
                         <TouchableOpacity
-                            style={[getGlassSurfaceStyle(isDark, 'card'), styles.roleCard, loading && styles.buttonDisabled]}
+                            style={[styles.roleCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }, loading && styles.buttonDisabled]}
                             onPress={() => handleRoleSelect('driver')}
                             disabled={loading}>
                             <Text style={styles.roleEmoji}>🚕</Text>
@@ -1258,7 +1239,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
 
                 {step === 'consent' && (
                     <View style={styles.consentContainer}>
-                        <ScrollView style={[getGlassSurfaceStyle(isDark, 'card'), styles.consentBox]}>
+                        <ScrollView style={[styles.consentBox, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}>
                             <Text style={[styles.consentTitle, { color: colors.textColor }]}>
                                 GORAAHI USER CONSENT & ACKNOWLEDGEMENT
                             </Text>
@@ -1322,7 +1303,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
 
                 {step === 'driver_consent' && (
                     <View style={styles.consentContainer}>
-                        <ScrollView style={[getGlassSurfaceStyle(isDark, 'card'), styles.consentBox]} showsVerticalScrollIndicator={true}>
+                        <ScrollView style={[styles.consentBox, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]} showsVerticalScrollIndicator={true}>
                             <Text style={[styles.consentTitle, { color: colors.textColor, fontSize: 15, fontWeight: '800', marginBottom: 12 }]}>
                                 GORAAHI DRIVER CONSENT & TERMS OF ONBOARDING
                             </Text>
@@ -1425,7 +1406,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                         <View style={styles.spacer16} />
                         <TextInput
                             testID="admin-phone-input"
-                            style={[getGlassSurfaceStyle(isDark, 'input'), styles.input, { color: colors.textColor, borderColor: authError ? '#EF4444' : '#1FAF63' }]}
+                            style={[styles.input, { backgroundColor: colors.inputFillColor, color: colors.textColor, borderColor: authError ? '#EF4444' : '#1FAF63' }]}
                             placeholder="Admin phone number"
                             placeholderTextColor="rgba(31,175,99,0.4)"
                             keyboardType="phone-pad"
@@ -1480,10 +1461,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                                         testID={`admin-otp-input-${i}`}
                                         ref={(ref) => { otpRefs.current[i] = ref; }}
                                         style={[
-                                            getGlassSurfaceStyle(isDark, 'input'),
                                             styles.otpBox,
                                             {
                                                 width: boxW,
+                                                backgroundColor: colors.inputFillColor,
                                                 color: colors.textColor,
                                                 borderColor: otpDigits[i] ? '#1FAF63' : 'rgba(31,175,99,0.35)',
                                                 shadowColor: '#1FAF63',
@@ -1558,7 +1539,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                         <Text style={{ color: colors.subtextColor, fontSize: 13, marginBottom: 10 }}>Enter the admin secret key provided by your system administrator.</Text>
                         <TextInput
                             testID="admin-secret-input"
-                            style={[getGlassSurfaceStyle(isDark, 'input'), styles.input, { color: colors.textColor, borderColor: authError ? '#EF4444' : '#1FAF63' }]}
+                            style={[styles.input, { backgroundColor: colors.inputFillColor, color: colors.textColor, borderColor: authError ? '#EF4444' : '#1FAF63' }]}
                             placeholder="Secret key"
                             placeholderTextColor="rgba(31,175,99,0.4)"
                             autoCapitalize="none"

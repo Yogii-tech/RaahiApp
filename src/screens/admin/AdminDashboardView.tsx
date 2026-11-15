@@ -5,7 +5,6 @@ import { downloadCSV } from '../../utils/exportUtils';
 import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
 import { parseJsonSafe, createRequestAbort } from '../../utils/json';
-import { getGlassSurfaceStyle } from '../../styles/glassmorphism';
 
 interface AdminStatsData {
     rides?: { total?: number; available?: number; ongoing?: number; completed?: number; cancelled?: number };
@@ -179,12 +178,12 @@ export default function AdminDashboardView({
     const exportData = statCards.map(c => ({ label: c.label, value: c.value, sub: c.sub }));
 
     return (
-        <ScrollView style={[styles.container, isMobile && styles.containerMobile, { backgroundColor: 'transparent' }]} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        <ScrollView style={[styles.container, isMobile && styles.containerMobile, { backgroundColor: T.bg }]} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
             <View style={[styles.header, isMobile && styles.headerMobile]}>
                 <Text style={[styles.headerTitle, { color: T.text }]}>Analytics Dashboard</Text>
                 <View style={styles.headerButtons}>
                     <TouchableOpacity
-                        style={[styles.ghostBtn, getGlassSurfaceStyle(isDark, 'pill'), refreshing && { opacity: 0.6 }]}
+                        style={[styles.ghostBtn, { backgroundColor: T.card, borderColor: T.border }, refreshing && { opacity: 0.6 }]}
                         onPress={() => loadStats(true)}
                         disabled={refreshing}
                     >
@@ -229,7 +228,7 @@ export default function AdminDashboardView({
                         {statCards.map((card, i) => (
                             <TouchableOpacity
                                 key={i}
-                                style={[styles.miniCard, isMobile && styles.miniCardMobile, getGlassSurfaceStyle(isDark, 'card')]}
+                                style={[styles.miniCard, isMobile && styles.miniCardMobile, { backgroundColor: T.card }]}
                                 onPress={card.onPress}
                             >
                                 <View style={styles.miniCardHeader}>
@@ -248,7 +247,7 @@ export default function AdminDashboardView({
                 {/* Trend Chart — Real monthly ride data */}
                 {!isMobile && trendData.length > 0 && (
                     <View style={styles.chartColumn}>
-                        <View style={[styles.largeCard, getGlassSurfaceStyle(isDark, 'card')]}>
+                        <View style={[styles.largeCard, { backgroundColor: T.card }]}>
                             <View style={styles.largeCardHeader}>
                                 <Text style={[styles.largeCardTitle, { color: T.text }]}>Rides — Last 6 Months</Text>
                             </View>
@@ -269,7 +268,7 @@ export default function AdminDashboardView({
             {/* Row 2: Booking breakdown + Calendar */}
             <View style={[styles.bottomGrid, isMobile && styles.bottomGridMobile]}>
                 {/* Booking Status Breakdown */}
-                <View style={[styles.detailCard, !isMobile && { flex: 1.5 }, isMobile && styles.detailCardMobile, getGlassSurfaceStyle(isDark, 'card')]}>
+                <View style={[styles.detailCard, !isMobile && { flex: 1.5 }, isMobile && styles.detailCardMobile, { backgroundColor: T.card }]}>
                     <Text style={[styles.detailTitle, { color: T.text }]}>Booking Breakdown</Text>
                     {[
                         { label: 'Pending', count: stats?.bookings?.pending ?? 0, color: '#FCB92C' },
@@ -304,7 +303,7 @@ export default function AdminDashboardView({
                 </View>
 
                 {/* Calendar */}
-                <View style={[styles.detailCard, !isMobile && { flex: 1.2 }, isMobile && styles.detailCardMobile, getGlassSurfaceStyle(isDark, 'card')]}>
+                <View style={[styles.detailCard, !isMobile && { flex: 1.2 }, isMobile && styles.detailCardMobile, { backgroundColor: T.card }]}>
                     <Text style={[styles.detailTitle, { color: T.text }]}>Calendar</Text>
                     <View style={styles.calendarMock}>
                         <View style={styles.calendarHeaderRow}>

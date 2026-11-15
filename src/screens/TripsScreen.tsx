@@ -14,7 +14,6 @@ import { notify } from '../utils/notify';
 import Icon from 'react-native-vector-icons/Ionicons';
 import TrackPackageView from '../components/TrackPackageView';
 import { startDriverTracking } from '../modern_map/services/socket';
-import { GLASS_TOKENS, getGlassSurfaceStyle } from '../styles/glassmorphism';
 
 interface Booking {
     id: string;
@@ -340,7 +339,8 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
         const isCompleted = item.status === 'completed';
         const isCancelled = item.status === 'cancelled';
         const isTerminal = isCompleted || isCancelled;
-        const cardOpacity = isTerminal ? 0.78 : 1;
+        const cardBgColor = isTerminal ? (isDark ? '#1C2939' : '#F5F5F5') : colors.cardColor;
+        const cardOpacity = isTerminal ? 0.7 : 1;
 
         const rawCompletedAt = item.completedAt || item.ride?.completedAt;
         let finishedTimeStr = '';
@@ -354,16 +354,7 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
         }
 
         return (
-            <View
-                style={[
-                    styles.card,
-                    getGlassSurfaceStyle(isDark, 'card'),
-                    isTerminal && {
-                        backgroundColor: isDark ? 'rgba(15, 23, 42, 0.45)' : 'rgba(241, 245, 249, 0.56)',
-                    },
-                    { opacity: cardOpacity },
-                ]}
-            >
+            <View style={[styles.card, { backgroundColor: cardBgColor, borderColor: colors.borderColor, opacity: cardOpacity }]}>
                 <View style={styles.cardHeader}>
                     <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
                         {item.bookingId ? (
@@ -431,7 +422,7 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
 
                 {isDriver && viewMode === 'list' && (
                     <TouchableOpacity
-                        style={[styles.viewLayoutBtn, getGlassSurfaceStyle(isDark, 'pill'), { borderColor: colors.primary, marginTop: 10 }]}
+                        style={[styles.viewLayoutBtn, { borderColor: colors.primary, marginTop: 10 }]}
                         onPress={() => setExpandedRideId(isExpanded ? null : item.id)}>
                         <Text style={[styles.viewLayoutText, { color: colors.primary }]}>
                             {isExpanded ? (t('trips.hideSeating') || 'Hide Seating & Actions ▴') : (t('trips.viewSeating') || 'View Seating & Actions ▾')}
@@ -444,7 +435,7 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
                     <View style={{ marginTop: 10 }}>
                         {viewMode === 'list' && (
                             <TouchableOpacity
-                                style={[styles.viewLayoutBtn, getGlassSurfaceStyle(isDark, 'pill'), { borderColor: colors.primary, marginTop: 4 }]}
+                                style={[styles.viewLayoutBtn, { borderColor: colors.primary, marginTop: 4 }]}
                                 onPress={() => setExpandedRideId(isExpanded ? null : item.id)}>
                                 <Text style={[styles.viewLayoutText, { color: colors.primary }]}>
                                     {isExpanded ? 'Hide Ticket & Seating ▴' : 'View Ticket & Seating ▾'}
@@ -455,19 +446,16 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
                         {(viewMode === 'detailed' || isExpanded) && (
                             <View style={{ marginTop: viewMode === 'list' ? 14 : 0 }}>
                                 {item.ride?.status === 'ongoing' && (
-                                    <View style={[
-                                        getGlassSurfaceStyle(isDark, 'pill'),
-                                        {
-                                            backgroundColor: 'rgba(76, 175, 80, 0.12)',
-                                            borderColor: '#4CAF50',
-                                            borderWidth: 1,
-                                            borderRadius: 12,
-                                            padding: 12,
-                                            marginBottom: 15,
-                                            flexDirection: 'row',
-                                            alignItems: 'center'
-                                        },
-                                    ]}>
+                                    <View style={{
+                                        backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                                        borderColor: '#4CAF50',
+                                        borderWidth: 1,
+                                        borderRadius: 12,
+                                        padding: 12,
+                                        marginBottom: 15,
+                                        flexDirection: 'row',
+                                        alignItems: 'center'
+                                    }}>
                                         <Icon name="car-outline" size={20} color="#4CAF50" style={{ marginRight: 10 }} />
                                         <Text style={{ color: '#4CAF50', fontSize: 13, fontWeight: 'bold', flex: 1 }}>
                                             {t('trips.driverMoving') || 'Driver started moving to destination!'}
@@ -485,7 +473,7 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
 
                                 {/* Ticket Layout or Completion Receipt */}
                                 {item.status === 'completed' ? (
-                                    <View style={[styles.bookingIdCard, getGlassSurfaceStyle(isDark, 'elevated'), { marginTop: 20, borderColor: 'rgba(76, 175, 80, 0.5)' }]}>
+                                    <View style={[styles.bookingIdCard, { marginTop: 20, backgroundColor: isDark ? '#1C2939' : '#F0F4F8', borderWidth: 1, borderColor: '#4CAF50' }]}>
                                         <View style={{ alignItems: 'center', paddingVertical: 10 }}>
                                             <View style={{ width: 50, height: 50, borderRadius: 25, backgroundColor: 'rgba(76, 175, 80, 0.1)', justifyContent: 'center', alignItems: 'center', marginBottom: 12 }}>
                                                 <Icon name="checkmark-circle" size={32} color="#4CAF50" />
@@ -495,7 +483,7 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
                                                 You reached {item.ride?.dropoff || 'destination'} safely.
                                             </Text>
 
-                                            <View style={{ width: '100%', height: 1, backgroundColor: GLASS_TOKENS[isDark ? 'dark' : 'light'].hairlineDivider, marginVertical: 15 }} />
+                                            <View style={{ width: '100%', height: 1, backgroundColor: colors.borderColor, marginVertical: 15 }} />
 
                                             <View style={{ width: '100%', flexDirection: 'row', justifyContent: 'space-between' }}>
                                                 <View>
@@ -514,13 +502,13 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
                                         </View>
                                     </View>
                                 ) : item.status === 'accepted' && (() => {
-                                    const ticketBg = isDark ? 'rgba(17, 24, 34, 0.84)' : 'rgba(238, 242, 255, 0.78)';
+                                    const ticketBg = isDark ? '#111822' : '#EEF2FF';
                                     const ticketLabel = isDark ? '#607D8B' : '#7986A3';
                                     const ticketText = isDark ? '#FFFFFF' : '#222260';
                                     const ticketDash = isDark ? 'rgba(255,255,255,0.2)' : 'rgba(34,34,96,0.15)';
                                     const ticketFooter = isDark ? '#4B5C6B' : '#8A96BB';
                                     return (
-                                        <View style={[styles.bookingIdCard, getGlassSurfaceStyle(isDark, 'elevated'), { marginTop: 20, backgroundColor: ticketBg }]}>
+                                        <View style={[styles.bookingIdCard, { marginTop: 20, backgroundColor: ticketBg }]}>
                                             {/* Ticket Layout Redesign - Row Based */}
                                             <View style={{ flexDirection: 'column', width: '100%' }}>
 
@@ -649,19 +637,17 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
                                 {item.bookings.map((booking: any) => {
                                     const isParcel = booking.type === 'parcel';
                                     return (
-                                        <View key={booking.id} style={[
-                                            getGlassSurfaceStyle(isDark, 'input'),
-                                            {
-                                                borderRadius: 12,
-                                                padding: 12,
-                                                marginBottom: 10,
-                                                flexDirection: 'row',
-                                                justifyContent: 'space-between',
-                                                alignItems: 'center',
-                                                borderWidth: 1,
-                                                borderColor: booking.status === 'completed' ? '#4CAF50' : GLASS_TOKENS[isDark ? 'dark' : 'light'].subtleBorder,
-                                            },
-                                        ]}>
+                                        <View key={booking.id} style={{
+                                            backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
+                                            borderRadius: 12,
+                                            padding: 12,
+                                            marginBottom: 10,
+                                            flexDirection: 'row',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                            borderWidth: 1,
+                                            borderColor: booking.status === 'completed' ? '#4CAF50' : colors.borderColor
+                                        }}>
                                             <View style={{ flex: 1 }}>
                                                 <Text style={{ color: colors.textColor, fontWeight: 'bold', fontSize: 13 }}>
                                                     {isParcel ? 'Parcel' : 'Pass.'} RA-{booking.id.slice(-4).toUpperCase()}
@@ -754,20 +740,20 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
     }
 
     return (
-        <View style={[styles.container, { backgroundColor: 'transparent' }]}>
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
                 <Text style={[styles.title, { color: colors.textColor, marginBottom: 0 }]}>
                     {title || (isDriver ? t('trips.myRides') : t('trips.myBookings'))}
                 </Text>
 
-                <View style={[
-                    getGlassSurfaceStyle(isDark, 'pill'),
-                    {
-                        flexDirection: 'row',
-                        borderRadius: 12,
-                        padding: 3,
-                    },
-                ]}>
+                <View style={{
+                    flexDirection: 'row',
+                    backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
+                    borderRadius: 10,
+                    padding: 3,
+                    borderWidth: 1,
+                    borderColor: colors.borderColor
+                }}>
                     <TouchableOpacity
                         onPress={() => {
                             setViewMode('list');

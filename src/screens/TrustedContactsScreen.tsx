@@ -17,7 +17,6 @@ import { useLanguage } from '../context/LanguageContext';
 import { apiRequest } from '../utils/api';
 import { confirmAction, notify } from '../utils/notify';
 import { ScreenHeader } from '../components/ScreenHeader';
-import { GLASS_TOKENS, getGlassSurfaceStyle } from '../styles/glassmorphism';
 
 interface Contact {
     phone: string;
@@ -92,9 +91,6 @@ const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
     const dangerColor = isDark ? '#F87171' : '#EF4444';
     const dangerBg = isDark ? 'rgba(239, 68, 68, 0.14)' : 'rgba(239, 68, 68, 0.08)';
     const dangerBorder = isDark ? 'rgba(248, 113, 113, 0.28)' : 'rgba(239, 68, 68, 0.2)';
-    const hairlineDivider = isDark
-        ? GLASS_TOKENS.dark.hairlineDivider
-        : GLASS_TOKENS.light.hairlineDivider;
 
     const pointerStyle: any = Platform.OS === 'web' ? { cursor: 'pointer' } : undefined;
 
@@ -228,7 +224,6 @@ const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
         <View
             testID="trusted-count-badge"
             style={[
-                getGlassSurfaceStyle(isDark, 'pill'),
                 styles.countPill,
                 { backgroundColor: softPrimaryBg, borderColor: softPrimaryBorder },
             ]}
@@ -247,7 +242,7 @@ const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
                     styles.screen,
                     styles.nonScrollPadding,
                     isDesktop && styles.nonScrollPaddingDesktop,
-                    { backgroundColor: 'transparent' },
+                    { backgroundColor: colors.background },
                 ]}
             >
                 <View style={styles.innerWrap}>
@@ -272,7 +267,7 @@ const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
                     styles.screen,
                     styles.nonScrollPadding,
                     isDesktop && styles.nonScrollPaddingDesktop,
-                    { backgroundColor: 'transparent' },
+                    { backgroundColor: colors.background },
                 ]}
             >
                 <View style={styles.innerWrap}>
@@ -284,9 +279,10 @@ const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
                     />
                     <View
                         style={[
-                            getGlassSurfaceStyle(isDark, 'elevated'),
                             styles.errorCard,
                             isDesktop && styles.errorCardDesktop,
+                            { backgroundColor: cardColor, borderColor },
+                            isDark ? styles.cardShadowDark : styles.cardShadowLight,
                         ]}
                     >
                         <View style={[styles.errorIconWell, { backgroundColor: dangerBg }]}>
@@ -339,7 +335,7 @@ const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
 
     return (
         <ScrollView
-            style={[styles.screen, { backgroundColor: 'transparent' }]}
+            style={[styles.screen, { backgroundColor: colors.background }]}
             contentContainerStyle={[
                 styles.scrollContent,
                 isDesktop && styles.scrollContentDesktop,
@@ -357,7 +353,6 @@ const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
 
                 <View
                     style={[
-                        getGlassSurfaceStyle(isDark, 'card'),
                         styles.safetyBanner,
                         isDesktop && styles.safetyBannerDesktop,
                         { backgroundColor: softPrimaryBg, borderColor: softPrimaryBorder },
@@ -366,7 +361,6 @@ const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
                     <View style={styles.bannerTopRow}>
                         <View
                             style={[
-                                getGlassSurfaceStyle(isDark, 'pill'),
                                 styles.safetyTag,
                                 {
                                     backgroundColor: cardColor,
@@ -417,12 +411,13 @@ const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
                         <View
                             key={index}
                             style={[
-                                getGlassSurfaceStyle(isDark, 'card'),
                                 styles.contactCard,
                                 isDesktop && styles.contactCardDesktop,
                                 {
+                                    backgroundColor: cardColor,
                                     borderColor: activeCardBorder,
                                 },
+                                isDark ? styles.cardShadowDark : styles.cardShadowLight,
                             ]}
                         >
                             <View style={styles.cardHeader}>
@@ -518,9 +513,9 @@ const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
 
                             <View
                                 style={[
-                                    getGlassSurfaceStyle(isDark, 'input'),
                                     styles.phoneInputGroup,
                                     {
+                                        backgroundColor: inputFillColor,
                                         borderColor: activeInputBorder,
                                     },
                                 ]}
@@ -528,7 +523,7 @@ const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
                                 <View
                                     style={[
                                         styles.countryPrefix,
-                                        { borderRightColor: hairlineDivider },
+                                        { borderRightColor: borderColor },
                                     ]}
                                 >
                                     <Icon name="call-outline" size={15} color={primaryColor} />
@@ -576,12 +571,9 @@ const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
                                     ? 'rgba(30, 144, 255, 0.45)'
                                     : 'rgba(91, 79, 255, 0.34)',
                                 backgroundColor: isDark
-                                    ? 'rgba(30, 144, 255, 0.1)'
-                                    : 'rgba(255, 255, 255, 0.48)',
+                                    ? 'rgba(30, 144, 255, 0.08)'
+                                    : 'rgba(91, 79, 255, 0.04)',
                             },
-                            Platform.OS === 'web'
-                                ? ({ backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)' } as any)
-                                : undefined,
                             pointerStyle,
                         ]}
                         onPress={addContact}

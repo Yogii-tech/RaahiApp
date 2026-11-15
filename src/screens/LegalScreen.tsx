@@ -12,7 +12,6 @@ import {
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import ScreenHeader from '../components/ScreenHeader';
-import { GlassBackdrop, getGlassSurfaceStyle } from '../styles/glassmorphism';
 
 interface LegalScreenProps {
     onClose?: () => void;
@@ -25,7 +24,6 @@ export const LegalScreen: React.FC<LegalScreenProps> = ({ onClose, initialTab = 
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-            <GlassBackdrop isDark={isDark} />
             <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
             
             {/* Header */}
@@ -41,7 +39,7 @@ export const LegalScreen: React.FC<LegalScreenProps> = ({ onClose, initialTab = 
             />
 
             {/* Tab Selector */}
-            <View style={[getGlassSurfaceStyle(isDark, 'pill'), styles.tabBar]}>
+            <View style={[styles.tabBar, { backgroundColor: isDark ? '#121824' : '#F1F5F9', borderColor: colors.borderColor }]}>
                 <TouchableOpacity
                     style={[
                         styles.tab,
@@ -83,7 +81,7 @@ export const LegalScreen: React.FC<LegalScreenProps> = ({ onClose, initialTab = 
 
                 {/* TERMS & CONDITIONS SECTION */}
                 {(activeTab === 'terms' || activeTab === 'combined') && (
-                    <View style={[getGlassSurfaceStyle(isDark, 'card'), styles.card]}>
+                    <View style={[styles.card, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}>
                         <View style={styles.docHeader}>
                             <Text style={[styles.docTitle, { color: colors.textColor }]}>Terms & Conditions</Text>
                             <Text style={[styles.docMeta, { color: colors.accentColor }]}>Last Updated: 16 September 2026</Text>
@@ -152,7 +150,7 @@ export const LegalScreen: React.FC<LegalScreenProps> = ({ onClose, initialTab = 
 
                 {/* DRIVER CONSENT & TERMS OF ONBOARDING SECTION */}
                 {(activeTab === 'driver' || activeTab === 'combined') && (
-                    <View style={[getGlassSurfaceStyle(isDark, 'card'), styles.card]}>
+                    <View style={[styles.card, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}>
                         <View style={styles.docHeader}>
                             <Text style={[styles.docTitle, { color: colors.textColor }]}>Driver Consent & Terms of Onboarding</Text>
                             <Text style={[styles.docMeta, { color: colors.accentColor }]}>GoRaahi Mountain Mobility LLP · Driver & Operator Agreement</Text>
@@ -218,7 +216,7 @@ export const LegalScreen: React.FC<LegalScreenProps> = ({ onClose, initialTab = 
 
                 {/* PRIVACY POLICY SECTION */}
                 {(activeTab === 'privacy' || activeTab === 'combined') && (
-                    <View style={[getGlassSurfaceStyle(isDark, 'card'), styles.card]}>
+                    <View style={[styles.card, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}>
                         <View style={styles.docHeader}>
                             <Text style={[styles.docTitle, { color: colors.textColor }]}>Privacy Policy</Text>
                             <Text style={[styles.docMeta, { color: colors.accentColor }]}>Last Updated: 16 September 2026</Text>

@@ -20,7 +20,6 @@ import { API_BASE } from '../apiConfig';
 import { TOTAL_DRIVER_DOC_SLOTS, getDriverDocCount } from '../utils/driverDocuments';
 import BackButton from '../components/BackButton';
 import ScreenHeader from '../components/ScreenHeader';
-import { GLASS_TOKENS, getGlassSurfaceStyle } from '../styles/glassmorphism';
 
 const isPdfUrl = (url: string): boolean => {
     const lower = url.toLowerCase();
@@ -28,7 +27,7 @@ const isPdfUrl = (url: string): boolean => {
 };
 
 const VehicleDetailsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
-    const { colors, isDark } = useTheme();
+    const { colors } = useTheme();
     const { user } = useAuth();
     const { t } = useLanguage();
     const [previewVisible, setPreviewVisible] = useState(false);
@@ -60,7 +59,7 @@ const VehicleDetailsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
     if (!vehicle) {
         return (
-            <View style={[styles.container, { backgroundColor: 'transparent' }]}>
+            <View style={[styles.container, { backgroundColor: colors.background }]}>
                 <ScreenHeader
                     title={t('account.vehicleDetails')}
                     onBack={onBack}
@@ -86,7 +85,7 @@ const VehicleDetailsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const uploadedDocCount = getDriverDocCount(vehicle);
 
     return (
-        <ScrollView style={[styles.container, { backgroundColor: 'transparent' }]}>
+        <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
             <ScreenHeader
                 title={t('account.vehicleDetails')}
                 onBack={onBack}
@@ -94,7 +93,7 @@ const VehicleDetailsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             />
 
             <View style={styles.content}>
-                <View style={[styles.infoCard, getGlassSurfaceStyle(isDark, 'card')]}>
+                <View style={[styles.infoCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}>
                     <DetailRow label={t('vehicle.nameLabel')} value={vehicle.vehicle_name} color={colors.textColor} subColor={colors.subtextColor} />
                     <DetailRow label={t('vehicle.typeLabel')} value={vehicle.vehicle_type} color={colors.textColor} subColor={colors.subtextColor} />
                     <DetailRow label={t('login.seatingArrangement')} value={t(`layout.${vehicle.seating_layout}` as any)} color={colors.textColor} subColor={colors.subtextColor} />
@@ -117,7 +116,7 @@ const VehicleDetailsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                             testID={`vehicle-doc-row-${doc.key}`}
                             style={[
                                 styles.docRow,
-                                getGlassSurfaceStyle(isDark, 'card'),
+                                { backgroundColor: colors.cardColor, borderColor: colors.borderColor },
                                 !hasDoc && { opacity: 0.65 },
                             ]}
                             onPress={() => hasDoc && handleViewDocument(doc.label, trimmedUrl)}
@@ -145,7 +144,7 @@ const VehicleDetailsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 animationType="fade"
                 onRequestClose={handleClosePreview}>
                 <View style={styles.modalOverlay}>
-                    <View style={[styles.modalContent, getGlassSurfaceStyle(isDark, 'modal')]}>
+                    <View style={[styles.modalContent, { backgroundColor: colors.cardColor }]}>
                         <View style={styles.modalHeader}>
                             <Text style={[styles.modalTitle, { color: colors.textColor }]}>{currentDoc?.label}</Text>
                             <TouchableOpacity onPress={handleClosePreview}>
@@ -232,15 +231,12 @@ const VehicleDetailsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     );
 };
 
-const DetailRow: React.FC<{ label: string, value: string, color: string, subColor: string, last?: boolean }> = ({ label, value, color, subColor, last }) => {
-    const { isDark } = useTheme();
-    return (
-        <View style={[styles.detailRow, !last && { borderBottomWidth: 1, borderBottomColor: GLASS_TOKENS[isDark ? 'dark' : 'light'].hairlineDivider }]}>
-            <Text style={[styles.detailLabel, { color: subColor }]}>{label}</Text>
-            <Text style={[styles.detailValue, { color: color }]}>{value}</Text>
-        </View>
-    );
-};
+const DetailRow: React.FC<{ label: string, value: string, color: string, subColor: string, last?: boolean }> = ({ label, value, color, subColor, last }) => (
+    <View style={[styles.detailRow, !last && { borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' }]}>
+        <Text style={[styles.detailLabel, { color: subColor }]}>{label}</Text>
+        <Text style={[styles.detailValue, { color: color }]}>{value}</Text>
+    </View>
+);
 
 const styles = StyleSheet.create({
     container: {

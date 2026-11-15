@@ -27,7 +27,6 @@ import RaahiLogo from '../../components/RaahiLogo';
 import { confirmAction, notify } from '../../utils/notify';
 import { createRequestAbort } from '../../utils/json';
 import SignOutConfirmModal, { useSignOutConfirmation } from './SignOutConfirmModal';
-import { GlassBackdrop, getGlassSurfaceStyle } from '../../styles/glassmorphism';
 import {
     FCMNotificationPayload,
     getWebNotificationPermission,
@@ -772,7 +771,6 @@ export default function AdminDashboardScreen() {
 
     return (
         <View style={[styles.wrapper, { backgroundColor: T.bg }]}>
-            <GlassBackdrop isDark={isDark} />
             {isMobile && isSidebarOpen && (
                 <TouchableOpacity
                     style={styles.overlay}
@@ -873,12 +871,12 @@ export default function AdminDashboardScreen() {
             )}
 
             {/* Main Content */}
-            <View style={[styles.content, { backgroundColor: 'transparent' }]}>
+            <View style={[styles.content, { backgroundColor: T.contentBg }]}>
                 {/* Top header bar */}
                 <View style={[
-                    getGlassSurfaceStyle(isDark, 'header'),
                     styles.topBar,
                     isMobile && styles.topBarMobile,
+                    { borderBottomColor: T.border, backgroundColor: isDark ? T.sidebar : '#FFFFFF' },
                 ]}>
                     <View style={styles.topBarLeft}>
                         {isMobile && (
@@ -887,9 +885,9 @@ export default function AdminDashboardScreen() {
                             </TouchableOpacity>
                         )}
                         <View style={[
-                            getGlassSurfaceStyle(isDark, 'input'),
                             styles.searchBar,
                             isMobile && styles.searchBarMobile,
+                            { backgroundColor: isDark ? '#111827' : '#F7F9FC' },
                         ]}>
                             <Text style={styles.searchIcon}>🔍</Text>
                             <TextInput

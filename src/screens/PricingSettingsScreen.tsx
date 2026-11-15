@@ -18,7 +18,6 @@ import { parseJsonSafe, getApiErrorMessage } from '../utils/json';
 import { notify } from '../utils/notify';
 import Icon from 'react-native-vector-icons/Ionicons';
 import ScreenHeader from '../components/ScreenHeader';
-import { getGlassSurfaceStyle } from '../styles/glassmorphism';
 
 const PricingSettingsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
      const { colors, isDark } = useTheme();
@@ -109,7 +108,7 @@ const PricingSettingsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
      };
 
      return (
-          <ScrollView style={[styles.container, { backgroundColor: 'transparent' }]}>
+          <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
                <ScreenHeader
                     title={t('account.pricingSettings')}
                     onBack={onBack}
@@ -117,7 +116,7 @@ const PricingSettingsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
                />
 
                <View style={styles.content}>
-                    <View style={[styles.card, getGlassSurfaceStyle(isDark, 'elevated')]}>
+                    <View style={[styles.card, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}>
                          <View style={[styles.iconContainer, { backgroundColor: isDark ? 'rgba(91, 79, 255, 0.1)' : 'rgba(91, 79, 255, 0.05)' }]}>
                               <Icon name="cash-outline" size={48} color={colors.primary} />
                          </View>
@@ -128,7 +127,7 @@ const PricingSettingsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
 
                          <View style={styles.inputGroup}>
                               <Text style={[styles.label, { color: colors.primary }]}>{t('home.ratePerKm').toUpperCase()}</Text>
-                              <View style={[styles.inputWrapper, getGlassSurfaceStyle(isDark, 'input')]}>
+                              <View style={[styles.inputWrapper, { backgroundColor: colors.inputFillColor, borderColor: colors.inputBorderColor }]}>
                                    <Text style={[styles.currency, { color: colors.textColor }]}>₹</Text>
                                    <TextInput
                                         style={[styles.input, { color: colors.textColor }]}
@@ -141,16 +140,7 @@ const PricingSettingsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
                               </View>
                          </View>
 
-                         <View
-                              style={[
-                                   styles.infoBox,
-                                   {
-                                        backgroundColor: isDark ? 'rgba(91, 79, 255, 0.14)' : 'rgba(91, 79, 255, 0.08)',
-                                        borderWidth: 1,
-                                        borderColor: isDark ? 'rgba(139, 131, 255, 0.28)' : 'rgba(91, 79, 255, 0.2)',
-                                   },
-                              ]}
-                         >
+                         <View style={styles.infoBox}>
                               <Text style={styles.infoText}>
                                    {t('account.pricingTip')}
                               </Text>

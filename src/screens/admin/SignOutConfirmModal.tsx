@@ -10,7 +10,6 @@ import {
 } from 'react-native';
 import { useBrowserBack } from '../../utils/browserHistory';
 import { notify } from '../../utils/notify';
-import { getGlassSurfaceStyle } from '../../styles/glassmorphism';
 
 export interface SignOutConfirmModalProps {
     visible: boolean;
@@ -137,9 +136,8 @@ export default function SignOutConfirmModal({
                 />
                 <View
                     style={[
-                        getGlassSurfaceStyle(isDark, 'modal'),
                         styles.modalCard,
-                        isDark && { borderColor: palette.cardBorder },
+                        { backgroundColor: palette.cardBg, borderColor: palette.cardBorder },
                     ]}
                     accessibilityViewIsModal={true}
                 >
@@ -161,8 +159,8 @@ export default function SignOutConfirmModal({
                         <TouchableOpacity
                             testID="admin-signout-cancel-btn"
                             style={[
-                                getGlassSurfaceStyle(isDark, 'pill'),
                                 styles.button,
+                                { backgroundColor: palette.cancelBg },
                                 webCursor,
                                 isSigningOut && styles.buttonDisabled,
                             ]}

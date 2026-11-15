@@ -8,7 +8,6 @@ import { useAuth } from '../../context/AuthContext';
 import { downloadCSV } from '../../utils/exportUtils';
 import { notify } from '../../utils/notify';
 import { parseJsonSafe, getApiErrorMessage, createRequestAbort } from '../../utils/json';
-import { getGlassSurfaceStyle } from '../../styles/glassmorphism';
 import {
     MIN_REQUIRED_DRIVER_DOCS,
     TOTAL_DRIVER_DOC_SLOTS,
@@ -470,7 +469,7 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
             </View>
 
             {/* Table Container */}
-            <View style={[styles.tableCard, getGlassSurfaceStyle(true, 'card')]}>
+            <View style={styles.tableCard}>
                 <View style={styles.tableCardHeader}>
                     <Text style={styles.tableCardTitle}>DRIVER ONBOARDING QUEUE</Text>
                     <Text style={styles.tableCardCount}>{filteredDrivers.length} Records</Text>
@@ -679,7 +678,7 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                     }}
                 >
                     <View style={[styles.modalBackdrop, isMobile && { padding: 12 }]}>
-                        <View style={[styles.inspectModalCard, getGlassSurfaceStyle(true, 'modal')]}>
+                        <View style={styles.inspectModalCard}>
                             {/* Modal Header */}
                             <View style={[styles.modalHeader, isMobile && { padding: 14 }]}>
                                 <View style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
@@ -939,7 +938,7 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                     onRequestClose={handleCloseReKYC}
                 >
                     <View style={[styles.modalBackdrop, isMobile && { padding: 12 }]}>
-                        <View style={[styles.rekycModalCard, getGlassSurfaceStyle(true, 'modal')]}>
+                        <View style={styles.rekycModalCard}>
                             <View style={[styles.modalHeader, isMobile && { padding: 14 }]}>
                                 <View style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
                                     <Text style={styles.modalTitle}>Request Re-KYC</Text>
@@ -1014,7 +1013,7 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                     onRequestClose={handleCancelDelete}
                 >
                     <View style={[styles.modalBackdrop, { zIndex: 9999 }]}>
-                        <View style={[styles.deleteConfirmCard, getGlassSurfaceStyle(true, 'modal')]}>
+                        <View style={styles.deleteConfirmCard}>
                             <Text style={styles.deleteConfirmIcon}>⚠️</Text>
                             <Text style={styles.deleteConfirmTitle}>Do you really want to delete this driver?</Text>
                             <Text style={styles.deleteConfirmName}>

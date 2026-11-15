@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, FlatList, ScrollView, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { downloadCSV } from '../../utils/exportUtils';
-import { getGlassSurfaceStyle } from '../../styles/glassmorphism';
 
 interface AuditLogEntry {
     id: string;
@@ -84,7 +83,7 @@ export default function AdminAuditLogsView({ isDark, searchQuery = '' }: { isDar
     }));
 
     return (
-        <ScrollView style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: 'transparent' }]} contentContainerStyle={{ paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
+        <ScrollView style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: T.bg }]} contentContainerStyle={{ paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
             <View style={[styles.headerRow, isMobile && { flexDirection: 'column', alignItems: 'flex-start', gap: 12 }]}>
                 <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={[styles.sectionTitle, { color: T.text }]}>Audit Logs</Text>
@@ -117,7 +116,7 @@ export default function AdminAuditLogsView({ isDark, searchQuery = '' }: { isDar
                     { label: 'Warnings', count: MOCK_LOGS.filter(l => l.severity === 'warning').length, color: '#FCB92C' },
                     { label: 'System Events', count: MOCK_LOGS.filter(l => l.category === 'system').length, color: '#9CA3AF' },
                 ].map(card => (
-                    <View key={card.label} style={[getGlassSurfaceStyle(isDark, 'card'), styles.kpiCard, isMobile && { minWidth: 130, padding: 14 }]}>
+                    <View key={card.label} style={[styles.kpiCard, isMobile && { minWidth: 130, padding: 14 }, { backgroundColor: T.card, borderColor: T.border }]}>
                         <Text style={[styles.kpiCount, { color: card.color }]}>{card.count}</Text>
                         <Text style={[styles.kpiLabel, { color: T.subtext }]}>{card.label}</Text>
                     </View>
@@ -125,7 +124,7 @@ export default function AdminAuditLogsView({ isDark, searchQuery = '' }: { isDar
             </View>
 
             {/* Filters Row */}
-            <View style={[getGlassSurfaceStyle(isDark, 'card'), styles.filtersCard, isMobile && { padding: 14 }]}>
+            <View style={[styles.filtersCard, isMobile && { padding: 14 }, { backgroundColor: T.card, borderColor: T.border }]}>
                 <View style={[styles.filterGroup, isMobile && { flexDirection: 'column', alignItems: 'flex-start', gap: 8 }]}>
                     <Text style={[styles.filterGroupLabel, isMobile && { width: 'auto' }, { color: T.subtext }]}>CATEGORY</Text>
                     <View style={[styles.filterChips, isMobile && { flex: undefined, width: '100%' }]}>
@@ -170,7 +169,7 @@ export default function AdminAuditLogsView({ isDark, searchQuery = '' }: { isDar
             </View>
 
             {/* Log Timeline */}
-            <View style={[getGlassSurfaceStyle(isDark, 'card'), styles.logCard]}>
+            <View style={[styles.logCard, { backgroundColor: T.card, borderColor: T.border }]}>
                 <FlatList
                     data={filteredLogs}
                     keyExtractor={item => item.id}

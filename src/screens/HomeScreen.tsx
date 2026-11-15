@@ -39,7 +39,6 @@ import {
     FORM_INPUT_TEXT_TYPOGRAPHY,
     FORM_INPUT_BOX_METRICS,
 } from '../styles/formTypography';
-import { GLASS_TOKENS, getGlassSurfaceStyle } from '../styles/glassmorphism';
 
 interface HomeScreenProps {
     onSosPressed?: () => void;
@@ -552,13 +551,10 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
     const pickupLabelColor = isDark ? '#00FFFF' : '#5B4FFF';
     const dropoffLabelColor = isDark ? '#FF4081' : '#5B4FFF';
     const recentLabelColor = isDark ? '#00FFFF' : '#5B4FFF';
-    const hairlineDivider = isDark
-        ? GLASS_TOKENS.dark.hairlineDivider
-        : GLASS_TOKENS.light.hairlineDivider;
 
     return (
         <ScrollView
-            style={[styles.container, { backgroundColor: 'transparent' }]}
+            style={[styles.container, { backgroundColor: colors.background }]}
             contentContainerStyle={styles.content}
             showsVerticalScrollIndicator={false}>
             {/* Greeting */}
@@ -574,19 +570,16 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
 
             {/* ── Verification Status Banner (drivers only) ─────────────── */}
             {isDriver && user?.verification_status !== 'verified' && !hideVerificationBanner && (
-                <View style={[
-                    getGlassSurfaceStyle(isDark, 'card'),
-                    {
-                        borderRadius: 14,
-                        borderWidth: 1.5,
-                        marginBottom: 20,
-                        overflow: 'hidden',
-                        ...(user?.verification_status === 'rejected'
-                            ? { backgroundColor: isDark ? 'rgba(244,67,54,0.14)' : 'rgba(255,245,245,0.82)', borderColor: '#F44336' }
-                            : { backgroundColor: isDark ? 'rgba(255,193,7,0.12)' : 'rgba(255,251,236,0.84)', borderColor: '#FFC107' }
-                        ),
-                    },
-                ]}>
+                <View style={{
+                    borderRadius: 14,
+                    borderWidth: 1.5,
+                    marginBottom: 20,
+                    overflow: 'hidden',
+                    ...(user?.verification_status === 'rejected'
+                        ? { backgroundColor: isDark ? 'rgba(244,67,54,0.1)' : '#FFF5F5', borderColor: '#F44336' }
+                        : { backgroundColor: isDark ? 'rgba(255,193,7,0.08)' : '#FFFBEC', borderColor: '#FFC107' }
+                    ),
+                }}>
                     {/* Coloured top strip */}
                     <View style={{
                         height: 4,
@@ -629,9 +622,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
             {/* Ride Card */}
             <View
                 style={[
-                    getGlassSurfaceStyle(isDark, 'elevated'),
                     styles.rideCard,
                     {
+                        backgroundColor: colors.cardColor,
+                        borderColor: colors.borderColor,
+                        shadowColor: isDark ? '#000' : '#5B4FFF',
                         zIndex: 9999, // Ensure absolute children of this card overlap subsequent elements
                     },
                 ]}>
@@ -681,14 +676,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                             {pickupLandmarks.slice(0, 5).map((l, idx) => (
                                 <TouchableOpacity
                                     key={idx}
-                                    style={[
-                                        getGlassSurfaceStyle(isDark, 'pill'),
-                                        {
-                                            backgroundColor: isDark ? 'rgba(0,255,255,0.08)' : 'rgba(91,79,255,0.08)',
-                                            paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, marginRight: 8,
-                                            borderWidth: 1, borderColor: isDark ? 'rgba(0,255,255,0.16)' : 'rgba(91,79,255,0.16)'
-                                        },
-                                    ]}
+                                    style={{
+                                        backgroundColor: isDark ? 'rgba(0,255,255,0.06)' : 'rgba(91,79,255,0.06)',
+                                        paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, marginRight: 8,
+                                        borderWidth: 1, borderColor: isDark ? 'rgba(0,255,255,0.1)' : 'rgba(91,79,255,0.1)'
+                                    }}
                                     onPress={() => setPickup(l.name)}
                                 >
                                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -726,7 +718,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                         <View style={styles.spacer8} />
                         <TextInput
                             style={[
-                                getGlassSurfaceStyle(isDark, 'input'),
                                 styles.textInput,
                                 {
                                     backgroundColor: colors.inputFillColor,
@@ -764,15 +755,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                                 setShowCalendar(true);
                             }}
                             activeOpacity={0.8}
-                            style={[
-                                getGlassSurfaceStyle(isDark, 'input'),
-                                styles.textInput,
-                                styles.datePickerButton,
-                                {
-                                    backgroundColor: colors.inputFillColor,
-                                    borderColor: date ? colors.primary : colors.inputBorderColor,
-                                },
-                            ]}>
+                            style={[styles.textInput, styles.datePickerButton, { backgroundColor: colors.inputFillColor, borderColor: date ? colors.primary : colors.inputBorderColor }]}>
                             <Text style={[styles.datePickerText, { color: date ? colors.textColor : (isDark ? 'rgba(255,255,255,0.3)' : 'rgba(34,34,96,0.35)') }]}>
                                 {date || t('home.datePlaceholder')}
                             </Text>
@@ -788,21 +771,18 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                                     {t('home.departureTime').toUpperCase()}
                                 </Text>
                                 <View style={styles.spacer8} />
-                                <View style={[
-                                    getGlassSurfaceStyle(isDark, 'input'),
-                                    {
-                                        flexDirection: 'row',
-                                        alignItems: 'center',
-                                        borderRadius: FORM_INPUT_BOX_METRICS.borderRadius,
-                                        borderWidth: FORM_INPUT_BOX_METRICS.borderWidth,
-                                        borderColor: departureTime ? colors.primary : colors.inputBorderColor,
-                                        backgroundColor: colors.inputFillColor,
-                                        height: FORM_INPUT_BOX_METRICS.height,
-                                        width: '100%',
-                                        zIndex: 100,
-                                        overflow: 'visible',
-                                    },
-                                ]}>
+                                <View style={{
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    borderRadius: FORM_INPUT_BOX_METRICS.borderRadius,
+                                    borderWidth: FORM_INPUT_BOX_METRICS.borderWidth,
+                                    borderColor: departureTime ? colors.primary : colors.inputBorderColor,
+                                    backgroundColor: colors.inputFillColor,
+                                    height: FORM_INPUT_BOX_METRICS.height,
+                                    width: '100%',
+                                    zIndex: 100,
+                                    overflow: 'visible',
+                                }}>
                                     <View style={{ flex: 1, height: '100%', justifyContent: 'center' }}>
                                         <TextInput
                                             style={{
@@ -824,7 +804,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                                             maxLength={5}
                                         />
                                     </View>
-                                    <View style={{ width: 1, height: '60%', backgroundColor: hairlineDivider }} />
+                                    <View style={{ width: 1, height: '60%', backgroundColor: colors.inputBorderColor }} />
                                     <TouchableOpacity
                                         style={{
                                             width: 60,
@@ -844,25 +824,30 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                                     </TouchableOpacity>
 
                                     {showTimePeriodDropdown && (
-                                        <View style={[
-                                            getGlassSurfaceStyle(isDark, 'elevated'),
-                                            {
-                                                position: 'absolute',
-                                                top: 52,
-                                                right: 0,
-                                                width: 80,
-                                                borderRadius: 12,
-                                                zIndex: 1000,
-                                                overflow: 'hidden'
-                                            },
-                                        ]}>
+                                        <View style={{
+                                            position: 'absolute',
+                                            top: 52,
+                                            right: 0,
+                                            width: 80,
+                                            borderRadius: 12,
+                                            borderWidth: 1,
+                                            backgroundColor: colors.cardColor,
+                                            borderColor: colors.borderColor,
+                                            zIndex: 1000,
+                                            elevation: 10,
+                                            shadowColor: '#000',
+                                            shadowOffset: { width: 0, height: 4 },
+                                            shadowOpacity: 0.2,
+                                            shadowRadius: 8,
+                                            overflow: 'hidden'
+                                        }}>
                                             <TouchableOpacity
                                                 style={{ paddingVertical: 12, alignItems: 'center', backgroundColor: timePeriod === 'AM' ? (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(91,79,255,0.1)') : 'transparent' }}
                                                 onPress={() => { setTimePeriod('AM'); setShowTimePeriodDropdown(false); }}
                                             >
                                                 <Text style={{ fontSize: 13, fontWeight: 'bold', color: colors.textColor }}>AM</Text>
                                             </TouchableOpacity>
-                                            <View style={{ height: 1, width: '100%', backgroundColor: hairlineDivider }} />
+                                            <View style={{ height: 1, width: '100%', backgroundColor: colors.inputBorderColor }} />
                                             <TouchableOpacity
                                                 style={{ paddingVertical: 12, alignItems: 'center', backgroundColor: timePeriod === 'PM' ? (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(91,79,255,0.1)') : 'transparent' }}
                                                 onPress={() => { setTimePeriod('PM'); setShowTimePeriodDropdown(false); }}
@@ -921,8 +906,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                         <View
                             key={index}
                             style={[
-                                getGlassSurfaceStyle(isDark, 'card'),
                                 styles.recentCard,
+                                {
+                                    backgroundColor: colors.cardColor,
+                                    borderColor: colors.borderColor,
+                                },
                                 index === 0 && styles.recentCardFirst,
                             ]}>
                             <View style={styles.recentLabelRow}>
@@ -981,8 +969,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
             <View style={styles.whyRow}>
                 <View
                     style={[
-                        getGlassSurfaceStyle(isDark, 'card'),
                         styles.whyCard,
+                        {
+                            backgroundColor: isDark ? colors.cardColor : '#F8F9FF',
+                            borderColor: colors.borderColor,
+                        },
                         styles.whyCardFirst,
                     ]}>
                     <Icon name="shield-checkmark-outline" size={28} color={colors.accentColor} />
@@ -997,8 +988,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
 
                 <TouchableOpacity
                     style={[
-                        getGlassSurfaceStyle(isDark, 'card'),
                         styles.whyCard,
+                        {
+                            backgroundColor: isDark ? colors.cardColor : '#F8F9FF',
+                            borderColor: colors.borderColor,
+                        },
                     ]}
                     onPress={() => {
                         // Temporary Coming Soon alert without removing internal functionality
@@ -1030,7 +1024,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                 animationType="fade"
                 onRequestClose={() => setShowCalendar(false)}>
                 <View style={styles.modalOverlay}>
-                    <View style={[getGlassSurfaceStyle(isDark, 'modal'), styles.calendarContent]}>
+                    <View style={[styles.calendarContent, { backgroundColor: colors.background, borderColor: colors.borderColor }]}>
                         {/* Calendar Header */}
                         <View style={styles.calendarHeader}>
                             <TouchableOpacity onPress={() => {
@@ -1124,7 +1118,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                 animationType="fade"
                 onRequestClose={() => setShowPostSuccess(false)}>
                 <View style={styles.modalOverlay}>
-                    <View style={[getGlassSurfaceStyle(isDark, 'modal'), styles.modalContent]}>
+                    <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
                         <View style={styles.successIconContainer}>
                             <Text style={styles.successIcon}>✓</Text>
                         </View>
