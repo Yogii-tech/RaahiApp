@@ -34,6 +34,11 @@ import {
 } from '../utils/formDraftStorage';
 import { pushSubViewHistory, popSubViewHistory, useBrowserBack } from '../utils/browserHistory';
 import ResubmitDocsView from './ResubmitDocsView';
+import {
+    FORM_LABEL_TYPOGRAPHY,
+    FORM_INPUT_TEXT_TYPOGRAPHY,
+    FORM_INPUT_BOX_METRICS,
+} from '../styles/formTypography';
 
 interface HomeScreenProps {
     onSosPressed?: () => void;
@@ -710,7 +715,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                         <Text style={[styles.fieldLabel, { color: colors.primary }]}>
                             {t('home.pricePerSeat').toUpperCase()}
                         </Text>
-                        <View style={styles.spacer6} />
+                        <View style={styles.spacer8} />
                         <TextInput
                             style={[
                                 styles.textInput,
@@ -735,7 +740,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                         <Text style={[styles.fieldLabel, { color: colors.primary }]}>
                             {t('home.rideDate').toUpperCase()}
                         </Text>
-                        <View style={styles.spacer6} />
+                        <View style={styles.spacer8} />
                         <TouchableOpacity
                             onPress={() => {
                                 const parts = date.trim().split('/');
@@ -765,15 +770,15 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                                 <Text style={[styles.fieldLabel, { color: colors.primary }]}>
                                     {t('home.departureTime').toUpperCase()}
                                 </Text>
-                                <View style={styles.spacer6} />
+                                <View style={styles.spacer8} />
                                 <View style={{
                                     flexDirection: 'row',
                                     alignItems: 'center',
-                                    borderRadius: 12,
-                                    borderWidth: 1,
+                                    borderRadius: FORM_INPUT_BOX_METRICS.borderRadius,
+                                    borderWidth: FORM_INPUT_BOX_METRICS.borderWidth,
                                     borderColor: departureTime ? colors.primary : colors.inputBorderColor,
                                     backgroundColor: colors.inputFillColor,
-                                    height: 50,
+                                    height: FORM_INPUT_BOX_METRICS.height,
                                     width: '100%',
                                     zIndex: 100,
                                     overflow: 'visible',
@@ -783,8 +788,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                                             style={{
                                                 width: '100%',
                                                 height: '100%',
-                                                paddingHorizontal: 12,
-                                                fontSize: 15,
+                                                paddingHorizontal: FORM_INPUT_BOX_METRICS.paddingHorizontal,
+                                                fontSize: FORM_INPUT_TEXT_TYPOGRAPHY.fontSize,
                                                 color: colors.textColor,
                                                 backgroundColor: 'transparent',
                                                 borderWidth: 0,
@@ -1174,16 +1179,11 @@ const styles = StyleSheet.create({
         fontSize: 16,
     },
     fieldLabel: {
-        fontWeight: 'bold',
-        fontSize: 13,
-        letterSpacing: 1,
+        ...FORM_LABEL_TYPOGRAPHY,
     },
     textInput: {
-        paddingVertical: 14,
-        paddingHorizontal: 14,
-        borderRadius: 12,
-        borderWidth: 1,
-        fontSize: 15,
+        ...FORM_INPUT_BOX_METRICS,
+        ...FORM_INPUT_TEXT_TYPOGRAPHY,
     },
     findButton: {
         paddingVertical: 16,
@@ -1259,7 +1259,7 @@ const styles = StyleSheet.create({
         borderWidth: 1,
     },
     datePickerText: {
-        fontSize: 15,
+        ...FORM_INPUT_TEXT_TYPOGRAPHY,
         flex: 1,
     },
     whyRow: {

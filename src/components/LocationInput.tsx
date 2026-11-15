@@ -13,6 +13,11 @@ import { useTheme } from '../context/ThemeContext';
 import { API_BASE } from '../apiConfig';
 import { apiRequest } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
+import {
+    FORM_LABEL_TYPOGRAPHY,
+    FORM_INPUT_TEXT_TYPOGRAPHY,
+    FORM_INPUT_BOX_METRICS,
+} from '../styles/formTypography';
 
 interface GeoResult {
     place_id: string | number;
@@ -415,23 +420,18 @@ const styles = StyleSheet.create({
         zIndex: 100,
     },
     label: {
-        fontWeight: 'bold',
-        fontSize: 11,
-        letterSpacing: 1.5,
+        ...FORM_LABEL_TYPOGRAPHY,
         marginBottom: 8,
     },
     spacer6: { height: 0 }, // Handled by marginBottom in label
     inputWrapper: {
         flexDirection: 'row',
         alignItems: 'center',
-        borderRadius: 12,
-        paddingHorizontal: 16,
-        height: 52,
-        borderWidth: 1,
+        ...FORM_INPUT_BOX_METRICS,
     },
     input: {
         flex: 1,
-        fontSize: 15,
+        ...FORM_INPUT_TEXT_TYPOGRAPHY,
         height: '100%',
         padding: 0,
         backgroundColor: 'transparent',

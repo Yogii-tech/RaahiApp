@@ -33,6 +33,7 @@ import {
     isTodayOrFutureDisplayDate,
 } from '../utils/formDraftStorage';
 import { pushSubViewHistory, popSubViewHistory, useBrowserBack } from '../utils/browserHistory';
+import { FORM_LABEL_TYPOGRAPHY, FORM_INPUT_TEXT_TYPOGRAPHY } from '../styles/formTypography';
 import BackButton from '../components/BackButton';
 import ScreenHeader from '../components/ScreenHeader';
 
@@ -611,7 +612,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
 
             {/* Form Fields */}
             <Text style={[styles.fieldLabel, { color: colors.subtextColor }]}>{t('parcel.recipientName')}</Text>
-            <View style={styles.spacer6} />
+            <View style={styles.spacer8} />
             <TextInput
                 style={[styles.input, { color: colors.textColor, backgroundColor: colors.inputFillColor, borderColor: colors.inputBorderColor }]}
                 value={recipientName}
@@ -623,7 +624,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
             <View style={styles.spacer16} />
 
             <Text style={[styles.fieldLabel, { color: colors.subtextColor }]}>{t('parcel.contactNumber')}</Text>
-            <View style={styles.spacer6} />
+            <View style={styles.spacer8} />
             <TextInput
                 style={[styles.input, { color: colors.textColor, backgroundColor: colors.inputFillColor, borderColor: colors.inputBorderColor }]}
                 value={contactNumber}
@@ -650,7 +651,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
             <View style={styles.spacer16} />
 
             <Text style={[styles.fieldLabel, { color: colors.subtextColor }]}>{t('parcel.notes')}</Text>
-            <View style={styles.spacer6} />
+            <View style={styles.spacer8} />
             <TextInput
                 style={[styles.input, { color: colors.textColor, backgroundColor: colors.inputFillColor, borderColor: colors.inputBorderColor, height: 100 }]}
                 value={notes}
@@ -931,7 +932,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                         <Text style={[styles.fieldLabel, { color: colors.primary }]}>
                             {t('PICKUP DATE') || 'PICKUP DATE'}
                         </Text>
-                        <View style={styles.spacer6} />
+                        <View style={styles.spacer8} />
                         <TouchableOpacity
                             style={[
                                 styles.input,
@@ -954,10 +955,10 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                                 }
                                 setShowCalendar(true);
                             }}>
-                            <Text style={{ color: colors.textColor, fontSize: 16, fontWeight: '500' }}>
+                            <Text style={{ color: colors.textColor, ...FORM_INPUT_TEXT_TYPOGRAPHY }}>
                                 {selectedDate}
                             </Text>
-                            <Icon name="calendar-outline" size={24} color={colors.primary} />
+                            <Icon name="calendar-outline" size={20} color={colors.primary} />
                         </TouchableOpacity>
                     </View>
 
@@ -1270,20 +1271,18 @@ const styles = StyleSheet.create({
         elevation: 4,
     },
     fieldLabel: {
-        fontWeight: 'bold',
-        fontSize: 13,
-        letterSpacing: 1,
+        ...FORM_LABEL_TYPOGRAPHY,
     },
     input: {
-        fontSize: 16,
-        fontWeight: '500',
+        ...FORM_INPUT_TEXT_TYPOGRAPHY,
         borderRadius: 12,
         borderWidth: 1,
-        paddingHorizontal: 15,
+        paddingHorizontal: 16,
         paddingVertical: 12,
-        minHeight: 50,
+        minHeight: 52,
     },
     spacer6: { height: 6 },
+    spacer8: { height: 8 },
     spacer16: { height: 16 },
     spacer24: { height: 24 },
     spacer32: { height: 32 },
