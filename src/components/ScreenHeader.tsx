@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, StyleProp, ViewStyle, TextStyle } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
+import { getGlassSurfaceStyle } from '../styles/glassmorphism';
 import { BackButton, BackButtonVariant } from './BackButton';
 
 export type ScreenHeaderTone = 'default' | 'surface' | 'primary';
@@ -56,11 +57,7 @@ export const ScreenHeader: React.FC<ScreenHeaderProps> = ({
     const containerToneStyle: ViewStyle = isPrimary
         ? { backgroundColor: primaryColor }
         : isSurface
-          ? {
-                backgroundColor: cardColor,
-                borderBottomWidth: 1,
-                borderBottomColor: borderColor,
-            }
+          ? getGlassSurfaceStyle(isDark, 'header')
           : { backgroundColor: 'transparent' };
 
     const resolvedTitleColor = isPrimary ? '#FFFFFF' : textColor;

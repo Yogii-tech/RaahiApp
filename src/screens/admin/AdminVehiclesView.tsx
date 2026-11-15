@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { downloadCSV } from '../../utils/exportUtils';
 import { Driver } from './AdminDriversView';
 import { parseJsonSafe, createRequestAbort } from '../../utils/json';
+import { getGlassSurfaceStyle } from '../../styles/glassmorphism';
 
 export default function AdminVehiclesView({ token, searchQuery = '', isDark }: { token: string; searchQuery?: string; isDark: boolean }) {
     const [vehicles, setVehicles] = useState<Driver[]>([]);
@@ -126,7 +127,7 @@ export default function AdminVehiclesView({ token, searchQuery = '', isDark }: {
     }
 
     return (
-        <ScrollView style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: T.bg }]} contentContainerStyle={{ paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
+        <ScrollView style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: 'transparent' }]} contentContainerStyle={{ paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
             <View style={[styles.headerRow, isMobile && { flexDirection: 'column', alignItems: 'flex-start', gap: 12 }]}>
                 <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={[styles.sectionTitle, { color: T.text }]}>Vehicle Fleet Management</Text>
@@ -136,7 +137,7 @@ export default function AdminVehiclesView({ token, searchQuery = '', isDark }: {
                 </View>
                 <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
                     <TouchableOpacity
-                        style={[styles.refreshBtn, { backgroundColor: T.card, borderColor: T.border }, refreshing && { opacity: 0.6 }]}
+                        style={[getGlassSurfaceStyle(isDark, 'pill'), styles.refreshBtn, refreshing && { opacity: 0.6 }]}
                         onPress={() => loadVehicles(true)}
                         disabled={refreshing}
                     >
@@ -163,7 +164,7 @@ export default function AdminVehiclesView({ token, searchQuery = '', isDark }: {
                     { label: 'Pending Safety Audit', count: pendingCount, color: '#FCB92C', icon: '⏳' },
                     { label: 'Rejected / Blocked', count: rejectedCount, color: '#DC3545', icon: '❌' },
                 ].map(card => (
-                    <View key={card.label} style={[styles.kpiCard, isMobile && { minWidth: 140, padding: 14 }, { backgroundColor: T.card, borderColor: T.border }]}>
+                    <View key={card.label} style={[getGlassSurfaceStyle(isDark, 'card'), styles.kpiCard, isMobile && { minWidth: 140, padding: 14 }]}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                             <Text style={[styles.kpiCount, { color: card.color }]}>{card.count}</Text>
                             <Text style={{ fontSize: 24 }}>{card.icon}</Text>
@@ -200,7 +201,7 @@ export default function AdminVehiclesView({ token, searchQuery = '', isDark }: {
             </View>
 
             {/* Vehicles Table */}
-            <View style={[styles.tableCard, { backgroundColor: T.card, borderColor: T.border }]}>
+            <View style={[getGlassSurfaceStyle(isDark, 'card'), styles.tableCard]}>
                 {isMobile ? (
                     filteredVehicles.length === 0 ? (
                         <Text style={{ color: T.subtext, textAlign: 'center', padding: 40 }}>

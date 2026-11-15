@@ -4,6 +4,7 @@ import { downloadCSV } from '../../utils/exportUtils';
 import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
 import { parseJsonSafe, createRequestAbort } from '../../utils/json';
+import { getGlassSurfaceStyle } from '../../styles/glassmorphism';
 
 interface ParcelStats {
      total: number;
@@ -131,7 +132,7 @@ export default function AdminParcelsDetailView({ isDark, searchQuery = '' }: { i
      );
 
      return (
-          <ScrollView style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: T.bg }]} showsVerticalScrollIndicator={false}>
+          <ScrollView style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: 'transparent' }]} showsVerticalScrollIndicator={false}>
                <View style={[styles.header, isMobile && { flexDirection: 'column', alignItems: 'flex-start', gap: 12 }]}>
                     <Text style={[styles.headerTitle, { color: T.text }]}>Parcels Overview</Text>
                     <View style={[styles.headerButtons, { flexWrap: 'wrap', gap: 10 }]}>
@@ -158,7 +159,7 @@ export default function AdminParcelsDetailView({ isDark, searchQuery = '' }: { i
                          { label: 'Pending Pickup', value: parcelStats?.pending ?? 0, color: '#FCB92C', icon: '⏳' },
                          { label: 'In Transit', value: parcelStats?.shipped ?? 0, color: '#28A745', icon: '🚛' },
                     ].map((stat, i) => (
-                         <View key={i} style={[styles.statCard, isMobile && { minWidth: 140, padding: 16 }, { backgroundColor: T.card, borderColor: T.border }]}>
+                         <View key={i} style={[getGlassSurfaceStyle(isDark, 'card'), styles.statCard, isMobile && { minWidth: 140, padding: 16 }]}>
                               <View style={styles.statHeader}>
                                    <Text style={[styles.statLabel, { color: T.subtext, flexShrink: 1, minWidth: 0 }]}>{stat.label}</Text>
                                    <Text style={{ fontSize: 18 }}>{stat.icon}</Text>
@@ -169,7 +170,7 @@ export default function AdminParcelsDetailView({ isDark, searchQuery = '' }: { i
                </View>
 
                {/* Parcel Table */}
-               <View style={[styles.tablePanel, isMobile && { padding: 16 }, { backgroundColor: T.card, borderColor: T.border }]}>
+               <View style={[getGlassSurfaceStyle(isDark, 'card'), styles.tablePanel, isMobile && { padding: 16 }]}>
                     <Text style={[styles.tableTitle, { color: T.text }]}>Recent Shipments</Text>
 
                     {!isMobile && (

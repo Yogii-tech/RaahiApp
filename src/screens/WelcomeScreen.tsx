@@ -8,6 +8,7 @@ import {
      StatusBar,
 } from 'react-native';
 import BrandLogo from '../components/BrandLogo';
+import { getGlassSurfaceStyle } from '../styles/glassmorphism';
 
 interface WelcomeScreenProps {
      onGetStarted: () => void;
@@ -23,7 +24,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onGetStarted }) => {
                     resizeMode="cover"
                >
                     <View style={styles.content}>
-                         <View style={styles.header}>
+                         <View style={[getGlassSurfaceStyle(false, 'card'), styles.header]}>
                               <BrandLogo
                                    size="lg"
                                    wordmarkColor="#0056D2"
@@ -64,7 +65,10 @@ const styles = StyleSheet.create({
      },
      header: {
           alignItems: 'center',
-          marginTop: 180,
+          marginTop: 156,
+          paddingVertical: 28,
+          paddingHorizontal: 36,
+          borderRadius: 28,
      },
      titleWeight: {
           fontWeight: '800',
@@ -77,15 +81,17 @@ const styles = StyleSheet.create({
           opacity: 0.8,
      },
      button: {
-          backgroundColor: '#4A90E2',
+          backgroundColor: 'rgba(74, 144, 226, 0.9)',
+          borderWidth: 1,
+          borderColor: 'rgba(255, 255, 255, 0.55)',
           paddingVertical: 18,
           paddingHorizontal: 80,
           borderRadius: 30,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.2,
-          shadowRadius: 8,
-          elevation: 5,
+          shadowColor: '#222260',
+          shadowOffset: { width: 0, height: 8 },
+          shadowOpacity: 0.22,
+          shadowRadius: 16,
+          elevation: 6,
           marginBottom: 40,
      },
      buttonText: {

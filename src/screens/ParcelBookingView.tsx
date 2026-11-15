@@ -36,6 +36,7 @@ import { pushSubViewHistory, popSubViewHistory, useBrowserBack } from '../utils/
 import { FORM_LABEL_TYPOGRAPHY, FORM_INPUT_TEXT_TYPOGRAPHY } from '../styles/formTypography';
 import BackButton from '../components/BackButton';
 import ScreenHeader from '../components/ScreenHeader';
+import { GLASS_TOKENS, getGlassSurfaceStyle } from '../styles/glassmorphism';
 
 const { width } = Dimensions.get('window');
 
@@ -494,14 +495,17 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
 
                 {selectedRide.isPartialMatch && (
                     <View
-                        style={{
-                            borderWidth: 1,
-                            borderRadius: 14,
-                            padding: 14,
-                            marginTop: 16,
-                            backgroundColor: isDark ? 'rgba(255, 179, 0, 0.12)' : 'rgba(255, 143, 0, 0.1)',
-                            borderColor: '#FFB300',
-                        }}>
+                        style={[
+                            getGlassSurfaceStyle(isDark, 'card'),
+                            {
+                                borderWidth: 1,
+                                borderRadius: 14,
+                                padding: 14,
+                                marginTop: 16,
+                                backgroundColor: isDark ? 'rgba(255, 179, 0, 0.12)' : 'rgba(255, 143, 0, 0.1)',
+                                borderColor: '#FFB300',
+                            },
+                        ]}>
                         <Text style={{ fontSize: 11, fontWeight: 'bold', letterSpacing: 0.8, marginBottom: 4, color: isDark ? '#FFD54F' : '#EF6C00' }}>
                             COMMON-POINT SEGMENT BOOKING
                         </Text>
@@ -514,12 +518,12 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                 <View style={styles.spacer32} />
 
                 {/* Calculation Card */}
-                <View style={[styles.summaryCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor, padding: 24 }]}>
+                <View style={[styles.summaryCard, getGlassSurfaceStyle(isDark, 'elevated'), { padding: 24 }]}>
                     <View style={styles.calcRow}>
                         <Text style={[styles.calcLabel, { color: colors.subtextColor }]}>Distance</Text>
                         <Text style={[styles.calcValue, { color: colors.textColor }]}>{stats.distance}</Text>
                     </View>
-                    <View style={styles.calcDivider} />
+                    <View style={[styles.calcDivider, { backgroundColor: GLASS_TOKENS[isDark ? 'dark' : 'light'].hairlineDivider }]} />
                     <View style={styles.calcRow}>
                         <Text style={[styles.calcLabel, { color: colors.subtextColor }]}>Weight Category</Text>
                         <Text style={[styles.calcValue, { color: colors.primary, fontWeight: 'bold' }]}>
@@ -531,7 +535,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                         <Text style={[styles.calcValue, { color: colors.textColor }]}>₹{rate}/km</Text>
                     </View>
 
-                    <View style={[styles.hr, { marginVertical: 20, opacity: 0.1 }]} />
+                    <View style={[styles.hr, { marginVertical: 20, backgroundColor: GLASS_TOKENS[isDark ? 'dark' : 'light'].hairlineDivider }]} />
 
                     <View style={styles.calcRow}>
                         <Text style={[styles.totalLabel, { color: colors.textColor }]}>Total Freight</Text>
@@ -541,7 +545,15 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
 
                 <View style={styles.spacer40} />
 
-                <View style={[styles.infoBox, { backgroundColor: 'rgba(0, 191, 165, 0.05)', borderColor: 'rgba(0, 191, 165, 0.2)' }]}>
+                <View
+                    style={[
+                        styles.infoBox,
+                        getGlassSurfaceStyle(isDark, 'pill'),
+                        {
+                            backgroundColor: isDark ? 'rgba(0, 191, 165, 0.1)' : 'rgba(0, 191, 165, 0.08)',
+                            borderColor: 'rgba(0, 191, 165, 0.25)',
+                        },
+                    ]}>
                     <Icon name="information-circle-outline" size={20} color="#00BFA5" />
                     <Text style={[styles.infoText, { color: colors.subtextColor }]}>
                         Price is calculated based on hilly terrain distance and parcel volume/weight.
@@ -587,7 +599,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
             <View style={styles.spacer24} />
 
             {/* Summary Card */}
-            <View style={[styles.summaryCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}>
+            <View style={[styles.summaryCard, getGlassSurfaceStyle(isDark, 'card')]}>
                 <View style={styles.row}>
                     <Icon name="cube-outline" size={24} color={colors.primary} />
                     <View style={styles.summaryInfo}>
@@ -614,7 +626,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
             <Text style={[styles.fieldLabel, { color: colors.subtextColor }]}>{t('parcel.recipientName')}</Text>
             <View style={styles.spacer8} />
             <TextInput
-                style={[styles.input, { color: colors.textColor, backgroundColor: colors.inputFillColor, borderColor: colors.inputBorderColor }]}
+                style={[styles.input, getGlassSurfaceStyle(isDark, 'input'), { color: colors.textColor }]}
                 value={recipientName}
                 onChangeText={setRecipientName}
                 placeholder={t('parcel.recipientNamePlaceholder')}
@@ -626,7 +638,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
             <Text style={[styles.fieldLabel, { color: colors.subtextColor }]}>{t('parcel.contactNumber')}</Text>
             <View style={styles.spacer8} />
             <TextInput
-                style={[styles.input, { color: colors.textColor, backgroundColor: colors.inputFillColor, borderColor: colors.inputBorderColor }]}
+                style={[styles.input, getGlassSurfaceStyle(isDark, 'input'), { color: colors.textColor }]}
                 value={contactNumber}
                 onChangeText={(text) => {
                     const numericValue = text.replace(/[^0-9]/g, '');
@@ -653,7 +665,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
             <Text style={[styles.fieldLabel, { color: colors.subtextColor }]}>{t('parcel.notes')}</Text>
             <View style={styles.spacer8} />
             <TextInput
-                style={[styles.input, { color: colors.textColor, backgroundColor: colors.inputFillColor, borderColor: colors.inputBorderColor, height: 100 }]}
+                style={[styles.input, getGlassSurfaceStyle(isDark, 'input'), { color: colors.textColor, height: 100 }]}
                 value={notes}
                 onChangeText={setNotes}
                 placeholder={t('parcel.notesPlaceholder')}
@@ -668,7 +680,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
             <Text style={[styles.fieldLabel, { color: colors.subtextColor }]}>{t('parcel.photoTitle')}</Text>
             <View style={styles.spacer12} />
             <TouchableOpacity
-                style={[styles.photoBox, { borderColor: colors.primary, backgroundColor: colors.inputFillColor }]}
+                style={[getGlassSurfaceStyle(isDark, 'input'), styles.photoBox, { borderColor: colors.primary }]}
                 onPress={handlePhotoUpload}
                 disabled={uploadingPhoto}>
                 {uploadingPhoto ? (
@@ -741,14 +753,17 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                     <ScrollView showsVerticalScrollIndicator={false}>
                         {directRides.length === 0 && commonPointRides.length > 0 && (
                             <View
-                                style={{
-                                    borderWidth: 1,
-                                    borderRadius: 14,
-                                    padding: 14,
-                                    marginBottom: 16,
-                                    backgroundColor: isDark ? 'rgba(255, 179, 0, 0.12)' : 'rgba(255, 143, 0, 0.1)',
-                                    borderColor: '#FFB300',
-                                }}>
+                                style={[
+                                    getGlassSurfaceStyle(isDark, 'card'),
+                                    {
+                                        borderWidth: 1,
+                                        borderRadius: 14,
+                                        padding: 14,
+                                        marginBottom: 16,
+                                        backgroundColor: isDark ? 'rgba(255, 179, 0, 0.12)' : 'rgba(255, 143, 0, 0.1)',
+                                        borderColor: '#FFB300',
+                                    },
+                                ]}>
                                 <Text style={{ fontSize: 11, fontWeight: 'bold', letterSpacing: 0.8, marginBottom: 4, color: isDark ? '#FFD54F' : '#EF6C00' }}>
                                     COMMON ROUTE POINT DRIVERS
                                 </Text>
@@ -773,7 +788,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                             return (
                                 <View key={ride.id || ride._id || String(index)}>
                                     {showCommonPointDivider && (
-                                        <View style={{ borderTopWidth: 1, borderTopColor: colors.borderColor, paddingTop: 18, marginTop: 6, marginBottom: 14 }}>
+                                        <View style={{ borderTopWidth: 1, borderTopColor: GLASS_TOKENS[isDark ? 'dark' : 'light'].hairlineDivider, paddingTop: 18, marginTop: 6, marginBottom: 14 }}>
                                             <Text style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 4, color: colors.textColor }}>
                                                 Other Drivers from Common Point
                                             </Text>
@@ -783,20 +798,23 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                                         </View>
                                     )}
                                     <TouchableOpacity
-                                        style={[styles.rideCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}
+                                        style={[styles.rideCard, getGlassSurfaceStyle(isDark, 'card')]}
                                         onPress={() => handleFinalBooking(ride)}>
                                         {ride.isPartialMatch && (
                                             <View
-                                                style={{
-                                                    paddingHorizontal: 12,
-                                                    paddingVertical: 6,
-                                                    borderRadius: 10,
-                                                    marginBottom: 12,
-                                                    alignSelf: 'flex-start',
-                                                    backgroundColor: isDark ? 'rgba(255, 179, 0, 0.16)' : 'rgba(255, 143, 0, 0.12)',
-                                                    borderWidth: 1,
-                                                    borderColor: '#FFB300',
-                                                }}>
+                                                style={[
+                                                    getGlassSurfaceStyle(isDark, 'pill'),
+                                                    {
+                                                        paddingHorizontal: 12,
+                                                        paddingVertical: 6,
+                                                        borderRadius: 10,
+                                                        marginBottom: 12,
+                                                        alignSelf: 'flex-start',
+                                                        backgroundColor: isDark ? 'rgba(255, 179, 0, 0.16)' : 'rgba(255, 143, 0, 0.12)',
+                                                        borderWidth: 1,
+                                                        borderColor: '#FFB300',
+                                                    },
+                                                ]}>
                                                 <Text style={{ fontSize: 10, fontWeight: 'bold', letterSpacing: 0.6, color: isDark ? '#FFD54F' : '#EF6C00' }}>
                                                     {badgeLabel}
                                                 </Text>
@@ -824,15 +842,24 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                                         </View>
 
                                         <View style={styles.dateTimeRow}>
-                                            <View style={styles.dateTimeChip}>
+                                            <View style={[styles.dateTimeChip, getGlassSurfaceStyle(isDark, 'pill')]}>
                                                 <Text style={styles.dateTimeChipIcon}>📅</Text>
                                                 <Text style={[styles.dateTimeChipText, { color: colors.textColor }]}>{selectedDate}</Text>
                                             </View>
-                                            <View style={[styles.dateTimeChip, { marginLeft: 10 }]}>
+                                            <View style={[styles.dateTimeChip, getGlassSurfaceStyle(isDark, 'pill'), { marginLeft: 10 }]}>
                                                 <Text style={styles.dateTimeChipIcon}>🕒</Text>
                                                 <Text style={[styles.dateTimeChipText, { color: colors.textColor }]}>{ride.departureTime}</Text>
                                             </View>
-                                            <View style={[styles.dateTimeChip, { marginLeft: 10, backgroundColor: 'rgba(31, 175, 99, 0.1)' }]}>
+                                            <View
+                                                style={[
+                                                    styles.dateTimeChip,
+                                                    getGlassSurfaceStyle(isDark, 'pill'),
+                                                    {
+                                                        marginLeft: 10,
+                                                        backgroundColor: isDark ? 'rgba(31, 175, 99, 0.16)' : 'rgba(31, 175, 99, 0.1)',
+                                                        borderColor: 'rgba(31, 175, 99, 0.3)',
+                                                    },
+                                                ]}>
                                                 <Text style={styles.dateTimeChipIcon}>🏁</Text>
                                                 <Text style={[styles.dateTimeChipText, { color: colors.textColor }]}>{stats.arrival}</Text>
                                             </View>
@@ -850,7 +877,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                                             </View>
                                             <View style={styles.seatsInfo}>
                                                 <Text style={[styles.seatsLeft, { color: '#00C853' }]}>{stats.distance} • {stats.duration}</Text>
-                                                <View style={[styles.arrowBtn, { backgroundColor: colors.borderColor }]}>
+                                                <View style={[styles.arrowBtn, getGlassSurfaceStyle(isDark, 'pill')]}>
                                                     <Text style={[styles.arrowText, { color: colors.textColor }]}>›</Text>
                                                 </View>
                                             </View>
@@ -867,7 +894,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
     };
 
     return (
-        <ScrollView style={[styles.container, { backgroundColor: colors.background }]} showsVerticalScrollIndicator={false} scrollEnabled={step !== 'rides'}>
+        <ScrollView style={[styles.container, { backgroundColor: 'transparent' }]} showsVerticalScrollIndicator={false} scrollEnabled={step !== 'rides'}>
             {step === 'details' ? renderRecipientDetails() : step === 'rides' ? renderRideSelection() : step === 'calculator' ? renderPriceCalculator() : (
                 <View style={styles.content}>
                     {onBack && (
@@ -890,7 +917,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                     <View style={styles.spacer24} />
 
                     {/* Step 1 Search UI - Existing */}
-                    <View style={[styles.inputCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor, zIndex: 10 }]}>
+                    <View style={[styles.inputCard, getGlassSurfaceStyle(isDark, 'elevated'), { zIndex: 10 }]}>
                         <LocationInput
                             label={t('parcel.pickupLabel')}
                             value={pickup}
@@ -937,9 +964,8 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                             style={[
                                 styles.input,
                                 styles.row,
+                                getGlassSurfaceStyle(isDark, 'input'),
                                 {
-                                    backgroundColor: colors.inputFillColor,
-                                    borderColor: colors.inputBorderColor,
                                     justifyContent: 'space-between',
                                 },
                             ]}
@@ -973,12 +999,15 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                                 key={size.id}
                                 style={[
                                     styles.sizeCard,
+                                    getGlassSurfaceStyle(isDark, 'card'),
                                     {
                                         width: width > 600 ? (width - 60) / 3 : width - 40,
-                                        backgroundColor: colors.cardColor,
-                                        borderColor: selectedSize === size.id ? colors.primary : colors.borderColor,
+                                        borderColor: selectedSize === size.id ? colors.primary : getGlassSurfaceStyle(isDark, 'card').borderColor,
                                         borderWidth: selectedSize === size.id ? 2 : 1,
-                                    }
+                                    },
+                                    selectedSize === size.id && {
+                                        backgroundColor: isDark ? 'rgba(91, 79, 255, 0.16)' : 'rgba(91, 79, 255, 0.1)',
+                                    },
                                 ]}
                                 onPress={() => setSelectedSize(size.id as any)}>
                                 <Icon
@@ -1097,7 +1126,7 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                 animationType="fade"
                 onRequestClose={() => setShowCalendar(false)}>
                 <View style={styles.modalOverlay}>
-                    <View style={[styles.calendarContent, { backgroundColor: colors.background, borderColor: colors.borderColor }]}>
+                    <View style={[styles.calendarContent, getGlassSurfaceStyle(isDark, 'modal')]}>
                         {/* Calendar Header */}
                         <View style={styles.calendarHeader}>
                             <TouchableOpacity onPress={() => {

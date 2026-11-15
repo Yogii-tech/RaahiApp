@@ -22,6 +22,7 @@ import { DriverKycDocsCard } from '../components/DriverKycDocsCard';
 import { validateMinimumDriverDocs } from '../utils/driverDocuments';
 import { useBrowserBack } from '../utils/browserHistory';
 import ScreenHeader from '../components/ScreenHeader';
+import { GlassBackdrop, getGlassSurfaceStyle } from '../styles/glassmorphism';
 
 interface ResubmitDocsViewProps {
     onClose: () => void;
@@ -207,7 +208,8 @@ const ResubmitDocsView: React.FC<ResubmitDocsViewProps> = ({ onClose, disableBro
 
     if (showDocSubmittedModal) {
         return (
-            <View style={[{ flex: 1 }, { backgroundColor: isDark ? '#0A1628' : '#F0F7FF', justifyContent: 'center', alignItems: 'center', padding: 28 }]}>
+            <View style={[{ flex: 1 }, { backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center', padding: 28 }]}>
+                <GlassBackdrop isDark={isDark} />
                 {/* Glow ring */}
                 <View style={{
                     width: 140, height: 140, borderRadius: 70,
@@ -297,8 +299,9 @@ const ResubmitDocsView: React.FC<ResubmitDocsViewProps> = ({ onClose, disableBro
 
     return (
         <KeyboardAvoidingView
-            style={[{ flex: 1 }, { backgroundColor: isDark ? '#0F172A' : '#F8FAFC' }]}
+            style={[{ flex: 1 }, { backgroundColor: colors.background }]}
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <GlassBackdrop isDark={isDark} />
             <ScrollView
                 style={{ flex: 1 }}
                 contentContainerStyle={{ paddingBottom: 48 }}
@@ -318,29 +321,35 @@ const ResubmitDocsView: React.FC<ResubmitDocsViewProps> = ({ onClose, disableBro
                 <View style={{ paddingHorizontal: 20, paddingTop: 24 }}>
 
                     {/* Section 1: Vehicle Info */}
-                    <View style={[kycStyles.card, { backgroundColor: isDark ? '#1E293B' : '#FFFFFF' }]}>
+                    <View style={[getGlassSurfaceStyle(isDark, 'card'), kycStyles.card]}>
                         <View style={kycStyles.cardHeader}>
                             <Text style={kycStyles.cardIcon}>🚗</Text>
                             <Text style={[kycStyles.cardTitle, { color: colors.textColor }]}>Vehicle Information</Text>
                         </View>
 
                         <TextInput
-                            style={[kycStyles.kycInput, {
-                                backgroundColor: isDark ? '#0F172A' : '#F1F5F9',
-                                color: colors.textColor,
-                                borderColor: vehicleDocs.name ? colors.primary : (isDark ? '#334155' : '#E2E8F0')
-                            }]}
+                            style={[
+                                getGlassSurfaceStyle(isDark, 'input'),
+                                kycStyles.kycInput,
+                                {
+                                    color: colors.textColor,
+                                    borderColor: vehicleDocs.name ? colors.primary : (isDark ? 'rgba(255, 255, 255, 0.16)' : 'rgba(255, 255, 255, 0.85)')
+                                }
+                            ]}
                             placeholder="Vehicle Name (e.g. Tata Sumo Gold)"
                             placeholderTextColor={isDark ? '#475569' : '#94A3B8'}
                             value={vehicleDocs.name}
                             onChangeText={text => setVehicleDocs(p => ({ ...p, name: text }))}
                         />
                         <TextInput
-                            style={[kycStyles.kycInput, {
-                                backgroundColor: isDark ? '#0F172A' : '#F1F5F9',
-                                color: colors.textColor,
-                                borderColor: vehicleDocs.type ? colors.primary : (isDark ? '#334155' : '#E2E8F0')
-                            }]}
+                            style={[
+                                getGlassSurfaceStyle(isDark, 'input'),
+                                kycStyles.kycInput,
+                                {
+                                    color: colors.textColor,
+                                    borderColor: vehicleDocs.type ? colors.primary : (isDark ? 'rgba(255, 255, 255, 0.16)' : 'rgba(255, 255, 255, 0.85)')
+                                }
+                            ]}
                             placeholder="Vehicle Type (e.g. SUV, Van, Sedan, Bus)"
                             placeholderTextColor={isDark ? '#475569' : '#94A3B8'}
                             autoCapitalize="words"
@@ -349,12 +358,15 @@ const ResubmitDocsView: React.FC<ResubmitDocsViewProps> = ({ onClose, disableBro
                         />
                         <View style={{ flexDirection: 'row', gap: 12 }}>
                             <TextInput
-                                style={[kycStyles.kycInput, {
-                                    flex: 1,
-                                    backgroundColor: isDark ? '#0F172A' : '#F1F5F9',
-                                    color: colors.textColor,
-                                    borderColor: vehicleDocs.seats ? colors.primary : (isDark ? '#334155' : '#E2E8F0')
-                                }]}
+                                style={[
+                                    getGlassSurfaceStyle(isDark, 'input'),
+                                    kycStyles.kycInput,
+                                    {
+                                        flex: 1,
+                                        color: colors.textColor,
+                                        borderColor: vehicleDocs.seats ? colors.primary : (isDark ? 'rgba(255, 255, 255, 0.16)' : 'rgba(255, 255, 255, 0.85)')
+                                    }
+                                ]}
                                 placeholder="Seats"
                                 placeholderTextColor={isDark ? '#475569' : '#94A3B8'}
                                 keyboardType="number-pad"
@@ -362,12 +374,15 @@ const ResubmitDocsView: React.FC<ResubmitDocsViewProps> = ({ onClose, disableBro
                                 onChangeText={text => setVehicleDocs(p => ({ ...p, seats: text.replace(/[^0-9]/g, '') }))}
                             />
                             <TextInput
-                                style={[kycStyles.kycInput, {
-                                    flex: 2,
-                                    backgroundColor: isDark ? '#0F172A' : '#F1F5F9',
-                                    color: colors.textColor,
-                                    borderColor: vehicleDocs.number ? colors.primary : (isDark ? '#334155' : '#E2E8F0')
-                                }]}
+                                style={[
+                                    getGlassSurfaceStyle(isDark, 'input'),
+                                    kycStyles.kycInput,
+                                    {
+                                        flex: 2,
+                                        color: colors.textColor,
+                                        borderColor: vehicleDocs.number ? colors.primary : (isDark ? 'rgba(255, 255, 255, 0.16)' : 'rgba(255, 255, 255, 0.85)')
+                                    }
+                                ]}
                                 placeholder="Vehicle Number (e.g. HP12AB3456)"
                                 placeholderTextColor={isDark ? '#475569' : '#94A3B8'}
                                 autoCapitalize="characters"
@@ -378,7 +393,7 @@ const ResubmitDocsView: React.FC<ResubmitDocsViewProps> = ({ onClose, disableBro
                     </View>
 
                     {/* Section 2: Seating Layout */}
-                    <View style={[kycStyles.card, { backgroundColor: isDark ? '#1E293B' : '#FFFFFF' }]}>
+                    <View style={[getGlassSurfaceStyle(isDark, 'card'), kycStyles.card]}>
                         <View style={kycStyles.cardHeader}>
                             <Text style={kycStyles.cardIcon}>💺</Text>
                             <Text style={[kycStyles.cardTitle, { color: colors.textColor }]}>Seating Arrangement</Text>
@@ -392,14 +407,11 @@ const ResubmitDocsView: React.FC<ResubmitDocsViewProps> = ({ onClose, disableBro
                                 <TouchableOpacity
                                     key={layout.id}
                                     style={[
+                                        getGlassSurfaceStyle(isDark, 'pill'),
                                         kycStyles.layoutCard,
-                                        {
-                                            backgroundColor: vehicleDocs.layout === layout.id
-                                                ? colors.primary
-                                                : (isDark ? '#0F172A' : '#F1F5F9'),
-                                            borderColor: vehicleDocs.layout === layout.id
-                                                ? colors.primary
-                                                : (isDark ? '#334155' : '#E2E8F0'),
+                                        vehicleDocs.layout === layout.id && {
+                                            backgroundColor: colors.primary,
+                                            borderColor: colors.primary,
                                         }
                                     ]}
                                     onPress={() => setVehicleDocs(p => ({ ...p, layout: layout.id as any }))}

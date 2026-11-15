@@ -5,6 +5,7 @@ import { downloadCSV } from '../../utils/exportUtils';
 import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
 import { parseJsonSafe, createRequestAbort } from '../../utils/json';
+import { getGlassSurfaceStyle } from '../../styles/glassmorphism';
 
 interface RideRow {
      id: string;
@@ -152,7 +153,7 @@ export default function AdminRidesDetailView({ isDark, searchQuery = '', initial
      }
 
      return (
-          <ScrollView style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: T.bg }]} showsVerticalScrollIndicator={false}>
+          <ScrollView style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: 'transparent' }]} showsVerticalScrollIndicator={false}>
                <View style={[styles.header, isMobile && { flexDirection: 'column', alignItems: 'flex-start', gap: 12 }]}>
                     <Text style={[styles.headerTitle, { color: T.text }]}>Rides Overview</Text>
                     <View style={[styles.headerButtons, { flexWrap: 'wrap', gap: 10 }]}>
@@ -182,7 +183,7 @@ export default function AdminRidesDetailView({ isDark, searchQuery = '', initial
                                         key={s.id}
                                         activeOpacity={0.8}
                                         onPress={() => setSelectedTab(s.id)}
-                                        style={[styles.statCard, { backgroundColor: T.card, borderColor: isActive ? s.color : T.border }, isActive && styles.activeCard]}>
+                                        style={[getGlassSurfaceStyle(isDark, 'card'), styles.statCard, isActive && { borderColor: s.color }, isActive && styles.activeCard]}>
                                         <View style={styles.cardTop}>
                                              <View>
                                                   <Text style={[styles.cardLabel, { color: T.subtext }]}>{s.label}</Text>
@@ -198,7 +199,7 @@ export default function AdminRidesDetailView({ isDark, searchQuery = '', initial
 
                {/* Trend Chart */}
                {trendData.length > 0 && (
-                    <View style={[styles.graphPanel, isMobile && { padding: 16 }, { backgroundColor: T.card, borderColor: T.border }]}>
+                    <View style={[getGlassSurfaceStyle(isDark, 'card'), styles.graphPanel, isMobile && { padding: 16 }]}>
                          <View style={styles.graphHeader}>
                               <View style={{ flex: 1, minWidth: 0 }}>
                                    <Text style={[styles.graphTitle, { color: T.text }]}>Ride Volume — Last 6 Months</Text>
@@ -217,7 +218,7 @@ export default function AdminRidesDetailView({ isDark, searchQuery = '', initial
                )}
 
                {/* Rides Table */}
-               <View style={[styles.tablePanel, isMobile && { padding: 16 }, { backgroundColor: T.card, borderColor: T.border }]}>
+               <View style={[getGlassSurfaceStyle(isDark, 'card'), styles.tablePanel, isMobile && { padding: 16 }]}>
                     <Text style={[styles.tableTitle, { color: T.text }]}>
                          Ride Records {selectedTab !== 'all' ? `— ${selectedTab}` : ''} ({filteredRides.length})
                     </Text>

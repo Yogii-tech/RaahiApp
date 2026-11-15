@@ -8,6 +8,7 @@ import { useAuth } from '../../context/AuthContext';
 import { downloadCSV } from '../../utils/exportUtils';
 import { notify } from '../../utils/notify';
 import { parseJsonSafe, getApiErrorMessage, createRequestAbort } from '../../utils/json';
+import { getGlassSurfaceStyle } from '../../styles/glassmorphism';
 
 interface Booking {
     id: string;
@@ -304,7 +305,7 @@ export default function AdminBookingsView({ token, searchQuery = '' }: { token: 
             </View>
 
             {/* Table Card */}
-            <View style={styles.tableCard}>
+            <View style={[styles.tableCard, getGlassSurfaceStyle(true, 'card')]}>
                 {isMobile ? (
                     <FlatList
                         data={filteredBookings}
@@ -373,7 +374,7 @@ export default function AdminBookingsView({ token, searchQuery = '' }: { token: 
                     onRequestClose={closeDetailModal}
                 >
                     <View style={[styles.modalBackdrop, isMobile && { padding: 12 }]}>
-                        <View style={styles.detailCard}>
+                        <View style={[styles.detailCard, getGlassSurfaceStyle(true, 'modal')]}>
                             {/* Modal Header */}
                             <View style={[styles.modalHeader, isMobile && { padding: 14 }]}>
                                 <View style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>

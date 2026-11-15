@@ -25,6 +25,7 @@ import VehicleDetailsScreen from './VehicleDetailsScreen';
 import LegalScreen from './LegalScreen';
 import { pushSubViewHistory, popSubViewHistory, useBrowserBack } from '../utils/browserHistory';
 import { useIsFocused } from '@react-navigation/native';
+import { GLASS_TOKENS, getGlassSurfaceStyle } from '../styles/glassmorphism';
 
 
 interface AccountScreenProps {
@@ -191,25 +192,27 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
         return <LegalScreen onClose={() => { setView('main'); popSubViewHistory(); }} />;
     }
 
+    const hairlineDivider = isDark
+        ? GLASS_TOKENS.dark.hairlineDivider
+        : GLASS_TOKENS.light.hairlineDivider;
+
     return (
         <ScrollView
-            style={[styles.container, { backgroundColor: colors.background }]}
+            style={[styles.container, { backgroundColor: 'transparent' }]}
             contentContainerStyle={styles.content}
             showsVerticalScrollIndicator={false}>
             {/* Profile Card */}
             <View
                 style={[
+                    getGlassSurfaceStyle(isDark, 'elevated'),
                     styles.profileCard,
-                    {
-                        backgroundColor: colors.cardColor,
-                        borderColor: colors.borderColor,
-                    },
                 ]}>
                 <View
                     style={[
+                        getGlassSurfaceStyle(isDark, 'pill'),
                         styles.avatar,
                         {
-                            backgroundColor: isDark ? '#181F2A' : '#F8F9FF',
+                            backgroundColor: isDark ? 'rgba(15, 23, 42, 0.65)' : 'rgba(255, 255, 255, 0.72)',
                         },
                     ]}>
                     <Icon name="person" size={40} color={colors.accentColor} style={styles.avatarIcon} />
@@ -284,11 +287,8 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
                 <React.Fragment key={item.title}>
                     <TouchableOpacity
                         style={[
+                            getGlassSurfaceStyle(isDark, 'card'),
                             styles.optionTile,
-                            {
-                                backgroundColor: colors.cardColor,
-                                borderColor: colors.borderColor,
-                            },
                         ]}
                         activeOpacity={0.7}
                         onPress={item.action}>
@@ -318,15 +318,19 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
                 animationType="fade"
                 onRequestClose={() => setLogoutVisible(false)}>
                 <View style={styles.modalOverlay}>
-                    <View style={[styles.modalContent, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}>
+                    <View style={[getGlassSurfaceStyle(isDark, 'modal'), styles.modalContent]}>
                         <Text style={[styles.modalTitle, { color: colors.textColor }]}>{t('account.logoutTitle')}</Text>
                         <Text style={[styles.modalText, { color: colors.subtextColor }]}>{t('account.logoutConfirm')}</Text>
 
                         <View style={styles.modalButtons}>
                             <TouchableOpacity
-                                style={[styles.modalButton, styles.cancelButton]}
+                                style={[
+                                    styles.modalButton,
+                                    styles.cancelButton,
+                                    { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(34,34,96,0.08)' },
+                                ]}
                                 onPress={() => setLogoutVisible(false)}>
-                                <Text style={styles.cancelButtonText}>{t('common.cancel')}</Text>
+                                <Text style={[styles.cancelButtonText, { color: isDark ? '#CBD5E1' : '#475569' }]}>{t('common.cancel')}</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
                                 style={[styles.modalButton, styles.confirmButton]}
@@ -345,13 +349,15 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
                 animationType="fade"
                 onRequestClose={() => setLanguageVisible(false)}>
                 <View style={styles.modalOverlay}>
-                    <View style={[styles.modalContent, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}>
+                    <View style={[getGlassSurfaceStyle(isDark, 'modal'), styles.modalContent]}>
                         <Text style={[styles.modalTitle, { color: colors.textColor, marginBottom: 20 }]}>{t('account.languageModalTitle')}</Text>
 
                         <TouchableOpacity
                             style={[
+                                getGlassSurfaceStyle(isDark, 'input'),
                                 styles.languageOption,
-                                language === 'en' && { borderColor: colors.primary, backgroundColor: 'rgba(91, 79, 255, 0.1)' }
+                                { borderColor: hairlineDivider },
+                                language === 'en' && { borderColor: colors.primary, backgroundColor: 'rgba(91, 79, 255, 0.14)' }
                             ]}
                             onPress={() => handleSelectLanguage('en')}>
                             <Text style={[styles.languageOptionText, { color: colors.textColor }]}>English</Text>
@@ -362,8 +368,10 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
 
                         <TouchableOpacity
                             style={[
+                                getGlassSurfaceStyle(isDark, 'input'),
                                 styles.languageOption,
-                                language === 'hi' && { borderColor: colors.primary, backgroundColor: 'rgba(91, 79, 255, 0.1)' }
+                                { borderColor: hairlineDivider },
+                                language === 'hi' && { borderColor: colors.primary, backgroundColor: 'rgba(91, 79, 255, 0.14)' }
                             ]}
                             onPress={() => handleSelectLanguage('hi')}>
                             <Text style={[styles.languageOptionText, { color: colors.textColor }]}>हिंदी (Hindi)</Text>
@@ -385,12 +393,16 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
                 animationType="fade"
                 onRequestClose={() => setSupportVisible(false)}>
                 <View style={styles.modalOverlay}>
-                    <View style={[styles.modalContent, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}>
+                    <View style={[getGlassSurfaceStyle(isDark, 'modal'), styles.modalContent]}>
                         <Text style={[styles.modalTitle, { color: colors.textColor }]}>{t('account.support')}</Text>
                         <Text style={[styles.modalText, { color: colors.subtextColor }]}>{t('common.chooseAction') || 'Choose how you want to reach us'}</Text>
 
                         <TouchableOpacity
-                            style={[styles.supportOption, { borderColor: colors.borderColor }]}
+                            style={[
+                                getGlassSurfaceStyle(isDark, 'card'),
+                                styles.supportOption,
+                                { borderColor: hairlineDivider },
+                            ]}
                             onPress={handleSupportCall}>
                             <Icon name="call-outline" size={22} color={colors.textColor} style={styles.supportOptionIcon} />
                             <Text style={[styles.supportOptionText, { color: colors.textColor }]}>{t('account.callSupport') || 'Call Support'}</Text>
@@ -399,7 +411,11 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ isParcelMode }) => {
                         <View style={styles.spacer14} />
 
                         <TouchableOpacity
-                            style={[styles.supportOption, { borderColor: colors.borderColor }]}
+                            style={[
+                                getGlassSurfaceStyle(isDark, 'card'),
+                                styles.supportOption,
+                                { borderColor: hairlineDivider },
+                            ]}
                             onPress={handleSupportWhatsApp}>
                             <Icon name="logo-whatsapp" size={22} color="#25D366" style={styles.supportOptionIcon} />
                             <Text style={[styles.supportOptionText, { color: colors.textColor }]}>{t('account.whatsappSupport') || 'WhatsApp Support'}</Text>

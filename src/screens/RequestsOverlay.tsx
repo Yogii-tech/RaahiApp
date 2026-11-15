@@ -10,6 +10,7 @@ import { apiRequest } from '../utils/api';
 import { parseJsonSafe, getApiErrorMessage, createRequestAbort } from '../utils/json';
 import { notify } from '../utils/notify';
 import Icon from 'react-native-vector-icons/Ionicons';
+import { GlassBackdrop, getGlassSurfaceStyle } from '../styles/glassmorphism';
 
 interface RequestsOverlayProps {
     onClose?: () => void;
@@ -128,7 +129,7 @@ const RatingModal: React.FC<RatingModalProps> = ({ visible, rideId, driverName, 
     return (
         <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
             <View style={ratingModalStyles.overlay}>
-                <View style={[ratingModalStyles.modal, { backgroundColor: isDark ? '#1A2332' : '#FFFFFF' }]}>
+                <View style={[getGlassSurfaceStyle(isDark, 'modal'), ratingModalStyles.modal]}>
                     {submitted ? (
                         <>
                             <Text style={{ fontSize: 48, textAlign: 'center', marginBottom: 12 }}>🎉</Text>
@@ -159,11 +160,11 @@ const RatingModal: React.FC<RatingModalProps> = ({ visible, rideId, driverName, 
                                     placeholderTextColor={colors.subtextColor}
                                     multiline
                                     numberOfLines={3}
-                                    style={[ratingModalStyles.commentInput, {
-                                        backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
-                                        color: colors.textColor,
-                                        borderColor: colors.borderColor,
-                                    }]}
+                                    style={[
+                                        getGlassSurfaceStyle(isDark, 'input'),
+                                        ratingModalStyles.commentInput,
+                                        { color: colors.textColor },
+                                    ]}
                                 />
                             </View>
                             <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
@@ -448,7 +449,7 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
 
         return (
             <TouchableOpacity
-                style={[styles.card, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}
+                style={[getGlassSurfaceStyle(isDark, 'card'), styles.card]}
                 onPress={() => toggleExpand(item.id)}
                 activeOpacity={0.85}
             >
@@ -566,9 +567,9 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
         return (
             <TouchableOpacity
                 style={[
+                    getGlassSurfaceStyle(isDark, 'card'),
                     styles.card,
                     {
-                        backgroundColor: colors.cardColor,
                         borderColor: isAccepted ? '#00C85322' : isRejected ? '#F4433622' : colors.borderColor,
                         borderLeftWidth: 4,
                         borderLeftColor: statusColor,
@@ -658,6 +659,7 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
 
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
+            <GlassBackdrop isDark={isDark} />
             {/* Rating Modal */}
             <RatingModal
                 visible={ratingModal.visible}
@@ -688,7 +690,7 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
                             : <Text style={{ color: '#F44336', fontSize: 12, fontWeight: '700' }}>🗑 Clear All</Text>
                         }
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+                    <TouchableOpacity onPress={onClose} style={[getGlassSurfaceStyle(isDark, 'pill'), styles.closeBtn]}>
                         <Text style={{ color: colors.primary, fontWeight: 'bold' }}>✕ Close</Text>
                     </TouchableOpacity>
                 </View>
@@ -711,10 +713,11 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
                             return (
                                 <TouchableOpacity
                                     key={notif.id}
-                                    style={[styles.notifCard, {
-                                        backgroundColor: colors.cardColor,
-                                        borderLeftColor: accent,
-                                    }]}
+                                    style={[
+                                        getGlassSurfaceStyle(isDark, 'card'),
+                                        styles.notifCard,
+                                        { borderLeftColor: accent },
+                                    ]}
                                     onPress={() => {
                                         if (notif.type === 'chat' && notif.relatedId) {
                                             onOpenChat({ id: notif.relatedId });
@@ -845,7 +848,7 @@ const styles = StyleSheet.create({
         borderWidth: 1, borderRadius: 8, paddingHorizontal: 10,
         paddingVertical: 5, flexDirection: 'row', alignItems: 'center',
     },
-    closeBtn: { padding: 6 },
+    closeBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 },
     list: { paddingBottom: 24 },
     sectionLabel: {
         fontSize: 10, fontWeight: '800', letterSpacing: 1,

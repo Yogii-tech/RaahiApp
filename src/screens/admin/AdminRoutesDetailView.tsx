@@ -4,6 +4,7 @@ import { downloadCSV } from '../../utils/exportUtils';
 import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
 import { parseJsonSafe, createRequestAbort } from '../../utils/json';
+import { getGlassSurfaceStyle } from '../../styles/glassmorphism';
 
 interface RouteRow {
      id: string;
@@ -128,7 +129,7 @@ export default function AdminRoutesDetailView({ isDark, searchQuery = '' }: { is
      }
 
      return (
-          <ScrollView style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: T.bg }]} showsVerticalScrollIndicator={false}>
+          <ScrollView style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: 'transparent' }]} showsVerticalScrollIndicator={false}>
                <View style={[styles.header, isMobile && { flexDirection: 'column', alignItems: 'flex-start', gap: 12 }]}>
                     <Text style={[styles.headerTitle, { color: T.text }]}>Route Analytics</Text>
                     <View style={[styles.headerButtons, { flexWrap: 'wrap', gap: 10 }]}>
@@ -152,7 +153,7 @@ export default function AdminRoutesDetailView({ isDark, searchQuery = '' }: { is
                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 10 }}>
                     <View style={{ flexDirection: 'row', gap: 16 }}>
                          {statCards.map(s => (
-                              <View key={s.id} style={[styles.statCard, { backgroundColor: T.card, borderColor: T.border }]}>
+                              <View key={s.id} style={[getGlassSurfaceStyle(isDark, 'card'), styles.statCard]}>
                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
                                         <Text style={[styles.cardLabel, { color: T.subtext }]}>{s.label}</Text>
                                         <Text style={{ fontSize: 20 }}>{s.icon}</Text>
@@ -164,7 +165,7 @@ export default function AdminRoutesDetailView({ isDark, searchQuery = '' }: { is
                </ScrollView>
 
                {/* Routes Table */}
-               <View style={[styles.tablePanel, isMobile && { padding: 16 }, { backgroundColor: T.card, borderColor: T.border }]}>
+               <View style={[getGlassSurfaceStyle(isDark, 'card'), styles.tablePanel, isMobile && { padding: 16 }]}>
                     <Text style={[styles.tableTitle, { color: T.text }]}>
                          Route Breakdown — {filteredRoutes.length} corridor{filteredRoutes.length !== 1 ? 's' : ''}
                     </Text>

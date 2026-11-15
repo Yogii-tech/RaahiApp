@@ -22,6 +22,7 @@ import {
   resolveAdminTargetView,
   resolveNotificationCategory,
 } from '../../utils/adminNotifications';
+import { getGlassSurfaceStyle } from '../../styles/glassmorphism';
 
 export interface AdminThemePalette {
   bg: string;
@@ -121,12 +122,9 @@ export const AdminNotificationBellPopover: React.FC<AdminNotificationBellPopover
         <View
           testID="admin-bell-popover"
           style={[
+            getGlassSurfaceStyle(isDark, 'modal'),
             styles.popoverCard,
             isMobile ? styles.popoverCardMobile : styles.popoverCardDesktop,
-            {
-              backgroundColor: palette.card,
-              borderColor: palette.border,
-            },
           ]}
         >
           {/* Header */}
@@ -425,7 +423,7 @@ export const AdminNotificationsView: React.FC<AdminNotificationsViewProps> = ({
             testID="admin-notifs-refresh-btn"
             onPress={onRefresh}
             disabled={refreshing}
-            style={[styles.ghostBtn, { backgroundColor: T.card, borderColor: T.border }, refreshing && { opacity: 0.6 }]}
+            style={[getGlassSurfaceStyle(isDark, 'pill'), styles.ghostBtn, refreshing && { opacity: 0.6 }]}
           >
             <Text style={[styles.ghostBtnText, { color: T.text }]}>
               {refreshing ? '↻ Refreshing...' : '↻ Refresh'}
@@ -450,7 +448,7 @@ export const AdminNotificationsView: React.FC<AdminNotificationsViewProps> = ({
             testID="admin-notifs-test-push-btn"
             onPress={onSendTestPush}
             disabled={testingPush}
-            style={[styles.ghostBtn, { backgroundColor: T.card, borderColor: T.border }, testingPush && { opacity: 0.6 }]}
+            style={[getGlassSurfaceStyle(isDark, 'pill'), styles.ghostBtn, testingPush && { opacity: 0.6 }]}
           >
             <Text style={[styles.ghostBtnText, { color: T.text }]}>
               {testingPush ? 'Sending...' : '🔔 Test Push'}
@@ -599,7 +597,7 @@ export const AdminNotificationsView: React.FC<AdminNotificationsViewProps> = ({
           <Text style={{ color: T.sub, marginTop: 12, fontSize: 14 }}>Loading notifications...</Text>
         </View>
       ) : filteredNotifications.length === 0 ? (
-        <View style={[styles.emptyCard, { backgroundColor: T.card, borderColor: T.border }]}>
+        <View style={[getGlassSurfaceStyle(isDark, 'card'), styles.emptyCard]}>
           <Text style={{ fontSize: 40, marginBottom: 12 }}>🔔</Text>
           <Text style={{ color: T.text, fontSize: 16, fontWeight: '700', marginBottom: 4 }}>
             {selectedFilter === 'unread' ? 'No unread notifications' : 'No notifications found'}
@@ -629,10 +627,11 @@ export const AdminNotificationsView: React.FC<AdminNotificationsViewProps> = ({
                 onPress={() => onNavigateNotification(n)}
                 activeOpacity={0.82}
                 style={[
+                  getGlassSurfaceStyle(isDark, 'card'),
                   styles.notifCard,
                   {
-                    backgroundColor: n.read ? T.card : T.cardUnread,
-                    borderColor: n.read ? T.border : `${appearance.color}55`,
+                    backgroundColor: n.read ? getGlassSurfaceStyle(isDark, 'card').backgroundColor : T.cardUnread,
+                    borderColor: n.read ? getGlassSurfaceStyle(isDark, 'card').borderColor : `${appearance.color}55`,
                     borderLeftColor: appearance.color,
                     opacity: n.read ? 0.85 : 1,
                   },
