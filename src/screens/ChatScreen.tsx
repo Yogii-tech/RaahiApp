@@ -21,6 +21,7 @@ import { apiRequest } from '../utils/api';
 import { parseJsonSafe, getApiErrorMessage, createRequestAbort } from '../utils/json';
 import { notify, confirmAction } from '../utils/notify';
 import { useRoute, useNavigation } from '@react-navigation/native';
+import BackButton from '../components/BackButton';
 
 interface Message {
     id: string;
@@ -288,16 +289,12 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
         <View style={[styles.container, { backgroundColor: colors.background }]}>
             {/* Header */}
             <View style={[styles.header, { backgroundColor: colors.primary }]}>
-                <TouchableOpacity
+                <BackButton
                     onPress={onBack}
+                    variant="icon"
+                    tone="inverted"
                     style={styles.backButton}
-                    hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
-                    activeOpacity={0.7}
-                >
-                    <View style={styles.backIconWrap}>
-                        <Text style={styles.headerIcon}>‹</Text>
-                    </View>
-                </TouchableOpacity>
+                />
 
                 <View style={styles.headerInfo}>
                     <View style={styles.headerTitleRow}>
@@ -447,26 +444,8 @@ const styles = StyleSheet.create({
         paddingBottom: 15,
     },
     backButton: {
-        padding: 6,
-        marginRight: 8,
-        justifyContent: 'center',
-        alignItems: 'center',
+        marginRight: 10,
         zIndex: 50,
-    },
-    backIconWrap: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        backgroundColor: 'rgba(255,255,255,0.18)',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    headerIcon: {
-        color: '#FFF',
-        fontSize: 28,
-        fontWeight: '300',
-        lineHeight: 32,
-        includeFontPadding: false,
     },
     headerInfo: {
         flex: 1,

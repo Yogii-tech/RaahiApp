@@ -7,6 +7,7 @@ import {
      ScrollView,
      TextInput,
      ActivityIndicator,
+     Platform,
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
@@ -16,6 +17,7 @@ import { apiRequest, getAuthSessionGeneration } from '../utils/api';
 import { parseJsonSafe, getApiErrorMessage } from '../utils/json';
 import { notify } from '../utils/notify';
 import Icon from 'react-native-vector-icons/Ionicons';
+import ScreenHeader from '../components/ScreenHeader';
 
 const PricingSettingsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
      const { colors, isDark } = useTheme();
@@ -107,12 +109,11 @@ const PricingSettingsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
 
      return (
           <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
-               <View style={styles.header}>
-                    <TouchableOpacity onPress={onBack} style={styles.backButton}>
-                         <Icon name="chevron-back" size={28} color={colors.primary} />
-                    </TouchableOpacity>
-                    <Text style={[styles.title, { color: colors.textColor }]}>{t('account.pricingSettings')}</Text>
-               </View>
+               <ScreenHeader
+                    title={t('account.pricingSettings')}
+                    onBack={onBack}
+                    style={styles.header}
+               />
 
                <View style={styles.content}>
                     <View style={[styles.card, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}>
@@ -159,9 +160,7 @@ const PricingSettingsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
 
 const styles = StyleSheet.create({
      container: { flex: 1 },
-     header: { flexDirection: 'row', alignItems: 'center', padding: 20, paddingTop: 40 },
-     backButton: { marginRight: 16 },
-     title: { fontSize: 24, fontWeight: 'bold' },
+     header: { paddingHorizontal: 20, paddingTop: Platform.OS === 'web' ? 20 : 40, paddingBottom: 8 },
      content: { padding: 20 },
      card: { borderRadius: 24, borderWidth: 1, padding: 24, alignItems: 'center' },
      iconContainer: { marginBottom: 20, width: 80, height: 80, borderRadius: 40, justifyContent: 'center', alignItems: 'center' },

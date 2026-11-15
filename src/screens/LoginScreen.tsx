@@ -23,6 +23,8 @@ import { DriverKycDocsCard } from '../components/DriverKycDocsCard';
 import { validateMinimumDriverDocs } from '../utils/driverDocuments';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { pushSubViewHistory, popSubViewHistory, useBrowserBack } from '../utils/browserHistory';
+import BackButton from '../components/BackButton';
+import ScreenHeader from '../components/ScreenHeader';
 
 export type LoginStep =
     | 'phone'
@@ -835,16 +837,15 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                     showsVerticalScrollIndicator={false}>
 
                     {/* Header */}
-                    <View style={[kycStyles.pageHeader, { backgroundColor: colors.primary }]}>
-                        <TouchableOpacity onPress={() => handleBackStep('driver_consent')} style={kycStyles.backBtn}>
-                            <Text style={{ color: '#fff', fontSize: 22, lineHeight: 26 }}>←</Text>
-                        </TouchableOpacity>
-                        <View style={{ flex: 1, alignItems: 'center' }}>
-                            <Text style={kycStyles.pageHeaderTitle}>Driver KYC</Text>
-                            <Text style={kycStyles.pageHeaderSub}>Vehicle & Document Verification</Text>
-                        </View>
-                        <View style={{ width: 40 }} />
-                    </View>
+                    <ScreenHeader
+                        title="Driver KYC"
+                        subtitle="Vehicle & Document Verification"
+                        onBack={() => handleBackStep('driver_consent')}
+                        backIconName="arrow-back"
+                        tone="primary"
+                        align="center"
+                        style={kycStyles.pageHeader}
+                    />
 
                     <View style={{ paddingHorizontal: 20, paddingTop: 24 }}>
 
@@ -1292,9 +1293,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                             <Text style={styles.buttonText}>{t('login.continue')}</Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity onPress={() => handleBackStep('name')} style={styles.backButton}>
-                            <Text style={[styles.switchText, { color: colors.primary }]}>{t('common.back')}</Text>
-                        </TouchableOpacity>
+                        <BackButton
+                            variant="link"
+                            onPress={() => handleBackStep('name')}
+                            style={[styles.backButton, { alignSelf: 'center' }]}
+                        />
                     </View>
                 )}
 
@@ -1384,9 +1387,13 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                             <Text style={styles.buttonText}>Agree & Proceed to Vehicle KYC</Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity onPress={() => handleBackStep('role')} style={styles.backButton}>
-                            <Text style={[styles.switchText, { color: colors.primary }]}>← Back to Role Selection</Text>
-                        </TouchableOpacity>
+                        <BackButton
+                            variant="link"
+                            iconName="arrow-back"
+                            label="Back to Role Selection"
+                            onPress={() => handleBackStep('role')}
+                            style={[styles.backButton, { alignSelf: 'center' }]}
+                        />
                     </View>
                 )}
 
@@ -1423,9 +1430,13 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                             disabled={loading}>
                             {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Send OTP</Text>}
                         </TouchableOpacity>
-                        <TouchableOpacity style={{ marginTop: 16 }} onPress={() => handleBackStep('phone')}>
-                            <Text style={[styles.switchText, { color: colors.subtextColor }]}>← Back to regular login</Text>
-                        </TouchableOpacity>
+                        <BackButton
+                            variant="link"
+                            iconName="arrow-back"
+                            label="Back to regular login"
+                            onPress={() => handleBackStep('phone')}
+                            style={{ marginTop: 14, alignSelf: 'center' }}
+                        />
                     </>
                 )}
 
@@ -1484,9 +1495,13 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => {
                             </View>
                         ) : null}
                         <View style={styles.spacer16} />
-                        <TouchableOpacity onPress={() => handleBackStep('admin_phone')} style={{ alignItems: 'center' }}>
-                            <Text style={[styles.switchText, { color: colors.subtextColor }]}>← Change number</Text>
-                        </TouchableOpacity>
+                        <BackButton
+                            variant="link"
+                            iconName="arrow-back"
+                            label="Change number"
+                            onPress={() => handleBackStep('admin_phone')}
+                            style={{ alignSelf: 'center' }}
+                        />
                         <View style={styles.spacer12} />
                         <View style={{ alignItems: 'center' }}>
                             {resendTimer > 0 ? (
@@ -1803,27 +1818,9 @@ const styles = StyleSheet.create({
 
 const kycStyles = StyleSheet.create({
     pageHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingTop: Platform.OS === 'web' ? 20 : 52,
-        paddingBottom: 20,
+        paddingTop: Platform.OS === 'web' ? 18 : 50,
+        paddingBottom: 18,
         paddingHorizontal: 20,
-    },
-    backBtn: {
-        width: 40,
-        height: 40,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    pageHeaderTitle: {
-        color: '#FFFFFF',
-        fontSize: 18,
-        fontWeight: '700',
-    },
-    pageHeaderSub: {
-        color: 'rgba(255,255,255,0.75)',
-        fontSize: 12,
-        marginTop: 2,
     },
     progressRow: {
         flexDirection: 'row',

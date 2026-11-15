@@ -18,6 +18,8 @@ import { notify } from '../utils/notify';
 
 import { API_BASE } from '../apiConfig';
 import { TOTAL_DRIVER_DOC_SLOTS, getDriverDocCount } from '../utils/driverDocuments';
+import BackButton from '../components/BackButton';
+import ScreenHeader from '../components/ScreenHeader';
 
 const isPdfUrl = (url: string): boolean => {
     const lower = url.toLowerCase();
@@ -57,11 +59,16 @@ const VehicleDetailsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
     if (!vehicle) {
         return (
-            <View style={[styles.container, { backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }]}>
-                <Text style={{ color: colors.textColor }}>No vehicle details found.</Text>
-                <TouchableOpacity onPress={onBack} style={{ marginTop: 20 }}>
-                    <Text style={{ color: colors.primary }}>{t('common.back')}</Text>
-                </TouchableOpacity>
+            <View style={[styles.container, { backgroundColor: colors.background }]}>
+                <ScreenHeader
+                    title={t('account.vehicleDetails')}
+                    onBack={onBack}
+                    style={styles.header}
+                />
+                <View style={styles.emptyState}>
+                    <Text style={{ color: colors.textColor, fontSize: 16 }}>No vehicle details found.</Text>
+                    <BackButton onPress={onBack} variant="pill" style={{ marginTop: 20 }} />
+                </View>
             </View>
         );
     }
@@ -79,12 +86,11 @@ const VehicleDetailsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
     return (
         <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
-            <View style={styles.header}>
-                <TouchableOpacity onPress={onBack} style={styles.backButton}>
-                    <Text style={[styles.backText, { color: colors.primary }]}>{t('common.back')}</Text>
-                </TouchableOpacity>
-                <Text style={[styles.title, { color: colors.textColor }]}>{t('account.vehicleDetails')}</Text>
-            </View>
+            <ScreenHeader
+                title={t('account.vehicleDetails')}
+                onBack={onBack}
+                style={styles.header}
+            />
 
             <View style={styles.content}>
                 <View style={[styles.infoCard, { backgroundColor: colors.cardColor, borderColor: colors.borderColor }]}>
@@ -237,21 +243,15 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     header: {
-        flexDirection: 'row',
+        paddingHorizontal: 20,
+        paddingTop: Platform.OS === 'web' ? 20 : 40,
+        paddingBottom: 8,
+    },
+    emptyState: {
+        flex: 1,
+        justifyContent: 'center',
         alignItems: 'center',
         padding: 20,
-        paddingTop: 40,
-    },
-    backButton: {
-        marginRight: 16,
-    },
-    backText: {
-        fontSize: 16,
-        fontWeight: 'bold',
-    },
-    title: {
-        fontSize: 24,
-        fontWeight: 'bold',
     },
     content: {
         padding: 20,

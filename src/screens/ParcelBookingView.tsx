@@ -33,6 +33,8 @@ import {
     isTodayOrFutureDisplayDate,
 } from '../utils/formDraftStorage';
 import { pushSubViewHistory, popSubViewHistory, useBrowserBack } from '../utils/browserHistory';
+import BackButton from '../components/BackButton';
+import ScreenHeader from '../components/ScreenHeader';
 
 const { width } = Dimensions.get('window');
 
@@ -482,14 +484,12 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
 
         return (
             <View style={styles.content}>
-                <TouchableOpacity onPress={stepBack} style={styles.backButton}>
-                    <Text style={[styles.backText, { color: colors.primary }]}>← {t('common.back')}</Text>
-                </TouchableOpacity>
-
-                <Text style={[styles.title, { color: colors.textColor }]}>Price Calculator</Text>
-                <Text style={[styles.routeSummary, { color: colors.subtextColor }]}>
-                    {`${effectivePickup} → ${effectiveDropoff}`}
-                </Text>
+                <ScreenHeader
+                    title="Price Calculator"
+                    subtitle={`${effectivePickup} → ${effectiveDropoff}`}
+                    onBack={stepBack}
+                    style={styles.stepHeader}
+                />
 
                 {selectedRide.isPartialMatch && (
                     <View
@@ -576,17 +576,12 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
 
     const renderRecipientDetails = () => (
         <View style={styles.content}>
-            <TouchableOpacity onPress={stepBack} style={styles.backButton}>
-                <Text style={[styles.backText, { color: colors.primary }]}>
-                    ← {t('common.back')}
-                </Text>
-            </TouchableOpacity>
-
-            <Text style={[styles.title, { color: colors.textColor }]}>{t('parcel.recipientDetails')}</Text>
-            <View style={styles.spacer6} />
-            <Text style={[styles.routeSummary, { color: colors.subtextColor }]}>
-                {pickup} → {dropoff} · {t(`parcel.size${selectedSize.charAt(0).toUpperCase() + selectedSize.slice(1)}` as any)}
-            </Text>
+            <ScreenHeader
+                title={t('parcel.recipientDetails')}
+                subtitle={`${pickup} → ${dropoff} · ${t(`parcel.size${selectedSize.charAt(0).toUpperCase() + selectedSize.slice(1)}` as any)}`}
+                onBack={stepBack}
+                style={styles.stepHeader}
+            />
 
             <View style={styles.spacer24} />
 
@@ -719,17 +714,12 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
 
         return (
             <View style={styles.content}>
-                <TouchableOpacity onPress={stepBack} style={styles.backButton}>
-                    <Text style={[styles.backText, { color: colors.primary }]}>
-                        ← {t('common.back')}
-                    </Text>
-                </TouchableOpacity>
-
-                <Text style={[styles.title, { color: colors.textColor }]}>{t('available.title') || 'Select Vehicle'}</Text>
-                <View style={styles.spacer6} />
-                <Text style={[styles.routeSummary, { color: colors.subtextColor }]}>
-                    {pickup} → {dropoff} · {selectedDate}
-                </Text>
+                <ScreenHeader
+                    title={t('available.title') || 'Select Vehicle'}
+                    subtitle={`${pickup} → ${dropoff} · ${selectedDate}`}
+                    onBack={stepBack}
+                    style={styles.stepHeader}
+                />
 
                 <View style={styles.spacer24} />
 
@@ -739,11 +729,12 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
                     <View style={{ alignItems: 'center', marginTop: 40 }}>
                         <Icon name="car-outline" size={64} color={colors.borderColor} />
                         <Text style={{ color: colors.subtextColor, marginTop: 16, fontSize: 16 }}>No vehicles available for this route.</Text>
-                        <TouchableOpacity
-                            style={{ marginTop: 24, padding: 12 }}
-                            onPress={stepBack}>
-                            <Text style={{ color: colors.primary, fontWeight: 'bold' }}>GO BACK & CHANGE DETAILS</Text>
-                        </TouchableOpacity>
+                        <BackButton
+                            variant="link"
+                            label="Go Back & Change Details"
+                            onPress={stepBack}
+                            style={{ marginTop: 20 }}
+                        />
                     </View>
                 ) : (
                     <ScrollView showsVerticalScrollIndicator={false}>
@@ -879,11 +870,11 @@ const ParcelBookingView: React.FC<ParcelBookingViewProps> = ({ onBack }) => {
             {step === 'details' ? renderRecipientDetails() : step === 'rides' ? renderRideSelection() : step === 'calculator' ? renderPriceCalculator() : (
                 <View style={styles.content}>
                     {onBack && (
-                        <TouchableOpacity onPress={onBack} style={styles.backButton}>
-                            <Text style={[styles.backText, { color: colors.primary }]}>
-                                {t('common.back')}
-                            </Text>
-                        </TouchableOpacity>
+                        <BackButton
+                            onPress={onBack}
+                            variant="pill"
+                            style={styles.backButton}
+                        />
                     )}
 
                     {/* Greeting */}
@@ -1204,12 +1195,11 @@ const styles = StyleSheet.create({
         padding: 20,
     },
     backButton: {
+        alignSelf: 'flex-start',
         marginBottom: 20,
     },
-    backText: {
-        fontSize: 14,
-        fontWeight: 'bold',
-        letterSpacing: 1,
+    stepHeader: {
+        marginBottom: 4,
     },
     row: {
         flexDirection: 'row',
@@ -1395,16 +1385,6 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: 'bold',
         textAlign: 'right',
-    },
-    title: {
-        fontSize: 28,
-        fontWeight: 'bold',
-        marginBottom: 8,
-    },
-    routeSummary: {
-        fontSize: 16,
-        fontWeight: '500',
-        opacity: 0.8,
     },
     summaryCard: {
         padding: 16,

@@ -21,6 +21,7 @@ import { pickAndUploadDocument, notify } from '../utils/documentUpload';
 import { DriverKycDocsCard } from '../components/DriverKycDocsCard';
 import { validateMinimumDriverDocs } from '../utils/driverDocuments';
 import { useBrowserBack } from '../utils/browserHistory';
+import ScreenHeader from '../components/ScreenHeader';
 
 interface ResubmitDocsViewProps {
     onClose: () => void;
@@ -304,16 +305,15 @@ const ResubmitDocsView: React.FC<ResubmitDocsViewProps> = ({ onClose, disableBro
                 showsVerticalScrollIndicator={false}>
 
                 {/* Header */}
-                <View style={[kycStyles.pageHeader, { backgroundColor: colors.primary }]}>
-                    <TouchableOpacity onPress={onClose} style={kycStyles.backBtn}>
-                        <Text style={{ color: '#fff', fontSize: 22, lineHeight: 26 }}>←</Text>
-                    </TouchableOpacity>
-                    <View style={{ flex: 1, alignItems: 'center' }}>
-                        <Text style={kycStyles.pageHeaderTitle}>Resubmit Driver KYC</Text>
-                        <Text style={kycStyles.pageHeaderSub}>Vehicle & Document Verification</Text>
-                    </View>
-                    <View style={{ width: 40 }} />
-                </View>
+                <ScreenHeader
+                    title="Resubmit Driver KYC"
+                    subtitle="Vehicle & Document Verification"
+                    onBack={onClose}
+                    backIconName="arrow-back"
+                    tone="primary"
+                    align="center"
+                    style={kycStyles.pageHeader}
+                />
 
                 <View style={{ paddingHorizontal: 20, paddingTop: 24 }}>
 
@@ -452,27 +452,9 @@ const ResubmitDocsView: React.FC<ResubmitDocsViewProps> = ({ onClose, disableBro
 
 const kycStyles = StyleSheet.create({
     pageHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingTop: Platform.OS === 'web' ? 20 : 52,
-        paddingBottom: 20,
+        paddingTop: Platform.OS === 'web' ? 18 : 50,
+        paddingBottom: 18,
         paddingHorizontal: 20,
-    },
-    backBtn: {
-        width: 40,
-        height: 40,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    pageHeaderTitle: {
-        color: '#FFFFFF',
-        fontSize: 18,
-        fontWeight: '700',
-    },
-    pageHeaderSub: {
-        color: 'rgba(255,255,255,0.75)',
-        fontSize: 12,
-        marginTop: 2,
     },
     card: {
         borderRadius: 16,

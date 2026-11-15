@@ -11,7 +11,7 @@ export const translations = {
     'tab.account': 'Account',
 
     // Shared
-    'common.back': '‹ BACK',
+    'common.back': 'Back',
     'common.cancel': 'Cancel',
     'common.confirm': 'Confirm',
     'common.ok': 'OK',
@@ -252,6 +252,17 @@ export const translations = {
     'trusted.tenDigits': 'Each phone number must be exactly 10 digits',
     'trusted.successUpdate': 'Trusted contacts updated successfully',
     'trusted.failUpdate': 'Failed to update contacts',
+    'trusted.safetyBadge': 'Safety Circle',
+    'trusted.contactWord': 'Contact',
+    'trusted.ofTotal': 'of 2',
+    'trusted.maxLimitHint': 'Up to 2 contacts',
+    'trusted.digitsValid': '10-digit number ready',
+    'trusted.digitsRemaining': 'more digits needed',
+    'trusted.removeTitle': 'Remove Contact?',
+    'trusted.removeMessage': 'Remove this phone number from your trusted contacts?',
+    'trusted.removeBtn': 'Remove',
+    'trusted.addAnotherLabel': 'Add Another Contact',
+    'trusted.securityNote': 'Stored securely for emergency SOS and ride safety sharing.',
 
     // SOS
     'sos.title': 'SOS Activated',
@@ -364,7 +375,7 @@ export const translations = {
     'tab.account': 'अकाउंट',
 
     // Shared
-    'common.back': '‹ पीछे',
+    'common.back': 'पीछे',
     'common.cancel': 'रद्द करें',
     'common.confirm': 'पुष्टि करें',
     'common.ok': 'ठीक है',
@@ -604,6 +615,17 @@ export const translations = {
     'trusted.tenDigits': 'प्रत्येक फ़ोन नंबर बिल्कुल 10 अंकों का होना चाहिए',
     'trusted.successUpdate': 'विश्वसनीय संपर्क सफलतापूर्वक अपडेट किए गए',
     'trusted.failUpdate': 'संपर्क अपडेट करने में विफल',
+    'trusted.safetyBadge': 'सुरक्षा सर्कल',
+    'trusted.contactWord': 'संपर्क',
+    'trusted.ofTotal': '/ 2',
+    'trusted.maxLimitHint': 'अधिकतम 2 संपर्क',
+    'trusted.digitsValid': '10 अंकों का नंबर मान्य',
+    'trusted.digitsRemaining': 'अंक और दर्ज करें',
+    'trusted.removeTitle': 'संपर्क हटाएं?',
+    'trusted.removeMessage': 'क्या आप इस फ़ोन नंबर को अपने विश्वसनीय संपर्कों से हटाना चाहते हैं?',
+    'trusted.removeBtn': 'हटाएं',
+    'trusted.addAnotherLabel': 'एक और संपर्क जोड़ें',
+    'trusted.securityNote': 'आपातकालीन SOS और राइड सुरक्षा साझाकरण के लिए सुरक्षित रूप से संग्रहीत।',
 
     // SOS
     'sos.title': 'SOS सक्रिय',

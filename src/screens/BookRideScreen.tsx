@@ -20,6 +20,7 @@ import { apiRequest } from '../utils/api';
 import { parseJsonSafe, getApiErrorMessage, createRequestAbort } from '../utils/json';
 import { notify } from '../utils/notify';
 import { useBrowserBack } from '../utils/browserHistory';
+import ScreenHeader from '../components/ScreenHeader';
 
 interface BookRideScreenProps {
     ride: {
@@ -256,13 +257,13 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
 
     return (
         <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
-            <View style={styles.header}>
-                <TouchableOpacity onPress={onBack}>
-                    <Text style={[styles.backText, { color: colors.textColor }]}>{t('common.back')}</Text>
-                </TouchableOpacity>
-                <Text style={[styles.title, { color: colors.textColor }]}>{t('book.bookMySeat')}</Text>
-                <View style={{ width: 40 }} />
-            </View>
+            <ScreenHeader
+                title={t('book.bookMySeat')}
+                onBack={onBack}
+                align="center"
+                style={styles.header}
+                titleStyle={styles.title}
+            />
 
             <View style={styles.content}>
                 {(effectivePickup || effectiveDropoff) ? (
@@ -389,21 +390,13 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
 const styles = StyleSheet.create({
     container: { flex: 1 },
     header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
         paddingHorizontal: 20,
-        paddingVertical: 20,
-    },
-    backText: {
-        fontSize: 14,
-        fontWeight: 'bold',
-        opacity: 0.7,
+        paddingVertical: 16,
     },
     title: {
         fontSize: 18,
         fontWeight: 'bold',
-        letterSpacing: 2,
+        letterSpacing: 1.5,
     },
     content: {
         paddingHorizontal: 20,

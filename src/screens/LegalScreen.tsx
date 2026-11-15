@@ -11,7 +11,7 @@ import {
     Linking,
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
-import Icon from 'react-native-vector-icons/Ionicons';
+import ScreenHeader from '../components/ScreenHeader';
 
 interface LegalScreenProps {
     onClose?: () => void;
@@ -27,18 +27,16 @@ export const LegalScreen: React.FC<LegalScreenProps> = ({ onClose, initialTab = 
             <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
             
             {/* Header */}
-            <View style={[styles.header, { backgroundColor: colors.cardColor, borderBottomColor: colors.borderColor }]}>
-                {onClose && (
-                    <TouchableOpacity onPress={onClose} style={styles.backButton} activeOpacity={0.7}>
-                        <Icon name="arrow-back" size={24} color={colors.textColor} />
-                    </TouchableOpacity>
-                )}
-                <View style={styles.headerTitleContainer}>
-                    <Text style={[styles.headerTitle, { color: colors.textColor }]}>Terms & Legal Policies</Text>
-                    <Text style={[styles.headerSubtitle, { color: colors.accentColor }]}>GoRaahi Mountain Mobility LLP</Text>
-                </View>
-                {onClose && <View style={{ width: 40 }} />}
-            </View>
+            <ScreenHeader
+                title="Terms & Legal Policies"
+                subtitle="GoRaahi Mountain Mobility LLP"
+                subtitleStyle={{ color: colors.accentColor, fontWeight: '600' }}
+                onBack={onClose}
+                backIconName="arrow-back"
+                backAccessibilityLabel="Close legal policies"
+                tone="surface"
+                align={onClose ? 'center' : 'left'}
+            />
 
             {/* Tab Selector */}
             <View style={[styles.tabBar, { backgroundColor: isDark ? '#121824' : '#F1F5F9', borderColor: colors.borderColor }]}>
@@ -520,29 +518,6 @@ export const LegalScreen: React.FC<LegalScreenProps> = ({ onClose, initialTab = 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-    },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingVertical: 14,
-        borderBottomWidth: 1,
-    },
-    backButton: {
-        padding: 6,
-        marginRight: 10,
-    },
-    headerTitleContainer: {
-        flex: 1,
-    },
-    headerTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-    },
-    headerSubtitle: {
-        fontSize: 12,
-        fontWeight: '600',
-        marginTop: 2,
     },
     tabBar: {
         flexDirection: 'row',

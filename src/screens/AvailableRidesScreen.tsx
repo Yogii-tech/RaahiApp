@@ -12,6 +12,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { API_BASE } from '../apiConfig';
+import BackButton from '../components/BackButton';
 
 // Hardcoded coordinates for villages missing from OSM/Nominatim
 const KNOWN_LOCATIONS: Record<string, { lat: string; lon: string }> = {
@@ -324,9 +325,7 @@ const AvailableRidesScreen: React.FC<AvailableRidesScreenProps> = ({ searchPicku
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
             <View style={styles.header}>
-                <TouchableOpacity onPress={onBack}>
-                    <Text style={[styles.backText, { color: colors.textColor }]}>{t('common.back')}</Text>
-                </TouchableOpacity>
+                <BackButton onPress={onBack} variant="pill" />
                 <Text style={[styles.routeDetails, { color: colors.subtextColor }]}>{t('available.routeDetails')}</Text>
             </View>
             <View style={styles.titleRow}>
@@ -399,13 +398,8 @@ const styles = StyleSheet.create({
     header: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingVertical: 15,
+        paddingVertical: 14,
         justifyContent: 'space-between',
-    },
-    backText: {
-        fontSize: 14,
-        fontWeight: 'bold',
-        opacity: 0.7,
     },
     routeDetails: {
         fontSize: 12,
