@@ -635,13 +635,20 @@ const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
                     </TouchableOpacity>
 
                     <View
+                        testID="trusted-security-footer"
                         style={[
                             styles.securityFooter,
                             isDesktop && styles.securityFooterDesktop,
                         ]}
                     >
-                        <Icon name="shield-checkmark-outline" size={14} color={subtextColor} />
+                        <View
+                            testID="trusted-security-icon-wrap"
+                            style={styles.securityFooterIconWrap}
+                        >
+                            <Icon name="shield-checkmark-outline" size={15} color={subtextColor} />
+                        </View>
                         <Text
+                            testID="trusted-security-footer-text"
                             style={[
                                 styles.securityFooterText,
                                 isDesktop && styles.securityFooterTextDesktop,
@@ -694,6 +701,7 @@ const styles = StyleSheet.create({
     countPill: {
         flexDirection: 'row',
         alignItems: 'center',
+        flexShrink: 0,
         gap: 6,
         paddingHorizontal: 10,
         paddingVertical: 6,
@@ -702,8 +710,10 @@ const styles = StyleSheet.create({
     },
     countPillText: {
         fontSize: 12,
+        lineHeight: 16,
         fontWeight: '700',
         includeFontPadding: false,
+        textAlignVertical: 'center',
     },
     safetyBanner: {
         borderRadius: 16,
@@ -731,6 +741,7 @@ const styles = StyleSheet.create({
     safetyTag: {
         flexDirection: 'row',
         alignItems: 'center',
+        flexShrink: 0,
         gap: 6,
         paddingHorizontal: 10,
         paddingVertical: 4,
@@ -739,8 +750,10 @@ const styles = StyleSheet.create({
     },
     safetyTagText: {
         fontSize: 12,
+        lineHeight: 16,
         fontWeight: '700',
         includeFontPadding: false,
+        textAlignVertical: 'center',
     },
     maxHintText: {
         fontSize: 12,
@@ -858,6 +871,7 @@ const styles = StyleSheet.create({
     countryPrefix: {
         flexDirection: 'row',
         alignItems: 'center',
+        flexShrink: 0,
         gap: 6,
         paddingHorizontal: 13,
         paddingVertical: 12,
@@ -865,8 +879,10 @@ const styles = StyleSheet.create({
     },
     countryCodeText: {
         fontSize: 15,
+        lineHeight: 20,
         fontWeight: '700',
         includeFontPadding: false,
+        textAlignVertical: 'center',
     },
     phoneInput: {
         flex: 1,
@@ -951,13 +967,18 @@ const styles = StyleSheet.create({
     primaryButtonText: {
         color: '#FFFFFF',
         fontSize: 16,
+        lineHeight: 22,
         fontWeight: '700',
         letterSpacing: 0.2,
+        includeFontPadding: false,
+        textAlignVertical: 'center',
     },
     securityFooter: {
         flexDirection: 'row',
-        alignItems: 'center',
+        alignItems: 'flex-start',
         justifyContent: 'center',
+        alignSelf: 'center',
+        maxWidth: 330,
         gap: 6,
         marginTop: 14,
         paddingHorizontal: 12,
@@ -965,13 +986,24 @@ const styles = StyleSheet.create({
     securityFooterDesktop: {
         marginTop: 0,
         paddingHorizontal: 0,
+        maxWidth: undefined,
+        alignSelf: 'auto',
         justifyContent: 'flex-start',
         flex: 1,
     },
+    securityFooterIconWrap: {
+        width: 18,
+        height: 18,
+        justifyContent: 'center',
+        alignItems: 'center',
+        flexShrink: 0,
+    },
     securityFooterText: {
         fontSize: 12,
+        lineHeight: 18,
         fontWeight: '500',
-        textAlign: 'center',
+        textAlign: 'left',
+        includeFontPadding: false,
         flexShrink: 1,
     },
     securityFooterTextDesktop: {

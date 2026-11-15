@@ -509,6 +509,59 @@ describe('TrustedContactsScreen', () => {
 
             const mobileActions = mobileTree.root.findByProps({ testID: 'trusted-actions-bar' });
             expect(mobileActions.props.style).toBeUndefined();
+
+            // Verify security footer shield icon alignment on mobile & desktop
+            const mobileFooter = mobileTree.root.findByProps({ testID: 'trusted-security-footer' });
+            const mobileFooterStyle = flattenStyle(mobileFooter.props.style);
+            expect(mobileFooterStyle).toMatchObject({
+                flexDirection: 'row',
+                alignItems: 'flex-start',
+                justifyContent: 'center',
+                alignSelf: 'center',
+                maxWidth: 330,
+            });
+
+            const mobileIconWrap = mobileTree.root.findByProps({ testID: 'trusted-security-icon-wrap' });
+            const mobileIconWrapStyle = flattenStyle(mobileIconWrap.props.style);
+            expect(mobileIconWrapStyle).toMatchObject({
+                width: 18,
+                height: 18,
+                justifyContent: 'center',
+                alignItems: 'center',
+                flexShrink: 0,
+            });
+
+            const mobileFooterText = mobileTree.root.findByProps({ testID: 'trusted-security-footer-text' });
+            const mobileFooterTextStyle = flattenStyle(mobileFooterText.props.style);
+            expect(mobileFooterTextStyle).toMatchObject({
+                fontSize: 12,
+                lineHeight: 18,
+                textAlign: 'left',
+                includeFontPadding: false,
+                flexShrink: 1,
+            });
+            expect(mobileIconWrapStyle.height).toBe(mobileFooterTextStyle.lineHeight);
+
+            const mobileCountBadge = mobileTree.root.findByProps({ testID: 'trusted-count-badge' });
+            expect(flattenStyle(mobileCountBadge.props.style).flexShrink).toBe(0);
+
+            const desktopFooter = desktopTree.root.findByProps({ testID: 'trusted-security-footer' });
+            const desktopFooterStyle = flattenStyle(desktopFooter.props.style);
+            expect(desktopFooterStyle).toMatchObject({
+                flexDirection: 'row',
+                alignItems: 'flex-start',
+                justifyContent: 'flex-start',
+                alignSelf: 'auto',
+                flex: 1,
+            });
+            expect(desktopFooterStyle.maxWidth).toBeUndefined();
+
+            const desktopIconWrap = desktopTree.root.findByProps({ testID: 'trusted-security-icon-wrap' });
+            const desktopFooterText = desktopTree.root.findByProps({ testID: 'trusted-security-footer-text' });
+            expect(flattenStyle(desktopIconWrap.props.style).height).toBe(
+                flattenStyle(desktopFooterText.props.style).lineHeight,
+            );
+            expect(flattenStyle(desktopFooterText.props.style).textAlign).toBe('left');
         } finally {
             dimSpy.mockRestore();
         }
