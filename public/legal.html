@@ -50,20 +50,26 @@
     .brand {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
       text-decoration: none;
       color: var(--text-main);
     }
 
     .brand img {
-      width: 36px;
-      height: 36px;
-      border-radius: 8px;
+      display: block;
+      width: 38px;
+      height: 38px;
+      object-fit: contain;
+      flex-shrink: 0;
     }
 
     .brand-name {
-      font-size: 1.25rem;
+      display: inline-flex;
+      align-items: center;
+      font-size: 1.375rem;
       font-weight: 700;
+      line-height: 1;
+      letter-spacing: -0.02em;
       color: var(--primary);
     }
 

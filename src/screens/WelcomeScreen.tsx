@@ -6,8 +6,8 @@ import {
      ImageBackground,
      TouchableOpacity,
      StatusBar,
-     Platform,
 } from 'react-native';
+import BrandLogo from '../components/BrandLogo';
 
 interface WelcomeScreenProps {
      onGetStarted: () => void;
@@ -24,7 +24,12 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onGetStarted }) => {
                >
                     <View style={styles.content}>
                          <View style={styles.header}>
-                              <Text style={styles.title}>GoRaahi</Text>
+                              <BrandLogo
+                                   size="lg"
+                                   wordmarkColor="#0056D2"
+                                   wordmarkStyle={styles.titleWeight}
+                                   testID="welcome-brand-logo"
+                              />
                               <Text style={styles.subtitle}>Local trusted rides</Text>
                          </View>
 
@@ -61,11 +66,8 @@ const styles = StyleSheet.create({
           alignItems: 'center',
           marginTop: 180,
      },
-     title: {
-          fontSize: 48,
+     titleWeight: {
           fontWeight: '800',
-          color: '#0056D2',
-          letterSpacing: -1,
      },
      subtitle: {
           fontSize: 18,

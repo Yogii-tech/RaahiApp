@@ -8,7 +8,6 @@ import {
   View,
   Text,
   TouchableOpacity,
-  Image,
   StyleSheet,
   Platform,
   AppState,
@@ -33,6 +32,7 @@ import TripsScreen from './src/screens/TripsScreen';
 import RequestsOverlay from './src/screens/RequestsOverlay';
 import AccountScreen from './src/screens/AccountScreen';
 import MapScreen from './src/screens/MapScreen';
+import BrandLogo from './src/components/BrandLogo';
 import ChatScreen from './src/screens/ChatScreen';
 import ResubmitDocsView from './src/screens/ResubmitDocsView';
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -72,7 +72,7 @@ const linking = {
 const Tab = createBottomTabNavigator();
 
 // ─── Custom Header ───────────────────────────────────────────────────
-function AppHeader({ onToggleNotifications, notificationCount = 0, onPressLogo }: { onToggleNotifications?: () => void, notificationCount?: number, onPressLogo?: () => void }) {
+export function AppHeader({ onToggleNotifications, notificationCount = 0, onPressLogo }: { onToggleNotifications?: () => void, notificationCount?: number, onPressLogo?: () => void }) {
   const { isDark, toggleTheme, colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
@@ -96,23 +96,13 @@ function AppHeader({ onToggleNotifications, notificationCount = 0, onPressLogo }
         },
       ]}>
       {/* Clickable Logo and Title */}
-      <TouchableOpacity
+      <BrandLogo
+        size="md"
+        wordmarkColor={colors.primary}
         onPress={handlePressLogo}
-        style={headerStyles.brandContainer}
-        activeOpacity={0.7}
-        accessibilityRole="button"
-        accessibilityLabel="Go to Home page">
-        <View style={headerStyles.logoContainer}>
-          <Image
-            source={require('./src/assets/logo_brand.png')}
-            style={headerStyles.logo}
-            resizeMode="contain"
-          />
-        </View>
-        <Text style={[headerStyles.title, { color: colors.primary }]}>
-          GoRaahi
-        </Text>
-      </TouchableOpacity>
+        accessibilityLabel="Go to Home page"
+        testID="app-header-brand-logo"
+      />
 
       <View style={headerStyles.spacer} />
 
@@ -161,29 +151,6 @@ const headerStyles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingBottom: 16,
-  },
-  brandContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    ...(Platform.OS === 'web' ? ({ cursor: 'pointer' } as any) : {}),
-  },
-  logoContainer: {
-    width: 60,
-    height: 60,
-    borderRadius: 50,
-    backgroundColor: 'transparent',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  logo: {
-    width: 100,
-    height: 100,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    marginLeft: 10,
-    letterSpacing: -0.5,
   },
   spacer: {
     flex: 1,
