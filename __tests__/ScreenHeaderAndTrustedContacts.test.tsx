@@ -1,7 +1,7 @@
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
 import React from 'react';
-import { ActivityIndicator, Text, TextInput, TouchableOpacity } from 'react-native';
+import { ActivityIndicator, Dimensions, StyleSheet, Text, TextInput, TouchableOpacity } from 'react-native';
 import renderer, { act, ReactTestInstance } from 'react-test-renderer';
 
 const mockApiRequest = jest.fn();
@@ -469,5 +469,48 @@ describe('TrustedContactsScreen', () => {
             translations.en['trusted.successUpdate'],
         );
         expect(onBack).toHaveBeenCalledTimes(1);
+    });
+
+    it('uses full-width two-column layout on desktop while keeping mobile layout stacked', async () => {
+        mockApiRequest.mockResolvedValue({ ok: true, json: async () => [] });
+        const dimSpy = jest.spyOn(Dimensions, 'get');
+
+        try {
+            // Desktop viewport (>= 768px)
+            dimSpy.mockReturnValue({ width: 1280, height: 800, scale: 1, fontScale: 1 });
+            let desktopTree!: renderer.ReactTestRenderer;
+            act(() => {
+                desktopTree = renderer.create(<TrustedContactsScreen onBack={jest.fn()} />);
+            });
+            await flushAsync();
+
+            const desktopGrid = desktopTree.root.findByProps({ testID: 'trusted-contacts-grid' });
+            const desktopGridStyle = StyleSheet.flatten(desktopGrid.props.style);
+            expect(desktopGridStyle.flexDirection).toBe('row');
+
+            const desktopActions = desktopTree.root.findByProps({ testID: 'trusted-actions-bar' });
+            const desktopActionsStyle = StyleSheet.flatten(desktopActions.props.style);
+            expect(desktopActionsStyle.flexDirection).toBe('row-reverse');
+
+            const desktopInnerStyle = StyleSheet.flatten(desktopGrid.parent!.props.style);
+            expect(desktopInnerStyle.width).toBe('100%');
+            expect(desktopInnerStyle.maxWidth).toBeUndefined();
+
+            // Mobile viewport (< 768px)
+            dimSpy.mockReturnValue({ width: 390, height: 844, scale: 3, fontScale: 1 });
+            let mobileTree!: renderer.ReactTestRenderer;
+            act(() => {
+                mobileTree = renderer.create(<TrustedContactsScreen onBack={jest.fn()} />);
+            });
+            await flushAsync();
+
+            const mobileGrid = mobileTree.root.findByProps({ testID: 'trusted-contacts-grid' });
+            expect(mobileGrid.props.style).toBeUndefined();
+
+            const mobileActions = mobileTree.root.findByProps({ testID: 'trusted-actions-bar' });
+            expect(mobileActions.props.style).toBeUndefined();
+        } finally {
+            dimSpy.mockRestore();
+        }
     });
 });

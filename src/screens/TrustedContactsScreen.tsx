@@ -8,6 +8,7 @@ import {
     ActivityIndicator,
     ScrollView,
     Platform,
+    useWindowDimensions,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../context/ThemeContext';
@@ -65,6 +66,8 @@ const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
     const [loadError, setLoadError] = useState<string | null>(null);
     const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
     const isMountedRef = useRef(true);
+    const { width } = useWindowDimensions();
+    const isDesktop = width >= 768;
 
     const primaryColor = colors.primary || (isDark ? '#1E90FF' : '#5B4FFF');
     const cardColor = colors.cardColor || (isDark ? '#162032' : '#FFFFFF');
@@ -234,7 +237,14 @@ const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
 
     if (loading) {
         return (
-            <View style={[styles.screen, styles.nonScrollPadding, { backgroundColor: colors.background }]}>
+            <View
+                style={[
+                    styles.screen,
+                    styles.nonScrollPadding,
+                    isDesktop && styles.nonScrollPaddingDesktop,
+                    { backgroundColor: colors.background },
+                ]}
+            >
                 <View style={styles.innerWrap}>
                     <ScreenHeader
                         onBack={onBack}
@@ -252,7 +262,14 @@ const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
 
     if (loadError) {
         return (
-            <View style={[styles.screen, styles.nonScrollPadding, { backgroundColor: colors.background }]}>
+            <View
+                style={[
+                    styles.screen,
+                    styles.nonScrollPadding,
+                    isDesktop && styles.nonScrollPaddingDesktop,
+                    { backgroundColor: colors.background },
+                ]}
+            >
                 <View style={styles.innerWrap}>
                     <ScreenHeader
                         onBack={onBack}
@@ -263,6 +280,7 @@ const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
                     <View
                         style={[
                             styles.errorCard,
+                            isDesktop && styles.errorCardDesktop,
                             { backgroundColor: cardColor, borderColor },
                             isDark ? styles.cardShadowDark : styles.cardShadowLight,
                         ]}
@@ -318,7 +336,10 @@ const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
     return (
         <ScrollView
             style={[styles.screen, { backgroundColor: colors.background }]}
-            contentContainerStyle={styles.scrollContent}
+            contentContainerStyle={[
+                styles.scrollContent,
+                isDesktop && styles.scrollContentDesktop,
+            ]}
             keyboardShouldPersistTaps="handled"
         >
             <View style={styles.innerWrap}>
@@ -333,6 +354,7 @@ const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
                 <View
                     style={[
                         styles.safetyBanner,
+                        isDesktop && styles.safetyBannerDesktop,
                         { backgroundColor: softPrimaryBg, borderColor: softPrimaryBorder },
                     ]}
                 >
@@ -360,6 +382,10 @@ const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
                     </Text>
                 </View>
 
+                <View
+                    testID="trusted-contacts-grid"
+                    style={isDesktop ? styles.cardsGridDesktop : undefined}
+                >
                 {contacts.map((contact, index) => {
                     const digitCount = contact.phone.trim().length;
                     const isValid = digitCount === 10;
@@ -386,6 +412,7 @@ const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
                             key={index}
                             style={[
                                 styles.contactCard,
+                                isDesktop && styles.contactCardDesktop,
                                 {
                                     backgroundColor: cardColor,
                                     borderColor: activeCardBorder,
@@ -538,6 +565,7 @@ const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
                     <TouchableOpacity
                         style={[
                             styles.addButton,
+                            isDesktop && styles.addButtonDesktop,
                             {
                                 borderColor: isDark
                                     ? 'rgba(30, 144, 255, 0.45)'
@@ -553,45 +581,76 @@ const TrustedContactsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
                         accessibilityLabel={addAnotherLabel}
                         activeOpacity={0.75}
                     >
-                        <Icon name="add-circle-outline" size={20} color={primaryColor} />
+                        <Icon
+                            name="add-circle-outline"
+                            size={isDesktop ? 24 : 20}
+                            color={primaryColor}
+                        />
                         <Text style={[styles.addButtonText, { color: primaryColor }]}>
                             {addAnotherLabel}
                         </Text>
+                        {isDesktop ? (
+                            <Text style={[styles.addButtonHint, { color: subtextColor }]}>
+                                {maxLimitLabel}
+                            </Text>
+                        ) : null}
                     </TouchableOpacity>
                 ) : null}
+                </View>
 
-                <TouchableOpacity
-                    style={[
-                        styles.saveButton,
-                        { backgroundColor: primaryColor, opacity: saving ? 0.78 : 1 },
-                        isDark ? styles.saveButtonShadowDark : styles.saveButtonShadowLight,
-                        Platform.OS === 'web'
-                            ? ({ cursor: saving ? 'wait' : 'pointer' } as any)
-                            : undefined,
-                    ]}
-                    onPress={handleSave}
-                    disabled={saving}
-                    accessibilityRole="button"
-                    accessibilityState={{ busy: saving, disabled: saving }}
-                    activeOpacity={0.85}
+                <View
+                    testID="trusted-actions-bar"
+                    style={
+                        isDesktop
+                            ? [styles.actionBarDesktop, { borderTopColor: borderColor }]
+                            : undefined
+                    }
                 >
-                    {saving ? (
-                        <ActivityIndicator color="#FFFFFF" />
-                    ) : (
-                        <>
-                            <Icon name="shield-checkmark-outline" size={19} color="#FFFFFF" />
-                            <Text style={styles.primaryButtonText}>
-                                {t('trusted.saveTrusted')}
-                            </Text>
-                        </>
-                    )}
-                </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[
+                            styles.saveButton,
+                            isDesktop && styles.saveButtonDesktop,
+                            { backgroundColor: primaryColor, opacity: saving ? 0.78 : 1 },
+                            isDark ? styles.saveButtonShadowDark : styles.saveButtonShadowLight,
+                            Platform.OS === 'web'
+                                ? ({ cursor: saving ? 'wait' : 'pointer' } as any)
+                                : undefined,
+                        ]}
+                        onPress={handleSave}
+                        disabled={saving}
+                        accessibilityRole="button"
+                        accessibilityState={{ busy: saving, disabled: saving }}
+                        activeOpacity={0.85}
+                    >
+                        {saving ? (
+                            <ActivityIndicator color="#FFFFFF" />
+                        ) : (
+                            <>
+                                <Icon name="shield-checkmark-outline" size={19} color="#FFFFFF" />
+                                <Text style={styles.primaryButtonText}>
+                                    {t('trusted.saveTrusted')}
+                                </Text>
+                            </>
+                        )}
+                    </TouchableOpacity>
 
-                <View style={styles.securityFooter}>
-                    <Icon name="shield-checkmark-outline" size={14} color={subtextColor} />
-                    <Text style={[styles.securityFooterText, { color: subtextColor }]}>
-                        {securityNoteLabel}
-                    </Text>
+                    <View
+                        style={[
+                            styles.securityFooter,
+                            isDesktop && styles.securityFooterDesktop,
+                        ]}
+                    >
+                        <Icon name="shield-checkmark-outline" size={14} color={subtextColor} />
+                        <Text
+                            style={[
+                                styles.securityFooterText,
+                                isDesktop && styles.securityFooterTextDesktop,
+                                { color: subtextColor },
+                            ]}
+                        >
+                            {securityNoteLabel}
+                        </Text>
+                    </View>
                 </View>
             </View>
         </ScrollView>
@@ -608,14 +667,20 @@ const styles = StyleSheet.create({
         paddingBottom: 36,
         flexGrow: 1,
     },
+    scrollContentDesktop: {
+        paddingHorizontal: 24,
+        paddingTop: 16,
+    },
     nonScrollPadding: {
         paddingHorizontal: 18,
         paddingTop: 12,
     },
+    nonScrollPaddingDesktop: {
+        paddingHorizontal: 24,
+        paddingTop: 16,
+    },
     innerWrap: {
         width: '100%',
-        maxWidth: 560,
-        alignSelf: 'center',
     },
     screenHeader: {
         marginBottom: 14,
@@ -645,6 +710,16 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         padding: 15,
         marginBottom: 18,
+    },
+    safetyBannerDesktop: {
+        padding: 18,
+        marginBottom: 20,
+    },
+    cardsGridDesktop: {
+        flexDirection: 'row',
+        alignItems: 'stretch',
+        gap: 16,
+        marginBottom: 4,
     },
     bannerTopRow: {
         flexDirection: 'row',
@@ -682,6 +757,12 @@ const styles = StyleSheet.create({
         marginBottom: 14,
         borderWidth: 1.5,
     },
+    contactCardDesktop: {
+        flex: 1,
+        minWidth: 0,
+        marginBottom: 0,
+        padding: 20,
+    },
     cardShadowLight: {
         shadowColor: '#222260',
         shadowOffset: { width: 0, height: 4 },
@@ -715,6 +796,9 @@ const styles = StyleSheet.create({
     indexDot: {
         width: 20,
         height: 20,
+        minWidth: 20,
+        minHeight: 20,
+        flexShrink: 0,
         borderRadius: 10,
         alignItems: 'center',
         justifyContent: 'center',
@@ -723,6 +807,8 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
         fontSize: 11,
         fontWeight: '800',
+        lineHeight: 14,
+        textAlign: 'center',
         includeFontPadding: false,
     },
     contactBadgeText: {
@@ -806,9 +892,32 @@ const styles = StyleSheet.create({
         marginTop: 2,
         marginBottom: 18,
     },
+    addButtonDesktop: {
+        flex: 1,
+        minWidth: 0,
+        flexDirection: 'column',
+        borderRadius: 18,
+        minHeight: 168,
+        padding: 20,
+        marginTop: 0,
+        marginBottom: 0,
+    },
     addButtonText: {
         fontSize: 14,
         fontWeight: '700',
+    },
+    addButtonHint: {
+        fontSize: 12,
+        fontWeight: '500',
+    },
+    actionBarDesktop: {
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 20,
+        marginTop: 22,
+        paddingTop: 18,
+        borderTopWidth: 1,
     },
     saveButton: {
         flexDirection: 'row',
@@ -819,6 +928,11 @@ const styles = StyleSheet.create({
         borderRadius: 16,
         paddingHorizontal: 20,
         marginTop: 4,
+    },
+    saveButtonDesktop: {
+        marginTop: 0,
+        minWidth: 260,
+        paddingHorizontal: 28,
     },
     saveButtonShadowLight: {
         shadowColor: '#5B4FFF',
@@ -848,11 +962,20 @@ const styles = StyleSheet.create({
         marginTop: 14,
         paddingHorizontal: 12,
     },
+    securityFooterDesktop: {
+        marginTop: 0,
+        paddingHorizontal: 0,
+        justifyContent: 'flex-start',
+        flex: 1,
+    },
     securityFooterText: {
         fontSize: 12,
         fontWeight: '500',
         textAlign: 'center',
         flexShrink: 1,
+    },
+    securityFooterTextDesktop: {
+        textAlign: 'left',
     },
     errorCard: {
         marginTop: 20,
@@ -860,6 +983,12 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         padding: 24,
         alignItems: 'center',
+    },
+    errorCardDesktop: {
+        maxWidth: 540,
+        width: '100%',
+        alignSelf: 'center',
+        marginTop: 32,
     },
     errorIconWell: {
         width: 52,
