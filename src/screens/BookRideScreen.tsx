@@ -7,8 +7,6 @@ import {
     Switch,
     ScrollView,
     Modal,
-    AppState,
-    Platform,
 } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
@@ -19,6 +17,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { apiRequest } from '../utils/api';
 import { parseJsonSafe, getApiErrorMessage, createRequestAbort } from '../utils/json';
 import { notify } from '../utils/notify';
+import { useVisibilityPolling } from '../utils/polling';
 import { useBrowserBack } from '../utils/browserHistory';
 import ScreenHeader from '../components/ScreenHeader';
 
@@ -77,28 +76,6 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
     };
 
     useBrowserBack(showSuccessModal, dismissSuccessModal, isFocused);
-    const [isAppActive, setIsAppActive] = useState<boolean>(() => {
-        if (Platform.OS === 'web') {
-            return typeof document === 'undefined' || document.visibilityState === 'visible';
-        }
-        return AppState.currentState === 'active';
-    });
-
-    useEffect(() => {
-        if (Platform.OS === 'web') {
-            if (typeof document === 'undefined') return;
-            const handleVisibility = () => {
-                setIsAppActive(document.visibilityState === 'visible');
-            };
-            document.addEventListener('visibilitychange', handleVisibility);
-            return () => document.removeEventListener('visibilitychange', handleVisibility);
-        }
-        const sub = AppState.addEventListener('change', (nextState) => {
-            setIsAppActive(nextState === 'active');
-        });
-        return () => sub?.remove?.();
-    }, []);
-
     const isPartialMatch = Boolean(ride.isPartialMatch ?? initialRide.isPartialMatch);
     const matchType = ride.matchType || initialRide.matchType;
     const effectivePickup =
@@ -166,22 +143,22 @@ const BookRideScreen: React.FC<BookRideScreenProps> = ({ ride: initialRide, sear
     const fetchRideDetailsRef = useRef(fetchRideDetails);
     fetchRideDetailsRef.current = fetchRideDetails;
 
+    const { triggerSync: triggerRideSync } = useVisibilityPolling({
+        enabled: isFocused && !loading && !showSuccessModal,
+        intervalMs: 9000, // Poll every 9s while focused, foregrounded, and idle
+        onPoll: () => fetchRideDetailsRef.current(),
+        onPause: () => pollAbortRef.current?.abort(),
+    });
+
+    const prevRideIdRef = useRef(initialRide.id);
     useEffect(() => {
-        if (!isFocused || !isAppActive || loading || showSuccessModal) {
-            pollAbortRef.current?.abort();
-            return;
+        if (prevRideIdRef.current !== initialRide.id) {
+            prevRideIdRef.current = initialRide.id;
+            if (isFocused && !loading && !showSuccessModal) {
+                void triggerRideSync();
+            }
         }
-        fetchRideDetailsRef.current();
-        const interval = setInterval(() => {
-            if (Platform.OS === 'web' && typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
-            if (Platform.OS !== 'web' && AppState.currentState !== 'active') return;
-            fetchRideDetailsRef.current();
-        }, 5000); // Poll every 5 seconds while focused, active, and idle
-        return () => {
-            clearInterval(interval);
-            pollAbortRef.current?.abort();
-        };
-    }, [initialRide.id, isFocused, isAppActive, loading, showSuccessModal]);
+    }, [initialRide.id, isFocused, loading, showSuccessModal, triggerRideSync]);
 
     const toggleSeat = (index: number) => {
         if (selectedSeats.includes(index)) {

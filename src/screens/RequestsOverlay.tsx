@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
     View, Text, StyleSheet, FlatList, ActivityIndicator,
-    TouchableOpacity, Modal, AppState, Platform
+    TouchableOpacity, Modal
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
@@ -9,6 +9,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { apiRequest } from '../utils/api';
 import { parseJsonSafe, getApiErrorMessage, createRequestAbort } from '../utils/json';
 import { notify } from '../utils/notify';
+import { useVisibilityPolling } from '../utils/polling';
 import Icon from 'react-native-vector-icons/Ionicons';
 
 interface RequestsOverlayProps {
@@ -236,27 +237,6 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
     });
 
     const isDriver = user?.role === 'driver';
-    const [isAppActive, setIsAppActive] = useState<boolean>(() => {
-        if (Platform.OS === 'web') {
-            return typeof document === 'undefined' || document.visibilityState === 'visible';
-        }
-        return AppState.currentState === 'active';
-    });
-
-    useEffect(() => {
-        if (Platform.OS === 'web') {
-            if (typeof document === 'undefined') return;
-            const handleVisibility = () => {
-                setIsAppActive(document.visibilityState === 'visible');
-            };
-            document.addEventListener('visibilitychange', handleVisibility);
-            return () => document.removeEventListener('visibilitychange', handleVisibility);
-        }
-        const sub = AppState.addEventListener('change', (nextState) => {
-            setIsAppActive(nextState === 'active');
-        });
-        return () => sub?.remove?.();
-    }, []);
 
     const fetchData = async () => {
         pollAbortRef.current?.abort();
@@ -304,22 +284,20 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
     const fetchDataRef = useRef(fetchData);
     fetchDataRef.current = fetchData;
 
+    const { triggerSync } = useVisibilityPolling({
+        enabled: true,
+        intervalMs: 10000,
+        onPoll: () => fetchDataRef.current(),
+        onPause: () => pollAbortRef.current?.abort(),
+    });
+
+    const prevDriverRef = useRef(isDriver);
     useEffect(() => {
-        if (!isAppActive) {
-            pollAbortRef.current?.abort();
-            return;
+        if (prevDriverRef.current !== isDriver) {
+            prevDriverRef.current = isDriver;
+            void triggerSync();
         }
-        fetchDataRef.current();
-        const interval = setInterval(() => {
-            if (Platform.OS === 'web' && typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
-            if (Platform.OS !== 'web' && AppState.currentState !== 'active') return;
-            fetchDataRef.current();
-        }, 5000);
-        return () => {
-            clearInterval(interval);
-            pollAbortRef.current?.abort();
-        };
-    }, [isAppActive, isDriver]);
+    }, [isDriver, triggerSync]);
 
     useEffect(() => {
         fetchSystemNotifs();
@@ -336,9 +314,10 @@ const RequestsOverlay: React.FC<RequestsOverlayProps> = ({ onClose, onOpenChat }
                 if (!isMountedRef.current || abort.signal.aborted) return;
                 const list = Array.isArray(data) ? data : [];
                 setSystemNotifs(list);
-                list.filter((n: any) => !n.read).forEach(async (n: any) => {
-                    try { await apiRequest(`/api/notifications/${n.id}/read`, { method: 'PUT' }, logout); } catch (_) {}
-                });
+                // Batch mark all unread notifications in one request instead of an N+1 loop.
+                if (list.some((n: any) => !n.read)) {
+                    apiRequest('/api/notifications/read-all', { method: 'PUT' }, logout).catch(() => {});
+                }
             }
         } catch (err: any) {
             if (err?.name !== 'AbortError') {

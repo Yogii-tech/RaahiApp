@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, TextInput, useWindowDimensions } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { notify } from '../../utils/notify';
@@ -57,6 +57,9 @@ export default function AdminSettingsView({ isDark, activeTab: initialTab = 'adm
         confirmSignOut,
     } = useSignOutConfirmation(logout);
     const [activeTab, setActiveTab] = useState<'admins' | 'permissions' | 'settings'>(initialTab);
+    useEffect(() => {
+        setActiveTab(initialTab);
+    }, [initialTab]);
     const [permissions, setPermissions] = useState<PermissionRow[]>(INITIAL_PERMISSIONS);
     const [platformConfig, setPlatformConfig] = useState({
         supportEmail: 'support@goraahi.in',

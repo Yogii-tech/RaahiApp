@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ScrollView, ActivityIndicator, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { downloadCSV } from '../../utils/exportUtils';
 import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
-import { parseJsonSafe, createRequestAbort } from '../../utils/json';
+import { parseJsonSafe } from '../../utils/json';
+import { useAdminCache } from '../../utils/adminCache';
 
 interface RouteRow {
      id: string;
@@ -37,7 +38,9 @@ export default function AdminRoutesDetailView({ isDark, searchQuery = '' }: { is
      const { fetchWithAuth } = useAuth();
      const fetchWithAuthRef = useRef(fetchWithAuth);
      fetchWithAuthRef.current = fetchWithAuth;
-     const abortRef = useRef<AbortController | null>(null);
+     const { fetchCached } = useAdminCache();
+     const fetchCachedRef = useRef(fetchCached);
+     fetchCachedRef.current = fetchCached;
      const reqIdRef = useRef(0);
      const isMountedRef = useRef(true);
      const { width } = useWindowDimensions();
@@ -53,9 +56,6 @@ export default function AdminRoutesDetailView({ isDark, searchQuery = '' }: { is
      };
 
      const fetchData = useCallback(async (background = false) => {
-          abortRef.current?.abort();
-          const { controller, cleanup, didTimeout } = createRequestAbort(12000);
-          abortRef.current = controller;
           const reqId = ++reqIdRef.current;
 
           if (background) {
@@ -66,18 +66,29 @@ export default function AdminRoutesDetailView({ isDark, searchQuery = '' }: { is
           setError(null);
 
           try {
-               const r = await fetchWithAuthRef.current(`${API_BASE}/api/admin/routes`, { signal: controller.signal });
-               if (!r.ok) throw new Error(`Server error: ${r.status}`);
-               const d = await parseJsonSafe<RouteRow[]>(r);
+               const d = await fetchCachedRef.current<RouteRow[]>(
+                    'admin:routes',
+                    async (signal) => {
+                         const r = await fetchWithAuthRef.current(`${API_BASE}/api/admin/routes`, {
+                              signal,
+                         });
+                         if (!r.ok) throw new Error(`Server error: ${r.status}`);
+                         const parsed = await parseJsonSafe<RouteRow[]>(r);
+                         return Array.isArray(parsed) ? parsed : [];
+                    },
+                    {
+                         force: background,
+                         timeoutMessage: 'Request timed out while loading routes',
+                    }
+               );
                if (!isMountedRef.current || reqId !== reqIdRef.current) return;
                setRoutes(Array.isArray(d) ? d : []);
           } catch (err: any) {
                if (!isMountedRef.current || reqId !== reqIdRef.current) return;
-               if (err?.name === 'AbortError' && !didTimeout()) return;
-               setError(didTimeout() ? 'Request timed out while loading routes' : (err?.message || 'Could not load routes'));
+               if (err?.name === 'AbortError') return;
+               setError(err?.message || 'Could not load routes');
                if (!background) setRoutes([]);
           } finally {
-               cleanup();
                if (isMountedRef.current && reqId === reqIdRef.current) {
                     setLoading(false);
                     setRefreshing(false);
@@ -91,7 +102,6 @@ export default function AdminRoutesDetailView({ isDark, searchQuery = '' }: { is
           return () => {
                isMountedRef.current = false;
                reqIdRef.current += 1;
-               abortRef.current?.abort();
           };
      }, [fetchData]);
 
@@ -127,8 +137,8 @@ export default function AdminRoutesDetailView({ isDark, searchQuery = '' }: { is
           );
      }
 
-     return (
-          <ScrollView style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: T.bg }]} showsVerticalScrollIndicator={false}>
+     const listHeader = (
+          <View>
                <View style={[styles.header, isMobile && { flexDirection: 'column', alignItems: 'flex-start', gap: 12 }]}>
                     <Text style={[styles.headerTitle, { color: T.text }]}>Route Analytics</Text>
                     <View style={[styles.headerButtons, { flexWrap: 'wrap', gap: 10 }]}>
@@ -163,8 +173,8 @@ export default function AdminRoutesDetailView({ isDark, searchQuery = '' }: { is
                     </View>
                </ScrollView>
 
-               {/* Routes Table */}
-               <View style={[styles.tablePanel, isMobile && { padding: 16 }, { backgroundColor: T.card, borderColor: T.border }]}>
+               {/* Routes Table Header */}
+               <View style={[styles.tableHeaderPanel, isMobile && { padding: 16, paddingBottom: 12 }, { backgroundColor: T.card, borderColor: T.border }]}>
                     <Text style={[styles.tableTitle, { color: T.text }]}>
                          Route Breakdown — {filteredRoutes.length} corridor{filteredRoutes.length !== 1 ? 's' : ''}
                     </Text>
@@ -175,55 +185,68 @@ export default function AdminRoutesDetailView({ isDark, searchQuery = '' }: { is
                               ))}
                          </View>
                     )}
-                    {filteredRoutes.length === 0 ? (
+               </View>
+          </View>
+     );
+
+     return (
+          <FlatList
+               style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: T.bg }]}
+               contentContainerStyle={{ paddingBottom: 100 }}
+               showsVerticalScrollIndicator={false}
+               data={filteredRoutes}
+               keyExtractor={r => r.id}
+               initialNumToRender={15}
+               maxToRenderPerBatch={15}
+               windowSize={7}
+               ListHeaderComponent={listHeader}
+               renderItem={({ item: r }) => {
+                    const statusColor = STATUS_COLORS[r.status] ?? '#6C757D';
+                    if (isMobile) {
+                         return (
+                              <View style={[styles.mobileCard, { paddingHorizontal: 16, borderColor: T.border, borderLeftWidth: 1, borderRightWidth: 1, backgroundColor: T.card }]}>
+                                   <View style={styles.mobileCardTop}>
+                                        <Text style={{ color: T.text, fontWeight: 'bold', fontSize: 14, flex: 1, minWidth: 0 }} numberOfLines={2}>
+                                             {r.route}
+                                        </Text>
+                                        <View style={[styles.statusBadge, { backgroundColor: statusColor + '20' }]}>
+                                             <Text style={{ color: statusColor, fontSize: 11, fontWeight: 'bold' }}>{r.status}</Text>
+                                        </View>
+                                   </View>
+                                   <Text style={{ color: T.subtext, fontSize: 12 }} numberOfLines={1}>
+                                        Top Driver: <Text style={{ color: T.text, fontWeight: '500' }}>{r.topDriver || '—'}</Text>
+                                   </Text>
+                                   <View style={styles.mobileCardMeta}>
+                                        <Text style={{ color: '#28A745', fontWeight: 'bold', fontSize: 12 }}>Bookings: {r.bookings}</Text>
+                                        <Text style={{ color: '#DC3545', fontWeight: 'bold', fontSize: 12 }}>Cancels: {r.cancellations}</Text>
+                                        <Text style={{ color: T.text, fontWeight: '600', fontSize: 12 }}>Avg: ₹{Math.round(r.avgPrice)}</Text>
+                                   </View>
+                              </View>
+                         );
+                    }
+                    return (
+                         <View style={[styles.tableRow, { paddingHorizontal: 24, borderColor: T.border, borderLeftWidth: 1, borderRightWidth: 1, backgroundColor: T.card }]}>
+                              <Text style={[styles.cell, { color: T.text, fontWeight: 'bold', flex: 2, minWidth: 0, paddingRight: 8 }]} numberOfLines={2}>{r.route}</Text>
+                              <Text style={[styles.cell, { color: '#28A745', fontWeight: 'bold', minWidth: 0 }]}>{r.bookings}</Text>
+                              <Text style={[styles.cell, { color: '#DC3545', fontWeight: 'bold', minWidth: 0 }]}>{r.cancellations}</Text>
+                              <Text style={[styles.cell, { color: T.text, minWidth: 0, paddingRight: 8 }]} numberOfLines={1} ellipsizeMode="tail">{r.topDriver || '—'}</Text>
+                              <Text style={[styles.cell, { color: T.text, minWidth: 0 }]}>₹{Math.round(r.avgPrice)}</Text>
+                              <View style={{ flex: 1, minWidth: 0 }}>
+                                   <View style={[styles.statusBadge, { backgroundColor: statusColor + '20' }]}>
+                                        <Text style={{ color: statusColor, fontSize: 11, fontWeight: 'bold' }}>{r.status}</Text>
+                                   </View>
+                              </View>
+                         </View>
+                    );
+               }}
+               ListEmptyComponent={
+                    <View style={{ backgroundColor: T.card, borderColor: T.border, borderWidth: 1, borderTopWidth: 0 }}>
                          <Text style={{ color: T.subtext, textAlign: 'center', padding: 40 }}>
                               No route data yet. Routes are generated from posted rides.
                          </Text>
-                    ) : isMobile ? (
-                         filteredRoutes.map(r => {
-                              const statusColor = STATUS_COLORS[r.status] ?? '#6C757D';
-                              return (
-                                   <View key={r.id} style={[styles.mobileCard, { borderBottomColor: T.border }]}>
-                                        <View style={styles.mobileCardTop}>
-                                             <Text style={{ color: T.text, fontWeight: 'bold', fontSize: 14, flex: 1, minWidth: 0 }} numberOfLines={2}>
-                                                  {r.route}
-                                             </Text>
-                                             <View style={[styles.statusBadge, { backgroundColor: statusColor + '20' }]}>
-                                                  <Text style={{ color: statusColor, fontSize: 11, fontWeight: 'bold' }}>{r.status}</Text>
-                                             </View>
-                                        </View>
-                                        <Text style={{ color: T.subtext, fontSize: 12 }} numberOfLines={1}>
-                                             Top Driver: <Text style={{ color: T.text, fontWeight: '500' }}>{r.topDriver || '—'}</Text>
-                                        </Text>
-                                        <View style={styles.mobileCardMeta}>
-                                             <Text style={{ color: '#28A745', fontWeight: 'bold', fontSize: 12 }}>Bookings: {r.bookings}</Text>
-                                             <Text style={{ color: '#DC3545', fontWeight: 'bold', fontSize: 12 }}>Cancels: {r.cancellations}</Text>
-                                             <Text style={{ color: T.text, fontWeight: '600', fontSize: 12 }}>Avg: ₹{Math.round(r.avgPrice)}</Text>
-                                        </View>
-                                   </View>
-                              );
-                         })
-                    ) : (
-                         filteredRoutes.map(r => {
-                              const statusColor = STATUS_COLORS[r.status] ?? '#6C757D';
-                              return (
-                                   <View key={r.id} style={[styles.tableRow, { borderBottomColor: T.border }]}>
-                                        <Text style={[styles.cell, { color: T.text, fontWeight: 'bold', flex: 2, minWidth: 0, paddingRight: 8 }]} numberOfLines={2}>{r.route}</Text>
-                                        <Text style={[styles.cell, { color: '#28A745', fontWeight: 'bold', minWidth: 0 }]}>{r.bookings}</Text>
-                                        <Text style={[styles.cell, { color: '#DC3545', fontWeight: 'bold', minWidth: 0 }]}>{r.cancellations}</Text>
-                                        <Text style={[styles.cell, { color: T.text, minWidth: 0, paddingRight: 8 }]} numberOfLines={1} ellipsizeMode="tail">{r.topDriver || '—'}</Text>
-                                        <Text style={[styles.cell, { color: T.text, minWidth: 0 }]}>₹{Math.round(r.avgPrice)}</Text>
-                                        <View style={{ flex: 1, minWidth: 0 }}>
-                                             <View style={[styles.statusBadge, { backgroundColor: statusColor + '20' }]}>
-                                                  <Text style={{ color: statusColor, fontSize: 11, fontWeight: 'bold' }}>{r.status}</Text>
-                                             </View>
-                                        </View>
-                                   </View>
-                              );
-                         })
-                    )}
-               </View>
-          </ScrollView>
+                    </View>
+               }
+          />
      );
 }
 
@@ -239,6 +262,7 @@ const styles = StyleSheet.create({
      statCard: { width: 180, borderRadius: 12, padding: 18, borderWidth: 1 },
      cardLabel: { fontSize: 13, fontWeight: '500' },
      cardValue: { fontSize: 22, fontWeight: 'bold', marginTop: 4 },
+     tableHeaderPanel: { borderTopLeftRadius: 12, borderTopRightRadius: 12, padding: 24, paddingBottom: 0, marginTop: 24, borderWidth: 1, borderBottomWidth: 0 },
      tablePanel: { borderRadius: 12, padding: 24, marginTop: 24, borderWidth: 1, marginBottom: 100 },
      tableTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 20 },
      tableHeader: { flexDirection: 'row', paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.05)' },

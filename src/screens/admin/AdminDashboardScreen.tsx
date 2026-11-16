@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    AppState,
     Platform,
     ScrollView,
     StyleSheet,
@@ -26,6 +25,8 @@ import AdminSettingsView from './AdminSettingsView';
 import RaahiLogo from '../../components/RaahiLogo';
 import { confirmAction, notify } from '../../utils/notify';
 import { createRequestAbort } from '../../utils/json';
+import { useVisibilityPolling } from '../../utils/polling';
+import { AdminCacheProvider } from '../../utils/adminCache';
 import SignOutConfirmModal, { useSignOutConfirmation } from './SignOutConfirmModal';
 import {
     FCMNotificationPayload,
@@ -149,14 +150,6 @@ const DARK_THEME = {
 const POLL_INTERVAL_MS = 15000;
 const TOAST_DURATION_MS = 5500;
 
-function isAppCurrentlyActive(): boolean {
-    if (Platform.OS === 'web') {
-        return typeof document === 'undefined' || document.visibilityState === 'visible';
-    }
-    const state = AppState.currentState;
-    return typeof state !== 'string' || (state !== 'background' && state !== 'inactive');
-}
-
 interface ForegroundToastState {
     id: string;
     title: string;
@@ -190,8 +183,6 @@ export default function AdminDashboardScreen() {
     );
     const [pushBannerDismissed, setPushBannerDismissed] = useState(false);
     const [foregroundToast, setForegroundToast] = useState<ForegroundToastState | null>(null);
-
-    const [isAppActive, setIsAppActive] = useState<boolean>(() => isAppCurrentlyActive());
 
     const isMountedRef = useRef(true);
     const fetchWithAuthRef = useRef(fetchWithAuth);
@@ -539,60 +530,19 @@ export default function AdminDashboardScreen() {
         });
     }, []);
 
-    // Track browser visibility / window focus / native AppState
-    useEffect(() => {
-        if (Platform.OS === 'web') {
-            if (typeof document === 'undefined') return;
-            const handleVisibility = () => {
-                const visible = document.visibilityState === 'visible';
-                setIsAppActive(visible);
-                if (visible) {
-                    setPushPermission(getWebNotificationPermission());
-                    loadNotificationsRef.current(true);
-                }
-            };
-            const handleWindowFocus = () => {
-                setIsAppActive(true);
+    // Visibility/AppState-aware notification polling with >= 5s resume cooldown.
+    const { triggerSync: triggerNotifSync } = useVisibilityPolling({
+        enabled: Boolean(token),
+        intervalMs: POLL_INTERVAL_MS,
+        resumeCooldownMs: 5000,
+        onPoll: (reason) => {
+            if (Platform.OS === 'web' && reason === 'resume') {
                 setPushPermission(getWebNotificationPermission());
-                loadNotificationsRef.current(true);
-            };
-            document.addEventListener('visibilitychange', handleVisibility);
-            if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
-                window.addEventListener('focus', handleWindowFocus);
             }
-            return () => {
-                document.removeEventListener('visibilitychange', handleVisibility);
-                if (typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {
-                    window.removeEventListener('focus', handleWindowFocus);
-                }
-            };
-        }
-
-        const sub = AppState.addEventListener('change', (nextState) => {
-            const active =
-                typeof nextState !== 'string' ||
-                (nextState !== 'background' && nextState !== 'inactive');
-            setIsAppActive(active);
-            if (active) {
-                loadNotificationsRef.current(true);
-            }
-        });
-        return () => sub?.remove?.();
-    }, []);
-
-    // Load notifications on mount + smart active polling
-    useEffect(() => {
-        if (!token || !isAppActive) return;
-        loadNotificationsRef.current(false);
-        const interval = setInterval(() => {
-            if (!isAppCurrentlyActive()) {
-                return;
-            }
-            loadNotificationsRef.current(true);
-        }, POLL_INTERVAL_MS);
-
-        return () => clearInterval(interval);
-    }, [token, isAppActive]);
+            return loadNotificationsRef.current(reason !== 'mount');
+        },
+        onPause: () => notifAbortRef.current?.abort(),
+    });
 
     // Register FCM for Admin on login / session restore
     useEffect(() => {
@@ -679,91 +629,95 @@ export default function AdminDashboardScreen() {
     }, [token, navigateFromNotificationPayload]);
 
     const safeToken = token || '';
+    const cacheScopeKey = user?.id ? `user:${user.id}` : safeToken;
 
     const renderContent = () => {
-        // Use key={activeView} on views that need full remount when switching between same component with different filters
         return (
-            <ScrollView style={styles.pageBody} showsVerticalScrollIndicator={false}>
-                {activeView === 'dashboard' && (
-                    <AdminDashboardView
-                        token={safeToken}
-                        isDark={isDark}
-                        onNavigateToRides={() => navigate('active_rides')}
-                        onNavigateToBookings={() => navigate('bookings')}
-                        onNavigateToParcels={() => navigate('parcels')}
-                        onNavigateToVisitors={() => navigate('admin_users')}
-                        onNavigateToRoutes={() => navigate('routes')}
-                    />
-                )}
-                {activeView === 'driver_verification' && (
-                    <AdminDriversView key="driver_verification" token={safeToken} searchQuery={searchQuery} initialFilter="pending" />
-                )}
-                {activeView === 'document_review' && (
-                    <AdminDriversView key="document_review" token={safeToken} searchQuery={searchQuery} initialFilter="all" />
-                )}
-                {activeView === 'drivers' && (
-                    <AdminDriversView key="drivers" token={safeToken} searchQuery={searchQuery} initialFilter="verified" />
-                )}
-                {activeView === 'vehicles' && (
-                    <AdminVehiclesView token={safeToken} searchQuery={searchQuery} isDark={isDark} />
-                )}
-                {activeView === 'active_rides' && (
-                    <AdminRidesDetailView key="active_rides" isDark={isDark} searchQuery={searchQuery} initialTab="available" />
-                )}
-                {activeView === 'completed_rides' && (
-                    <AdminRidesDetailView key="completed_rides" isDark={isDark} searchQuery={searchQuery} initialTab="completed" />
-                )}
-                {activeView === 'cancelled_rides' && (
-                    <AdminRidesDetailView key="cancelled_rides" isDark={isDark} searchQuery={searchQuery} initialTab="cancelled" />
-                )}
-                {activeView === 'routes' && (
-                    <AdminRoutesDetailView isDark={isDark} searchQuery={searchQuery} />
-                )}
-                {activeView === 'bookings' && (
-                    <AdminBookingsView token={safeToken} searchQuery={searchQuery} />
-                )}
-                {activeView === 'parcels' && (
-                    <AdminParcelsDetailView isDark={isDark} searchQuery={searchQuery} />
-                )}
-                {activeView === 'finance' && (
-                    <AdminFinanceView token={safeToken} searchQuery={searchQuery} isDark={isDark} />
-                )}
-                {activeView === 'NOTIFICATIONS' && (
-                    <AdminNotificationsView
-                        notifications={notifications}
-                        unreadCount={unreadCount}
-                        loading={loadingNotifications}
-                        refreshing={refreshingNotifications}
-                        error={notifError}
-                        markingAllRead={markingAllRead}
-                        clearing={clearingNotifications}
-                        testingPush={testingPush}
-                        searchQuery={searchQuery}
-                        isDark={isDark}
-                        pushPermission={pushPermission}
-                        onRefresh={() => loadNotifications(true)}
-                        onMarkRead={markNotificationRead}
-                        onMarkAllRead={handleMarkAllRead}
-                        onClearAll={handleClearAll}
-                        onNavigateNotification={handleSelectNotification}
-                        onRequestPushPermission={handleRequestPushPermission}
-                        onSendTestPush={handleSendTestPush}
-                    />
-                )}
-                {activeView === 'reports' && <AdminReportsView token={safeToken} />}
-                {activeView === 'audit_logs' && (
-                    <AdminAuditLogsView isDark={isDark} searchQuery={searchQuery} />
-                )}
-                {activeView === 'admin_users' && (
-                    <AdminVisitorsDetailView isDark={isDark} searchQuery={searchQuery} />
-                )}
-                {activeView === 'permissions' && (
-                    <AdminSettingsView key="permissions" isDark={isDark} activeTab="permissions" />
-                )}
-                {activeView === 'settings' && (
-                    <AdminSettingsView key="settings" isDark={isDark} activeTab="settings" />
-                )}
-            </ScrollView>
+            <AdminCacheProvider scopeKey={cacheScopeKey}>
+                <View style={styles.pageBody}>
+                    {activeView === 'dashboard' && (
+                        <AdminDashboardView
+                            token={safeToken}
+                            isDark={isDark}
+                            onNavigateToRides={() => navigate('active_rides')}
+                            onNavigateToBookings={() => navigate('bookings')}
+                            onNavigateToParcels={() => navigate('parcels')}
+                            onNavigateToVisitors={() => navigate('admin_users')}
+                            onNavigateToRoutes={() => navigate('routes')}
+                        />
+                    )}
+                    {activeView === 'driver_verification' && (
+                        <AdminDriversView token={safeToken} searchQuery={searchQuery} initialFilter="pending" />
+                    )}
+                    {activeView === 'document_review' && (
+                        <AdminDriversView token={safeToken} searchQuery={searchQuery} initialFilter="all" />
+                    )}
+                    {activeView === 'drivers' && (
+                        <AdminDriversView token={safeToken} searchQuery={searchQuery} initialFilter="verified" />
+                    )}
+                    {activeView === 'vehicles' && (
+                        <AdminVehiclesView token={safeToken} searchQuery={searchQuery} isDark={isDark} />
+                    )}
+                    {activeView === 'active_rides' && (
+                        <AdminRidesDetailView isDark={isDark} searchQuery={searchQuery} initialTab="available" />
+                    )}
+                    {activeView === 'completed_rides' && (
+                        <AdminRidesDetailView isDark={isDark} searchQuery={searchQuery} initialTab="completed" />
+                    )}
+                    {activeView === 'cancelled_rides' && (
+                        <AdminRidesDetailView isDark={isDark} searchQuery={searchQuery} initialTab="cancelled" />
+                    )}
+                    {activeView === 'routes' && (
+                        <AdminRoutesDetailView isDark={isDark} searchQuery={searchQuery} />
+                    )}
+                    {activeView === 'bookings' && (
+                        <AdminBookingsView token={safeToken} searchQuery={searchQuery} />
+                    )}
+                    {activeView === 'parcels' && (
+                        <AdminParcelsDetailView isDark={isDark} searchQuery={searchQuery} />
+                    )}
+                    {activeView === 'finance' && (
+                        <AdminFinanceView token={safeToken} searchQuery={searchQuery} isDark={isDark} />
+                    )}
+                    {activeView === 'NOTIFICATIONS' && (
+                        <AdminNotificationsView
+                            notifications={notifications}
+                            unreadCount={unreadCount}
+                            loading={loadingNotifications}
+                            refreshing={refreshingNotifications}
+                            error={notifError}
+                            markingAllRead={markingAllRead}
+                            clearing={clearingNotifications}
+                            testingPush={testingPush}
+                            searchQuery={searchQuery}
+                            isDark={isDark}
+                            pushPermission={pushPermission}
+                            onRefresh={() => {
+                                void triggerNotifSync();
+                            }}
+                            onMarkRead={markNotificationRead}
+                            onMarkAllRead={handleMarkAllRead}
+                            onClearAll={handleClearAll}
+                            onNavigateNotification={handleSelectNotification}
+                            onRequestPushPermission={handleRequestPushPermission}
+                            onSendTestPush={handleSendTestPush}
+                        />
+                    )}
+                    {activeView === 'reports' && <AdminReportsView token={safeToken} />}
+                    {activeView === 'audit_logs' && (
+                        <AdminAuditLogsView isDark={isDark} searchQuery={searchQuery} />
+                    )}
+                    {activeView === 'admin_users' && (
+                        <AdminVisitorsDetailView isDark={isDark} searchQuery={searchQuery} />
+                    )}
+                    {activeView === 'permissions' && (
+                        <AdminSettingsView isDark={isDark} activeTab="permissions" />
+                    )}
+                    {activeView === 'settings' && (
+                        <AdminSettingsView isDark={isDark} activeTab="settings" />
+                    )}
+                </View>
+            </AdminCacheProvider>
         );
     };
 

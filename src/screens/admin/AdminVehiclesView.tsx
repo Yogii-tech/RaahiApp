@@ -4,7 +4,8 @@ import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
 import { downloadCSV } from '../../utils/exportUtils';
 import { Driver } from './AdminDriversView';
-import { parseJsonSafe, createRequestAbort } from '../../utils/json';
+import { parseJsonSafe } from '../../utils/json';
+import { useAdminCache } from '../../utils/adminCache';
 
 export default function AdminVehiclesView({ token, searchQuery = '', isDark }: { token: string; searchQuery?: string; isDark: boolean }) {
     const [vehicles, setVehicles] = useState<Driver[]>([]);
@@ -15,7 +16,9 @@ export default function AdminVehiclesView({ token, searchQuery = '', isDark }: {
     const { fetchWithAuth } = useAuth();
     const fetchWithAuthRef = useRef(fetchWithAuth);
     fetchWithAuthRef.current = fetchWithAuth;
-    const abortRef = useRef<AbortController | null>(null);
+    const { fetchCached } = useAdminCache();
+    const fetchCachedRef = useRef(fetchCached);
+    fetchCachedRef.current = fetchCached;
     const reqIdRef = useRef(0);
     const isMountedRef = useRef(true);
     const { width } = useWindowDimensions();
@@ -31,9 +34,6 @@ export default function AdminVehiclesView({ token, searchQuery = '', isDark }: {
     };
 
     const loadVehicles = useCallback(async (background = false) => {
-        abortRef.current?.abort();
-        const { controller, cleanup, didTimeout } = createRequestAbort(12000);
-        abortRef.current = controller;
         const reqId = ++reqIdRef.current;
 
         if (background) {
@@ -43,20 +43,31 @@ export default function AdminVehiclesView({ token, searchQuery = '', isDark }: {
         }
         setError(null);
         try {
-            const res = await fetchWithAuthRef.current(`${API_BASE}/api/admin/drivers`, { signal: controller.signal });
-            if (!res.ok) throw new Error(`Server error: ${res.status}`);
-            const data = await parseJsonSafe<Driver[]>(res);
+            const data = await fetchCachedRef.current<Driver[]>(
+                'admin:drivers',
+                async (signal) => {
+                    const res = await fetchWithAuthRef.current(`${API_BASE}/api/admin/drivers`, {
+                        signal,
+                    });
+                    if (!res.ok) throw new Error(`Server error: ${res.status}`);
+                    const parsed = await parseJsonSafe<Driver[]>(res);
+                    return Array.isArray(parsed) ? parsed : [];
+                },
+                {
+                    force: background,
+                    timeoutMessage: 'Request timed out while loading vehicles',
+                }
+            );
             if (!isMountedRef.current || reqId !== reqIdRef.current) return;
             const withVehicles = Array.isArray(data) ? data.filter(d => d.vehicleNumber || d.vehicleName) : [];
             setVehicles(withVehicles);
         } catch (err: any) {
             if (!isMountedRef.current || reqId !== reqIdRef.current) return;
-            if (err?.name === 'AbortError' && !didTimeout()) return;
+            if (err?.name === 'AbortError') return;
             console.error('Failed to load vehicles:', err);
-            setError(didTimeout() ? 'Request timed out while loading vehicles' : (err?.message || 'Failed to load vehicles'));
+            setError(err?.message || 'Failed to load vehicles');
             if (!background) setVehicles([]);
         } finally {
-            cleanup();
             if (isMountedRef.current && reqId === reqIdRef.current) {
                 setLoading(false);
                 setRefreshing(false);
@@ -70,7 +81,6 @@ export default function AdminVehiclesView({ token, searchQuery = '', isDark }: {
         return () => {
             isMountedRef.current = false;
             reqIdRef.current += 1;
-            abortRef.current?.abort();
         };
     }, [loadVehicles]);
 
@@ -125,8 +135,8 @@ export default function AdminVehiclesView({ token, searchQuery = '', isDark }: {
         );
     }
 
-    return (
-        <ScrollView style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: T.bg }]} contentContainerStyle={{ paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
+    const topSections = (
+        <View>
             <View style={[styles.headerRow, isMobile && { flexDirection: 'column', alignItems: 'flex-start', gap: 12 }]}>
                 <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={[styles.sectionTitle, { color: T.text }]}>Vehicle Fleet Management</Text>
@@ -198,105 +208,129 @@ export default function AdminVehiclesView({ token, searchQuery = '', isDark }: {
                     </TouchableOpacity>
                 ))}
             </View>
+        </View>
+    );
 
-            {/* Vehicles Table */}
-            <View style={[styles.tableCard, { backgroundColor: T.card, borderColor: T.border }]}>
-                {isMobile ? (
-                    filteredVehicles.length === 0 ? (
+    if (isMobile) {
+        return (
+            <FlatList
+                style={[styles.container, { padding: 16, backgroundColor: T.bg }]}
+                contentContainerStyle={{ paddingBottom: 60 }}
+                showsVerticalScrollIndicator={false}
+                data={filteredVehicles}
+                keyExtractor={item => item.id}
+                initialNumToRender={15}
+                maxToRenderPerBatch={15}
+                windowSize={7}
+                ListHeaderComponent={topSections}
+                renderItem={({ item, index }) => {
+                    const status = getNormalizedStatus(item.verificationStatus);
+                    const badgeStyle = status === 'verified' ? styles.badgeVerified : status === 'rejected' ? styles.badgeRejected : styles.badgePending;
+                    const badgeColor = status === 'verified' ? '#28A745' : status === 'rejected' ? '#DC3545' : '#FCB92C';
+                    const badgeLabel = status === 'verified' ? 'Active / Audit OK' : status === 'rejected' ? 'Rejected' : 'Pending Audit';
+                    return (
+                        <View style={[styles.mobileVehicleCard, { borderColor: T.border, borderBottomWidth: 1, borderLeftWidth: 1, borderRightWidth: 1, borderTopWidth: index === 0 ? 1 : 0, backgroundColor: index % 2 === 1 ? (isDark ? 'rgba(255,255,255,0.03)' : '#F8FAFC') : T.card }]}>
+                            <View style={styles.mobileCardTop}>
+                                <View style={{ flex: 1, minWidth: 0 }}>
+                                    <Text style={[styles.vehicleName, { color: T.text }]} numberOfLines={1} ellipsizeMode="tail">
+                                        {item.vehicleName || 'Vehicle Specification'}
+                                    </Text>
+                                    <Text style={[styles.vehiclePlate, { color: T.subtext }]} numberOfLines={1}>
+                                        {item.vehicleNumber || 'No Plate Number'}
+                                    </Text>
+                                </View>
+                                <View style={[styles.statusBadge, badgeStyle]}>
+                                    <Text style={[styles.badgeText, { color: badgeColor }]}>
+                                        {badgeLabel}
+                                    </Text>
+                                </View>
+                            </View>
+                            <View style={styles.mobileCardMeta}>
+                                <Text style={{ color: T.subtext, fontSize: 12 }}>
+                                    {item.vehicleType || 'Sedan'} • {item.seats || 4} Seats
+                                </Text>
+                                <Text style={{ color: T.text, fontSize: 13, fontWeight: '500', flexShrink: 1 }} numberOfLines={1}>
+                                    {item.name} ({item.phone})
+                                </Text>
+                            </View>
+                        </View>
+                    );
+                }}
+                ListEmptyComponent={
+                    <View style={[styles.tableCard, { backgroundColor: T.card, borderColor: T.border }]}>
                         <Text style={{ color: T.subtext, textAlign: 'center', padding: 40 }}>
                             No registered vehicles match filters.
                         </Text>
-                    ) : (
-                        filteredVehicles.map((item, index) => {
-                            const status = getNormalizedStatus(item.verificationStatus);
-                            const badgeStyle = status === 'verified' ? styles.badgeVerified : status === 'rejected' ? styles.badgeRejected : styles.badgePending;
-                            const badgeColor = status === 'verified' ? '#28A745' : status === 'rejected' ? '#DC3545' : '#FCB92C';
-                            const badgeLabel = status === 'verified' ? 'Active / Audit OK' : status === 'rejected' ? 'Rejected' : 'Pending Audit';
-                            return (
-                                <View key={item.id} style={[styles.mobileVehicleCard, { borderBottomColor: T.border, backgroundColor: index % 2 === 1 ? (isDark ? 'rgba(255,255,255,0.01)' : '#F8FAFC') : 'transparent' }]}>
-                                    <View style={styles.mobileCardTop}>
-                                        <View style={{ flex: 1, minWidth: 0 }}>
-                                            <Text style={[styles.vehicleName, { color: T.text }]} numberOfLines={1} ellipsizeMode="tail">
-                                                {item.vehicleName || 'Vehicle Specification'}
-                                            </Text>
-                                            <Text style={[styles.vehiclePlate, { color: T.subtext }]} numberOfLines={1}>
-                                                {item.vehicleNumber || 'No Plate Number'}
-                                            </Text>
-                                        </View>
-                                        <View style={[styles.statusBadge, badgeStyle]}>
-                                            <Text style={[styles.badgeText, { color: badgeColor }]}>
-                                                {badgeLabel}
-                                            </Text>
-                                        </View>
-                                    </View>
-                                    <View style={styles.mobileCardMeta}>
-                                        <Text style={{ color: T.subtext, fontSize: 12 }}>
-                                            {item.vehicleType || 'Sedan'} • {item.seats || 4} Seats
-                                        </Text>
-                                        <Text style={{ color: T.text, fontSize: 13, fontWeight: '500', flexShrink: 1 }} numberOfLines={1}>
-                                            {item.name} ({item.phone})
-                                        </Text>
-                                    </View>
-                                </View>
-                            );
-                        })
-                    )
-                ) : (
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                        <View style={{ minWidth: 900, padding: 20 }}>
-                            <View style={[styles.tableHeader, { borderBottomColor: T.border }]}>
-                                <Text style={[styles.headerCell, { flex: 2, color: T.text }]}>VEHICLE / PLATE</Text>
-                                <Text style={[styles.headerCell, { flex: 1.5, color: T.text }]}>TYPE</Text>
-                                <Text style={[styles.headerCell, { flex: 1, color: T.text }]}>CAPACITY</Text>
-                                <Text style={[styles.headerCell, { flex: 2, color: T.text }]}>REGISTERED OWNER</Text>
-                                <Text style={[styles.headerCell, { flex: 1.5, color: T.text }]}>STATUS</Text>
-                            </View>
+                    </View>
+                }
+            />
+        );
+    }
 
-                            <FlatList
-                                data={filteredVehicles}
-                                keyExtractor={item => item.id}
-                                renderItem={({ item, index }) => {
-                                    const status = getNormalizedStatus(item.verificationStatus);
-                                    const badgeStyle = status === 'verified' ? styles.badgeVerified : status === 'rejected' ? styles.badgeRejected : styles.badgePending;
-                                    const badgeColor = status === 'verified' ? '#28A745' : status === 'rejected' ? '#DC3545' : '#FCB92C';
-                                    const badgeLabel = status === 'verified' ? 'Active / Audit OK' : status === 'rejected' ? 'Rejected' : 'Pending Audit';
-                                    return (
-                                        <View style={[styles.tableRow, { borderBottomColor: T.border, backgroundColor: index % 2 === 1 ? (isDark ? 'rgba(255,255,255,0.01)' : '#F8FAFC') : 'transparent' }]}>
-                                            <View style={{ flex: 2, justifyContent: 'center', minWidth: 0, paddingRight: 8 }}>
-                                                <Text style={[styles.vehicleName, { color: T.text }]} numberOfLines={1} ellipsizeMode="tail">{item.vehicleName || 'Vehicle Specification'}</Text>
-                                                <Text style={[styles.vehiclePlate, { color: T.subtext }]} numberOfLines={1}>{item.vehicleNumber || 'No Plate Number'}</Text>
-                                            </View>
-                                            <View style={{ flex: 1.5, justifyContent: 'center', minWidth: 0 }}>
-                                                <Text style={[styles.cellText, { color: T.text }]}>{item.vehicleType || 'Sedan'}</Text>
-                                            </View>
-                                            <View style={{ flex: 1, justifyContent: 'center', minWidth: 0 }}>
-                                                <Text style={[styles.cellText, { color: T.text }]}>{item.seats || 4} Seats</Text>
-                                            </View>
-                                            <View style={{ flex: 2, justifyContent: 'center', minWidth: 0, paddingRight: 8 }}>
-                                                <Text style={[styles.ownerName, { color: T.text }]} numberOfLines={1} ellipsizeMode="tail">{item.name}</Text>
-                                                <Text style={[styles.ownerPhone, { color: T.subtext }]} numberOfLines={1}>{item.phone}</Text>
-                                            </View>
-                                            <View style={{ flex: 1.5, justifyContent: 'center', minWidth: 0 }}>
-                                                <View style={[styles.statusBadge, badgeStyle]}>
-                                                    <Text style={[styles.badgeText, { color: badgeColor }]}>
-                                                        {badgeLabel}
-                                                    </Text>
-                                                </View>
+    return (
+        <View style={[styles.container, { backgroundColor: T.bg }]}>
+            {topSections}
+
+            {/* Vehicles Table */}
+            <View style={[styles.tableCard, { flex: 1, backgroundColor: T.card, borderColor: T.border }]}>
+                <ScrollView horizontal style={{ flex: 1 }} showsHorizontalScrollIndicator={false} contentContainerStyle={{ minWidth: '100%', flexGrow: 1 }}>
+                    <View style={{ minWidth: 900, flex: 1, padding: 20 }}>
+                        <View style={[styles.tableHeader, { borderBottomColor: T.border }]}>
+                            <Text style={[styles.headerCell, { flex: 2, color: T.text }]}>VEHICLE / PLATE</Text>
+                            <Text style={[styles.headerCell, { flex: 1.5, color: T.text }]}>TYPE</Text>
+                            <Text style={[styles.headerCell, { flex: 1, color: T.text }]}>CAPACITY</Text>
+                            <Text style={[styles.headerCell, { flex: 2, color: T.text }]}>REGISTERED OWNER</Text>
+                            <Text style={[styles.headerCell, { flex: 1.5, color: T.text }]}>STATUS</Text>
+                        </View>
+
+                        <FlatList
+                            style={{ flex: 1 }}
+                            data={filteredVehicles}
+                            keyExtractor={item => item.id}
+                            initialNumToRender={15}
+                            maxToRenderPerBatch={15}
+                            windowSize={7}
+                            renderItem={({ item, index }) => {
+                                const status = getNormalizedStatus(item.verificationStatus);
+                                const badgeStyle = status === 'verified' ? styles.badgeVerified : status === 'rejected' ? styles.badgeRejected : styles.badgePending;
+                                const badgeColor = status === 'verified' ? '#28A745' : status === 'rejected' ? '#DC3545' : '#FCB92C';
+                                const badgeLabel = status === 'verified' ? 'Active / Audit OK' : status === 'rejected' ? 'Rejected' : 'Pending Audit';
+                                return (
+                                    <View style={[styles.tableRow, { borderBottomColor: T.border, backgroundColor: index % 2 === 1 ? (isDark ? 'rgba(255,255,255,0.01)' : '#F8FAFC') : 'transparent' }]}>
+                                        <View style={{ flex: 2, justifyContent: 'center', minWidth: 0, paddingRight: 8 }}>
+                                            <Text style={[styles.vehicleName, { color: T.text }]} numberOfLines={1} ellipsizeMode="tail">{item.vehicleName || 'Vehicle Specification'}</Text>
+                                            <Text style={[styles.vehiclePlate, { color: T.subtext }]} numberOfLines={1}>{item.vehicleNumber || 'No Plate Number'}</Text>
+                                        </View>
+                                        <View style={{ flex: 1.5, justifyContent: 'center', minWidth: 0 }}>
+                                            <Text style={[styles.cellText, { color: T.text }]}>{item.vehicleType || 'Sedan'}</Text>
+                                        </View>
+                                        <View style={{ flex: 1, justifyContent: 'center', minWidth: 0 }}>
+                                            <Text style={[styles.cellText, { color: T.text }]}>{item.seats || 4} Seats</Text>
+                                        </View>
+                                        <View style={{ flex: 2, justifyContent: 'center', minWidth: 0, paddingRight: 8 }}>
+                                            <Text style={[styles.ownerName, { color: T.text }]} numberOfLines={1} ellipsizeMode="tail">{item.name}</Text>
+                                            <Text style={[styles.ownerPhone, { color: T.subtext }]} numberOfLines={1}>{item.phone}</Text>
+                                        </View>
+                                        <View style={{ flex: 1.5, justifyContent: 'center', minWidth: 0 }}>
+                                            <View style={[styles.statusBadge, badgeStyle]}>
+                                                <Text style={[styles.badgeText, { color: badgeColor }]}>
+                                                    {badgeLabel}
+                                                </Text>
                                             </View>
                                         </View>
-                                    );
-                                }}
-                                ListEmptyComponent={
-                                    <Text style={{ color: T.subtext, textAlign: 'center', padding: 40 }}>
-                                        No registered vehicles match filters.
-                                    </Text>
-                                }
-                            />
-                        </View>
-                    </ScrollView>
-                )}
+                                    </View>
+                                );
+                            }}
+                            ListEmptyComponent={
+                                <Text style={{ color: T.subtext, textAlign: 'center', padding: 40 }}>
+                                    No registered vehicles match filters.
+                                </Text>
+                            }
+                        />
+                    </View>
+                </ScrollView>
             </View>
-        </ScrollView>
+        </View>
     );
 }
 

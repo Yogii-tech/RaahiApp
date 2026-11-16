@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { downloadCSV } from '../../utils/exportUtils';
 import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
-import { parseJsonSafe, createRequestAbort } from '../../utils/json';
+import { parseJsonSafe } from '../../utils/json';
+import { useAdminCache } from '../../utils/adminCache';
 
 interface ParcelStats {
      total: number;
@@ -39,7 +40,9 @@ export default function AdminParcelsDetailView({ isDark, searchQuery = '' }: { i
      const { fetchWithAuth } = useAuth();
      const fetchWithAuthRef = useRef(fetchWithAuth);
      fetchWithAuthRef.current = fetchWithAuth;
-     const abortRef = useRef<AbortController | null>(null);
+     const { fetchCached } = useAdminCache();
+     const fetchCachedRef = useRef(fetchCached);
+     fetchCachedRef.current = fetchCached;
      const reqIdRef = useRef(0);
      const isMountedRef = useRef(true);
      const { width } = useWindowDimensions();
@@ -55,9 +58,6 @@ export default function AdminParcelsDetailView({ isDark, searchQuery = '' }: { i
      };
 
      const fetchData = useCallback(async (background = false) => {
-          abortRef.current?.abort();
-          const { controller, cleanup, didTimeout } = createRequestAbort(12000);
-          abortRef.current = controller;
           const reqId = ++reqIdRef.current;
 
           if (background) {
@@ -68,29 +68,49 @@ export default function AdminParcelsDetailView({ isDark, searchQuery = '' }: { i
           setError(null);
 
           try {
-               const [statsRes, parcelsRes] = await Promise.all([
-                    fetchWithAuthRef.current(`${API_BASE}/api/admin/stats`, { signal: controller.signal }),
-                    fetchWithAuthRef.current(`${API_BASE}/api/admin/parcels`, { signal: controller.signal }),
-               ]);
-               if (!statsRes.ok) throw new Error(`Stats error: ${statsRes.status}`);
-               if (!parcelsRes.ok) throw new Error(`Parcels error: ${parcelsRes.status}`);
                const [stats, parcelsData] = await Promise.all([
-                    parseJsonSafe<any>(statsRes),
-                    parseJsonSafe<ParcelRow[]>(parcelsRes),
+                    fetchCachedRef.current<any>(
+                         'admin:stats',
+                         async (signal) => {
+                              const res = await fetchWithAuthRef.current(`${API_BASE}/api/admin/stats`, {
+                                   signal,
+                              });
+                              if (!res.ok) throw new Error(`Stats error: ${res.status}`);
+                              return parseJsonSafe<any>(res);
+                         },
+                         {
+                              force: background,
+                              timeoutMessage: 'Request timed out while loading parcel data',
+                         }
+                    ),
+                    fetchCachedRef.current<ParcelRow[]>(
+                         'admin:parcels',
+                         async (signal) => {
+                              const res = await fetchWithAuthRef.current(`${API_BASE}/api/admin/parcels`, {
+                                   signal,
+                              });
+                              if (!res.ok) throw new Error(`Parcels error: ${res.status}`);
+                              const parsed = await parseJsonSafe<ParcelRow[]>(res);
+                              return Array.isArray(parsed) ? parsed : [];
+                         },
+                         {
+                              force: background,
+                              timeoutMessage: 'Request timed out while loading parcel data',
+                         }
+                    ),
                ]);
                if (!isMountedRef.current || reqId !== reqIdRef.current) return;
                setParcelStats(stats?.parcels ?? null);
                setParcels(Array.isArray(parcelsData) ? parcelsData : []);
           } catch (err: any) {
                if (!isMountedRef.current || reqId !== reqIdRef.current) return;
-               if (err?.name === 'AbortError' && !didTimeout()) return;
-               setError(didTimeout() ? 'Request timed out while loading parcel data' : (err?.message || 'Could not load parcel data'));
+               if (err?.name === 'AbortError') return;
+               setError(err?.message || 'Could not load parcel data');
                if (!background) {
                     setParcelStats(null);
                     setParcels([]);
                }
           } finally {
-               cleanup();
                if (isMountedRef.current && reqId === reqIdRef.current) {
                     setLoading(false);
                     setRefreshing(false);
@@ -104,7 +124,6 @@ export default function AdminParcelsDetailView({ isDark, searchQuery = '' }: { i
           return () => {
                isMountedRef.current = false;
                reqIdRef.current += 1;
-               abortRef.current?.abort();
           };
      }, [fetchData]);
 
@@ -130,8 +149,8 @@ export default function AdminParcelsDetailView({ isDark, searchQuery = '' }: { i
           (p.id || '').toLowerCase().includes(q)
      );
 
-     return (
-          <ScrollView style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: T.bg }]} showsVerticalScrollIndicator={false}>
+     const listHeader = (
+          <View>
                <View style={[styles.header, isMobile && { flexDirection: 'column', alignItems: 'flex-start', gap: 12 }]}>
                     <Text style={[styles.headerTitle, { color: T.text }]}>Parcels Overview</Text>
                     <View style={[styles.headerButtons, { flexWrap: 'wrap', gap: 10 }]}>
@@ -168,8 +187,8 @@ export default function AdminParcelsDetailView({ isDark, searchQuery = '' }: { i
                     ))}
                </View>
 
-               {/* Parcel Table */}
-               <View style={[styles.tablePanel, isMobile && { padding: 16 }, { backgroundColor: T.card, borderColor: T.border }]}>
+               {/* Parcel Table Header */}
+               <View style={[styles.tableHeaderPanel, isMobile && { padding: 16, paddingBottom: 12 }, { backgroundColor: T.card, borderColor: T.border }]}>
                     <Text style={[styles.tableTitle, { color: T.text }]}>Recent Shipments</Text>
 
                     {!isMobile && (
@@ -179,60 +198,72 @@ export default function AdminParcelsDetailView({ isDark, searchQuery = '' }: { i
                               ))}
                          </View>
                     )}
-
-                    {filteredParcels.length === 0 ? (
-                         <View style={styles.emptyState}>
-                              <Text style={{ color: T.subtext }}>No parcels found.</Text>
-                         </View>
-                    ) : isMobile ? (
-                         filteredParcels.map((p, i) => (
-                              <View key={i} style={[styles.mobileCard, { borderBottomColor: T.border }]}>
-                                   <View style={styles.mobileCardTop}>
-                                        <Text style={{ color: T.text, fontSize: 13, fontWeight: '700', flex: 1, minWidth: 0 }} numberOfLines={1} ellipsizeMode="tail">
-                                             {p.id}
-                                        </Text>
-                                        <View style={[styles.statusBadge, { backgroundColor: (STATUS_COLORS[p.status] || '#6C757D') + '22' }]}>
-                                             <Text style={{ color: STATUS_COLORS[p.status] || '#6C757D', fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase' }}>
-                                                  {p.status}
-                                             </Text>
-                                        </View>
-                                   </View>
-                                   <Text style={{ color: T.text, fontSize: 13, fontWeight: '500' }} numberOfLines={1}>
-                                        {p.sender} → <Text style={{ color: T.subtext, fontWeight: '400' }}>{p.recipient}</Text>
-                                   </Text>
-                                   <View style={styles.mobileCardBottom}>
-                                        <Text style={{ color: T.subtext, fontSize: 12, flex: 1, minWidth: 0 }} numberOfLines={1} ellipsizeMode="tail">
-                                             {(p.pickup || '—').split(',')[0]} → {(p.dropoff || '—').split(',')[0]}
-                                        </Text>
-                                        <Text style={{ color: '#00C853', fontWeight: 'bold', fontSize: 14 }}>₹{p.price}</Text>
-                                   </View>
-                              </View>
-                         ))
-                    ) : (
-                         filteredParcels.map((p, i) => (
-                              <View key={i} style={[styles.tableRow, { borderBottomColor: T.border }]}>
-                                   <Text style={[styles.tableCell, { color: T.text, fontWeight: '600', minWidth: 0 }]} numberOfLines={1} ellipsizeMode="tail">{p.id}</Text>
-                                   <View style={[styles.tableCell, { minWidth: 0, paddingRight: 8 }]}>
-                                        <Text style={{ color: T.text, fontSize: 13, fontWeight: '500' }} numberOfLines={1}>{p.sender}</Text>
-                                        <Text style={{ color: T.subtext, fontSize: 11 }} numberOfLines={1}>→ {p.recipient}</Text>
-                                   </View>
-                                   <View style={[styles.tableCell, { flex: 1.2, minWidth: 0, paddingRight: 8 }]}>
-                                        <Text style={{ color: T.text, fontSize: 12 }} numberOfLines={1}>{(p.pickup || '—').split(',')[0]}</Text>
-                                        <Text style={{ color: T.subtext, fontSize: 11 }} numberOfLines={1}>to {(p.dropoff || '—').split(',')[0]}</Text>
-                                   </View>
-                                   <View style={[styles.tableCell, { minWidth: 0 }]}>
-                                        <View style={[styles.statusBadge, { backgroundColor: (STATUS_COLORS[p.status] || '#6C757D') + '22' }]}>
-                                             <Text style={{ color: STATUS_COLORS[p.status] || '#6C757D', fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase' }}>
-                                                  {p.status}
-                                             </Text>
-                                        </View>
-                                   </View>
-                                   <Text style={[styles.tableCell, { color: '#00C853', fontWeight: 'bold', minWidth: 0 }]}>₹{p.price}</Text>
-                              </View>
-                         ))
-                    )}
                </View>
-          </ScrollView>
+          </View>
+     );
+
+     return (
+          <FlatList
+               style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: T.bg }]}
+               contentContainerStyle={{ paddingBottom: 100 }}
+               showsVerticalScrollIndicator={false}
+               data={filteredParcels}
+               keyExtractor={(p, i) => p.id || String(i)}
+               initialNumToRender={15}
+               maxToRenderPerBatch={15}
+               windowSize={7}
+               ListHeaderComponent={listHeader}
+               renderItem={({ item: p }) =>
+                    isMobile ? (
+                         <View style={[styles.mobileCard, { paddingHorizontal: 16, borderColor: T.border, borderLeftWidth: 1, borderRightWidth: 1, backgroundColor: T.card }]}>
+                              <View style={styles.mobileCardTop}>
+                                   <Text style={{ color: T.text, fontSize: 13, fontWeight: '700', flex: 1, minWidth: 0 }} numberOfLines={1} ellipsizeMode="tail">
+                                        {p.id}
+                                   </Text>
+                                   <View style={[styles.statusBadge, { backgroundColor: (STATUS_COLORS[p.status] || '#6C757D') + '22' }]}>
+                                        <Text style={{ color: STATUS_COLORS[p.status] || '#6C757D', fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase' }}>
+                                             {p.status}
+                                        </Text>
+                                   </View>
+                              </View>
+                              <Text style={{ color: T.text, fontSize: 13, fontWeight: '500' }} numberOfLines={1}>
+                                   {p.sender} → <Text style={{ color: T.subtext, fontWeight: '400' }}>{p.recipient}</Text>
+                              </Text>
+                              <View style={styles.mobileCardBottom}>
+                                   <Text style={{ color: T.subtext, fontSize: 12, flex: 1, minWidth: 0 }} numberOfLines={1} ellipsizeMode="tail">
+                                        {(p.pickup || '—').split(',')[0]} → {(p.dropoff || '—').split(',')[0]}
+                                   </Text>
+                                   <Text style={{ color: '#00C853', fontWeight: 'bold', fontSize: 14 }}>₹{p.price}</Text>
+                              </View>
+                         </View>
+                    ) : (
+                         <View style={[styles.tableRow, { paddingHorizontal: 24, borderColor: T.border, borderLeftWidth: 1, borderRightWidth: 1, backgroundColor: T.card }]}>
+                              <Text style={[styles.tableCell, { color: T.text, fontWeight: '600', minWidth: 0 }]} numberOfLines={1} ellipsizeMode="tail">{p.id}</Text>
+                              <View style={[styles.tableCell, { minWidth: 0, paddingRight: 8 }]}>
+                                   <Text style={{ color: T.text, fontSize: 13, fontWeight: '500' }} numberOfLines={1}>{p.sender}</Text>
+                                   <Text style={{ color: T.subtext, fontSize: 11 }} numberOfLines={1}>→ {p.recipient}</Text>
+                              </View>
+                              <View style={[styles.tableCell, { flex: 1.2, minWidth: 0, paddingRight: 8 }]}>
+                                   <Text style={{ color: T.text, fontSize: 12 }} numberOfLines={1}>{(p.pickup || '—').split(',')[0]}</Text>
+                                   <Text style={{ color: T.subtext, fontSize: 11 }} numberOfLines={1}>to {(p.dropoff || '—').split(',')[0]}</Text>
+                              </View>
+                              <View style={[styles.tableCell, { minWidth: 0 }]}>
+                                   <View style={[styles.statusBadge, { backgroundColor: (STATUS_COLORS[p.status] || '#6C757D') + '22' }]}>
+                                        <Text style={{ color: STATUS_COLORS[p.status] || '#6C757D', fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase' }}>
+                                             {p.status}
+                                        </Text>
+                                   </View>
+                              </View>
+                              <Text style={[styles.tableCell, { color: '#00C853', fontWeight: 'bold', minWidth: 0 }]}>₹{p.price}</Text>
+                         </View>
+                    )
+               }
+               ListEmptyComponent={
+                    <View style={[styles.emptyState, { backgroundColor: T.card, borderColor: T.border, borderWidth: 1, borderTopWidth: 0 }]}>
+                         <Text style={{ color: T.subtext }}>No parcels found.</Text>
+                    </View>
+               }
+          />
      );
 }
 
@@ -250,6 +281,7 @@ const styles = StyleSheet.create({
      statHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
      statLabel: { fontSize: 13, fontWeight: '500' },
      statValue: { fontSize: 28, fontWeight: 'bold' },
+     tableHeaderPanel: { borderTopLeftRadius: 12, borderTopRightRadius: 12, padding: 24, paddingBottom: 0, borderWidth: 1, borderBottomWidth: 0 },
      tablePanel: { borderRadius: 12, padding: 24, borderWidth: 1, marginBottom: 100 },
      tableTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 20 },
      tableHeader: { flexDirection: 'row', paddingBottom: 12, borderBottomWidth: 1 },

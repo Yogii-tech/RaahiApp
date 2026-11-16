@@ -10,7 +10,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   Platform,
-  AppState,
 } from 'react-native';
 import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -24,14 +23,14 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { LanguageProvider, useLanguage } from './src/context/LanguageContext';
 // API_BASE is imported per-screen from './src/config/api' — not needed here
 import { apiRequest } from './src/utils/api';
-import { parseJsonSafe } from './src/utils/json';
+import { createRequestAbort, parseJsonSafe } from './src/utils/json';
+import { useVisibilityPolling } from './src/utils/polling';
 import LoginScreen from './src/screens/LoginScreen';
 import AdminDashboardScreen from './src/screens/admin/AdminDashboardScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import TripsScreen from './src/screens/TripsScreen';
 import RequestsOverlay from './src/screens/RequestsOverlay';
 import AccountScreen from './src/screens/AccountScreen';
-import MapScreen from './src/screens/MapScreen';
 import BrandLogo from './src/components/BrandLogo';
 import ChatScreen from './src/screens/ChatScreen';
 import ResubmitDocsView from './src/screens/ResubmitDocsView';
@@ -219,8 +218,28 @@ const tabIcons: Record<string, { default: string; focused: string }> = {
   Account: { default: 'person-outline', focused: 'person' },
 };
 
+export const MAIN_TABS_POLL_INTERVAL_MS = 25000;
+
+export function shouldMainTabsPoll(opts: {
+  token: string | null;
+  notificationsVisible: boolean;
+  activeChat: boolean;
+  rekycVisible: boolean;
+  bookRideActive: boolean;
+  currentRoute: string;
+  isParcelModeActive: boolean;
+}): boolean {
+  if (!opts.token) return false;
+  if (opts.notificationsVisible || opts.activeChat || opts.rekycVisible || opts.bookRideActive) {
+    return false;
+  }
+  if (opts.currentRoute === 'History') return false;
+  if (opts.currentRoute === 'Trips' && !opts.isParcelModeActive) return false;
+  return true;
+}
+
 // ─── Main Tab Navigator ──────────────────────────────────────────────
-function MainTabs() {
+export function MainTabs() {
   const { colors, isDark } = useTheme();
   const { user, token, logout } = useAuth();
   const { t } = useLanguage();
@@ -228,22 +247,36 @@ function MainTabs() {
   const [notificationCount, setNotificationCount] = useState(0);
   const [activeChat, setActiveChat] = useState<any>(null);
   const [rekycVisible, setRekycVisible] = useState(false);
+  const [bookRideActive, setBookRideActive] = useState(false);
   const [parcelMode, setParcelMode] = useState(false);
   const [currentRoute, setCurrentRoute] = useState('Home');
   const insets = useSafeAreaInsets();
-  const tabNavRef = useRef<any>(null);
   const navigation = useNavigation();
 
   const isDriver = user?.role === 'driver';
+  const isParcelModeActive = user?.role === 'parceller' || parcelMode;
+  const mainPollEnabled = shouldMainTabsPoll({
+    token,
+    notificationsVisible,
+    activeChat: Boolean(activeChat),
+    rekycVisible,
+    bookRideActive,
+    currentRoute,
+    isParcelModeActive,
+  });
+
   const notificationsVisibleRef = useRef(notificationsVisible);
   notificationsVisibleRef.current = notificationsVisible;
   const activeChatRef = useRef(activeChat);
   activeChatRef.current = activeChat;
   const rekycVisibleRef = useRef(rekycVisible);
   rekycVisibleRef.current = rekycVisible;
+  const mainPollEnabledRef = useRef(mainPollEnabled);
+  mainPollEnabledRef.current = mainPollEnabled;
   const isMountedRef = useRef(true);
   const notifEpochRef = useRef(0);
   const latestPollIdRef = useRef(0);
+  const pollAbortRef = useRef<AbortController | null>(null);
   const tokenRef = useRef(token);
   tokenRef.current = token;
   const isDriverRef = useRef(isDriver);
@@ -255,6 +288,7 @@ function MainTabs() {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
+      pollAbortRef.current?.abort();
     };
   }, []);
 
@@ -291,28 +325,6 @@ function MainTabs() {
     if (popHistory && hadOverlay) {
       popSubViewHistory();
     }
-  }, []);
-
-  const [isAppActive, setIsAppActive] = useState<boolean>(() => {
-    if (Platform.OS === 'web') {
-      return typeof document === 'undefined' || document.visibilityState === 'visible';
-    }
-    return AppState.currentState === 'active';
-  });
-
-  useEffect(() => {
-    if (Platform.OS === 'web') {
-      if (typeof document === 'undefined') return;
-      const handleVisibilityChange = () => {
-        setIsAppActive(document.visibilityState === 'visible');
-      };
-      document.addEventListener('visibilitychange', handleVisibilityChange);
-      return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-    }
-    const sub = AppState.addEventListener('change', (nextState) => {
-      setIsAppActive(nextState === 'active');
-    });
-    return () => sub?.remove?.();
   }, []);
 
   // ─── FCM: register when authenticated, unregister on logout ─────────────
@@ -372,6 +384,14 @@ function MainTabs() {
   activeTokenRef.current = token;
   const userId = user?.id ?? null;
 
+  const triggerNotificationSyncRef = useRef<() => Promise<void>>(async () => {});
+
+  const handleBackgroundPushHint = useCallback(() => {
+    if (mainPollEnabledRef.current) {
+      void triggerNotificationSyncRef.current();
+    }
+  }, []);
+
   useEffect(() => {
     if (token) {
       const registeredUserChanged =
@@ -382,13 +402,17 @@ function MainTabs() {
         fcmRegisteredUserIdRef.current = userId;
         unregisterFCM(prevToken).finally(() => {
           if (isMountedRef.current && activeTokenRef.current === token) {
-            registerFCM(token, handleFCMNavigate);
+            registerFCM(token, handleFCMNavigate, {
+              onPushReceived: handleBackgroundPushHint,
+            });
           }
         });
       } else if (!fcmRegisteredTokenRef.current) {
         fcmRegisteredTokenRef.current = token;
         fcmRegisteredUserIdRef.current = userId;
-        registerFCM(token, handleFCMNavigate);
+        registerFCM(token, handleFCMNavigate, {
+          onPushReceived: handleBackgroundPushHint,
+        });
       } else {
         // Same user after access-token refresh: track latest bearer token without teardown
         fcmRegisteredTokenRef.current = token;
@@ -399,7 +423,7 @@ function MainTabs() {
       fcmRegisteredUserIdRef.current = null;
       unregisterFCM(lastToken);
     }
-  }, [token, userId, handleFCMNavigate]);
+  }, [token, userId, handleFCMNavigate, handleBackgroundPushHint]);
 
   useEffect(() => {
     return () => {
@@ -419,6 +443,9 @@ function MainTabs() {
   });
 
   const fetchNotificationCount = useCallback(async () => {
+    pollAbortRef.current?.abort();
+    const abort = createRequestAbort(12000);
+    pollAbortRef.current = abort.controller;
     try {
       const currentToken = tokenRef.current;
       if (!currentToken) return;
@@ -426,7 +453,8 @@ function MainTabs() {
       const startEpoch = notifEpochRef.current;
       const driver = isDriverRef.current;
       const endpoint = driver ? '/api/rides/requests' : '/api/rides/bookings';
-      const response = await apiRequest(endpoint, {}, logoutRef.current);
+      const response = await apiRequest(endpoint, { signal: abort.signal }, logoutRef.current);
+      if (!isMountedRef.current || abort.signal.aborted) return;
 
       let reqCount = 0;
       let unreadChatTotal = 0;
@@ -447,32 +475,42 @@ function MainTabs() {
       // Also count unread system notifications (e.g. document approved/rejected)
       let systemNotifCount = 0;
       try {
-        const notifResponse = await apiRequest('/api/notifications/', {}, logoutRef.current);
+        const notifResponse = await apiRequest('/api/notifications/', { signal: abort.signal }, logoutRef.current);
         if (notifResponse.ok) {
           const notifs = (await parseJsonSafe<any[]>(notifResponse)) || [];
           systemNotifCount = notifs.filter((n: any) => !n.read).length;
         }
       } catch (_) { /* ignore */ }
 
-      if (!isMountedRef.current || notifEpochRef.current !== startEpoch || latestPollIdRef.current !== pollId) {
+      if (!isMountedRef.current || abort.signal.aborted || notifEpochRef.current !== startEpoch || latestPollIdRef.current !== pollId) {
         return;
       }
       setNotificationCount(reqCount + unreadChatTotal + systemNotifCount);
-    } catch (err) {
-      console.error('Badge poll fail:', err);
+    } catch (err: any) {
+      if (err?.name !== 'AbortError') {
+        console.error('Badge poll fail:', err);
+      }
+    } finally {
+      abort.cleanup();
     }
   }, []);
 
-  useEffect(() => {
-    if (!token || !isAppActive) return;
-    fetchNotificationCount();
-    const interval = setInterval(() => {
-      if (Platform.OS === 'web' && typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
-      if (Platform.OS !== 'web' && AppState.currentState !== 'active') return;
-      fetchNotificationCount();
-    }, 10000);
-    return () => clearInterval(interval);
-  }, [user, token, isAppActive, fetchNotificationCount]);
+  const fetchNotificationCountRef = useRef(fetchNotificationCount);
+  fetchNotificationCountRef.current = fetchNotificationCount;
+
+  const { triggerSync: triggerNotificationSync } = useVisibilityPolling({
+    enabled: mainPollEnabled,
+    intervalMs: MAIN_TABS_POLL_INTERVAL_MS,
+    onPoll: () => fetchNotificationCountRef.current(),
+    onPause: () => pollAbortRef.current?.abort(),
+  });
+  triggerNotificationSyncRef.current = triggerNotificationSync;
+
+  const handleRideActivity = useCallback(() => {
+    if (tokenRef.current) {
+      void triggerNotificationSync();
+    }
+  }, [triggerNotificationSync]);
 
   const handleMarkViewed = async () => {
     try {
@@ -555,7 +593,14 @@ function MainTabs() {
         })}
       >
         <Tab.Screen name="Home">
-          {props => <HomeScreen {...props} setParcelMode={setParcelMode} />}
+          {props => (
+            <HomeScreen
+              {...props}
+              setParcelMode={setParcelMode}
+              onBookRideActiveChange={setBookRideActive}
+              onRideActivity={handleRideActivity}
+            />
+          )}
         </Tab.Screen>
         <Tab.Screen
           name="Trips"

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, ScrollView, TouchableOpacity, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { downloadCSV } from '../../utils/exportUtils';
 
 interface AuditLogEntry {
@@ -82,8 +82,8 @@ export default function AdminAuditLogsView({ isDark, searchQuery = '' }: { isDar
         IP: l.ip,
     }));
 
-    return (
-        <ScrollView style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: T.bg }]} contentContainerStyle={{ paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
+    const headerElement = (
+        <View>
             <View style={[styles.headerRow, isMobile && { flexDirection: 'column', alignItems: 'flex-start', gap: 12 }]}>
                 <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={[styles.sectionTitle, { color: T.text }]}>Audit Logs</Text>
@@ -167,82 +167,90 @@ export default function AdminAuditLogsView({ isDark, searchQuery = '' }: { isDar
                 <Text style={[styles.resultCount, { color: T.subtext }]}>{filteredLogs.length} audit events</Text>
                 <Text style={[styles.resultCount, { color: T.subtext }]}>Showing newest first</Text>
             </View>
+        </View>
+    );
 
-            {/* Log Timeline */}
-            <View style={[styles.logCard, { backgroundColor: T.card, borderColor: T.border }]}>
-                <FlatList
-                    data={filteredLogs}
-                    keyExtractor={item => item.id}
-                    renderItem={({ item, index }) => {
-                        const sev = SEVERITY_CONFIG[item.severity];
-                        if (isMobile) {
-                            return (
-                                <View style={[styles.mobileLogCard, { borderBottomColor: T.border, backgroundColor: index % 2 === 1 ? (isDark ? 'rgba(255,255,255,0.01)' : '#F8FAFC') : 'transparent' }]}>
-                                    <View style={styles.mobileLogTop}>
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                            <View style={[styles.severityBadge, { backgroundColor: sev.bg }]}>
-                                                <Text style={[styles.severityText, { color: sev.color }]}>{sev.label}</Text>
-                                            </View>
-                                            <Text style={{ fontSize: 16 }}>{CATEGORY_ICONS[item.category]}</Text>
-                                        </View>
-                                        <Text style={[styles.logTimestamp, { color: T.subtext, marginTop: 0 }]}>{item.timestamp}</Text>
-                                    </View>
-                                    <Text style={[styles.logAction, { color: T.text }]}>{item.action}</Text>
-                                    <Text style={[styles.logTarget, { color: T.subtext }]} numberOfLines={2}>→ {item.target}</Text>
-                                    <View style={styles.mobileLogMeta}>
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1, minWidth: 0 }}>
-                                            <Text style={[styles.logActor, { color: T.text }]} numberOfLines={1}>{item.actor}</Text>
-                                            <View style={[styles.roleChip, { backgroundColor: item.role === 'superadmin' ? 'rgba(220,53,69,0.1)' : 'rgba(59,125,221,0.1)' }]}>
-                                                <Text style={[styles.roleChipText, { color: item.role === 'superadmin' ? '#DC3545' : T.accent }]}>
-                                                    {item.role}
-                                                </Text>
-                                            </View>
-                                        </View>
-                                        <Text style={[styles.logIp, { color: T.codeBg === '#0D1117' ? '#6B7280' : '#94A3B8', backgroundColor: T.codeBg }]}>
-                                            {item.ip}
-                                        </Text>
-                                    </View>
-                                </View>
-                            );
-                        }
-                        return (
-                            <View style={[styles.logRow, { borderBottomColor: T.border, backgroundColor: index % 2 === 1 ? (isDark ? 'rgba(255,255,255,0.01)' : '#F8FAFC') : 'transparent' }]}>
-                                {/* Left: Severity + Category */}
-                                <View style={styles.logLeft}>
+    return (
+        <FlatList
+            style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: T.bg }]}
+            contentContainerStyle={{ paddingBottom: 60 }}
+            showsVerticalScrollIndicator={false}
+            data={filteredLogs}
+            keyExtractor={item => item.id}
+            initialNumToRender={15}
+            maxToRenderPerBatch={15}
+            windowSize={7}
+            ListHeaderComponent={headerElement}
+            renderItem={({ item, index }) => {
+                const sev = SEVERITY_CONFIG[item.severity];
+                if (isMobile) {
+                    return (
+                        <View style={[styles.mobileLogCard, { borderColor: T.border, borderWidth: 1, borderRadius: index === 0 ? 8 : 0, backgroundColor: T.card }]}>
+                            <View style={styles.mobileLogTop}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                                     <View style={[styles.severityBadge, { backgroundColor: sev.bg }]}>
                                         <Text style={[styles.severityText, { color: sev.color }]}>{sev.label}</Text>
                                     </View>
-                                    <Text style={{ fontSize: 18, marginTop: 6 }}>{CATEGORY_ICONS[item.category]}</Text>
+                                    <Text style={{ fontSize: 16 }}>{CATEGORY_ICONS[item.category]}</Text>
                                 </View>
-
-                                {/* Middle: Main content */}
-                                <View style={[styles.logBody, { minWidth: 0 }]}>
-                                    <Text style={[styles.logAction, { color: T.text }]}>{item.action}</Text>
-                                    <Text style={[styles.logTarget, { color: T.subtext }]} numberOfLines={1} ellipsizeMode="tail">→ {item.target}</Text>
-                                    <Text style={[styles.logTimestamp, { color: T.subtext }]}>{item.timestamp}</Text>
-                                </View>
-
-                                {/* Right: Actor + IP */}
-                                <View style={styles.logRight}>
-                                    <Text style={[styles.logActor, { color: T.text }]}>{item.actor}</Text>
+                                <Text style={[styles.logTimestamp, { color: T.subtext, marginTop: 0 }]}>{item.timestamp}</Text>
+                            </View>
+                            <Text style={[styles.logAction, { color: T.text }]}>{item.action}</Text>
+                            <Text style={[styles.logTarget, { color: T.subtext }]} numberOfLines={2}>→ {item.target}</Text>
+                            <View style={styles.mobileLogMeta}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1, minWidth: 0 }}>
+                                    <Text style={[styles.logActor, { color: T.text }]} numberOfLines={1}>{item.actor}</Text>
                                     <View style={[styles.roleChip, { backgroundColor: item.role === 'superadmin' ? 'rgba(220,53,69,0.1)' : 'rgba(59,125,221,0.1)' }]}>
                                         <Text style={[styles.roleChipText, { color: item.role === 'superadmin' ? '#DC3545' : T.accent }]}>
                                             {item.role}
                                         </Text>
                                     </View>
-                                    <Text style={[styles.logIp, { color: T.codeBg === '#0D1117' ? '#6B7280' : '#94A3B8', backgroundColor: T.codeBg }]}>
-                                        {item.ip}
-                                    </Text>
                                 </View>
+                                <Text style={[styles.logIp, { color: T.codeBg === '#0D1117' ? '#6B7280' : '#94A3B8', backgroundColor: T.codeBg }]}>
+                                    {item.ip}
+                                </Text>
                             </View>
-                        );
-                    }}
-                    ListEmptyComponent={
-                        <Text style={{ color: T.subtext, textAlign: 'center', padding: 40 }}>No audit logs match filters.</Text>
-                    }
-                />
-            </View>
-        </ScrollView>
+                        </View>
+                    );
+                }
+                return (
+                    <View style={[styles.logRow, { borderColor: T.border, borderBottomWidth: 1, borderLeftWidth: 1, borderRightWidth: 1, borderTopWidth: index === 0 ? 1 : 0, backgroundColor: index % 2 === 1 ? (isDark ? 'rgba(255,255,255,0.03)' : '#F8FAFC') : T.card }]}>
+                        {/* Left: Severity + Category */}
+                        <View style={styles.logLeft}>
+                            <View style={[styles.severityBadge, { backgroundColor: sev.bg }]}>
+                                <Text style={[styles.severityText, { color: sev.color }]}>{sev.label}</Text>
+                            </View>
+                            <Text style={{ fontSize: 18, marginTop: 6 }}>{CATEGORY_ICONS[item.category]}</Text>
+                        </View>
+
+                        {/* Middle: Main content */}
+                        <View style={[styles.logBody, { minWidth: 0 }]}>
+                            <Text style={[styles.logAction, { color: T.text }]}>{item.action}</Text>
+                            <Text style={[styles.logTarget, { color: T.subtext }]} numberOfLines={1} ellipsizeMode="tail">→ {item.target}</Text>
+                            <Text style={[styles.logTimestamp, { color: T.subtext }]}>{item.timestamp}</Text>
+                        </View>
+
+                        {/* Right: Actor + IP */}
+                        <View style={styles.logRight}>
+                            <Text style={[styles.logActor, { color: T.text }]}>{item.actor}</Text>
+                            <View style={[styles.roleChip, { backgroundColor: item.role === 'superadmin' ? 'rgba(220,53,69,0.1)' : 'rgba(59,125,221,0.1)' }]}>
+                                <Text style={[styles.roleChipText, { color: item.role === 'superadmin' ? '#DC3545' : T.accent }]}>
+                                    {item.role}
+                                </Text>
+                            </View>
+                            <Text style={[styles.logIp, { color: T.codeBg === '#0D1117' ? '#6B7280' : '#94A3B8', backgroundColor: T.codeBg }]}>
+                                {item.ip}
+                            </Text>
+                        </View>
+                    </View>
+                );
+            }}
+            ListEmptyComponent={
+                <View style={[styles.logCard, { backgroundColor: T.card, borderColor: T.border }]}>
+                    <Text style={{ color: T.subtext, textAlign: 'center', padding: 40 }}>No audit logs match filters.</Text>
+                </View>
+            }
+        />
     );
 }
 

@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { downloadCSV } from '../../utils/exportUtils';
 import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
 import { confirmAction, notify } from '../../utils/notify';
 import { parseJsonSafe, getApiErrorMessage, createRequestAbort } from '../../utils/json';
+import { useAdminCache } from '../../utils/adminCache';
 
 interface UserStats {
      total: number;
@@ -37,7 +38,11 @@ export default function AdminVisitorsDetailView({ isDark, searchQuery = '' }: { 
      const { fetchWithAuth } = useAuth();
      const fetchWithAuthRef = useRef(fetchWithAuth);
      fetchWithAuthRef.current = fetchWithAuth;
-     const abortRef = useRef<AbortController | null>(null);
+     const { fetchCached, invalidate } = useAdminCache();
+     const fetchCachedRef = useRef(fetchCached);
+     fetchCachedRef.current = fetchCached;
+     const invalidateRef = useRef(invalidate);
+     invalidateRef.current = invalidate;
      const reqIdRef = useRef(0);
      const isMountedRef = useRef(true);
      const { width } = useWindowDimensions();
@@ -53,9 +58,6 @@ export default function AdminVisitorsDetailView({ isDark, searchQuery = '' }: { 
      };
 
      const fetchData = useCallback(async (background = false) => {
-          abortRef.current?.abort();
-          const { controller, cleanup, didTimeout } = createRequestAbort(12000);
-          abortRef.current = controller;
           const reqId = ++reqIdRef.current;
 
           if (background) {
@@ -66,29 +68,49 @@ export default function AdminVisitorsDetailView({ isDark, searchQuery = '' }: { 
           setError(null);
 
           try {
-               const [statsRes, usersRes] = await Promise.all([
-                    fetchWithAuthRef.current(`${API_BASE}/api/admin/stats`, { signal: controller.signal }),
-                    fetchWithAuthRef.current(`${API_BASE}/api/admin/users`, { signal: controller.signal }),
-               ]);
-               if (!statsRes.ok) throw new Error(`Stats error: ${statsRes.status}`);
-               if (!usersRes.ok) throw new Error(`Users error: ${usersRes.status}`);
                const [stats, usersData] = await Promise.all([
-                    parseJsonSafe<any>(statsRes),
-                    parseJsonSafe<UserRow[]>(usersRes),
+                    fetchCachedRef.current<any>(
+                         'admin:stats',
+                         async (signal) => {
+                              const res = await fetchWithAuthRef.current(`${API_BASE}/api/admin/stats`, {
+                                   signal,
+                              });
+                              if (!res.ok) throw new Error(`Stats error: ${res.status}`);
+                              return parseJsonSafe<any>(res);
+                         },
+                         {
+                              force: background,
+                              timeoutMessage: 'Request timed out while loading users',
+                         }
+                    ),
+                    fetchCachedRef.current<UserRow[]>(
+                         'admin:users',
+                         async (signal) => {
+                              const res = await fetchWithAuthRef.current(`${API_BASE}/api/admin/users`, {
+                                   signal,
+                              });
+                              if (!res.ok) throw new Error(`Users error: ${res.status}`);
+                              const parsed = await parseJsonSafe<UserRow[]>(res);
+                              return Array.isArray(parsed) ? parsed : [];
+                         },
+                         {
+                              force: background,
+                              timeoutMessage: 'Request timed out while loading users',
+                         }
+                    ),
                ]);
                if (!isMountedRef.current || reqId !== reqIdRef.current) return;
                setUserStats(stats?.users ?? null);
                setUsers(Array.isArray(usersData) ? usersData : []);
           } catch (err: any) {
                if (!isMountedRef.current || reqId !== reqIdRef.current) return;
-               if (err?.name === 'AbortError' && !didTimeout()) return;
-               setError(didTimeout() ? 'Request timed out while loading users' : (err?.message || 'Could not load users'));
+               if (err?.name === 'AbortError') return;
+               setError(err?.message || 'Could not load users');
                if (!background) {
                     setUserStats(null);
                     setUsers([]);
                }
           } finally {
-               cleanup();
                if (isMountedRef.current && reqId === reqIdRef.current) {
                     setLoading(false);
                     setRefreshing(false);
@@ -102,7 +124,6 @@ export default function AdminVisitorsDetailView({ isDark, searchQuery = '' }: { 
           return () => {
                isMountedRef.current = false;
                reqIdRef.current += 1;
-               abortRef.current?.abort();
           };
      }, [fetchData]);
 
@@ -138,6 +159,7 @@ export default function AdminVisitorsDetailView({ isDark, searchQuery = '' }: { 
                if (!isMountedRef.current) return;
                if (res.ok) {
                     notify('Cleanup Complete', `Cleaned up ${data?.deletedCount ?? 0} abandoned incomplete user registrations (older than 24h).`);
+                    invalidateRef.current(['admin:users', 'admin:stats']);
                     await fetchData(true);
                } else {
                     notify('Error', getApiErrorMessage(data, `Failed to cleanup incomplete users (${res.status}).`));
@@ -164,8 +186,8 @@ export default function AdminVisitorsDetailView({ isDark, searchQuery = '' }: { 
           );
      };
 
-     return (
-          <ScrollView style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: T.bg }]} showsVerticalScrollIndicator={false}>
+     const listHeader = (
+          <View>
                <View style={[styles.header, isMobile && { flexDirection: 'column', alignItems: 'flex-start', gap: 12 }]}>
                     <Text style={[styles.headerTitle, { color: T.text }]}>Visitors / Users Overview</Text>
                     <View style={[styles.headerButtons, { flexWrap: 'wrap', gap: 8 }]}>
@@ -209,8 +231,8 @@ export default function AdminVisitorsDetailView({ isDark, searchQuery = '' }: { 
                     ))}
                </View>
 
-               {/* User Table */}
-               <View style={[styles.tablePanel, isMobile && { padding: 16 }, { backgroundColor: T.card, borderColor: T.border }]}>
+               {/* User Table Header */}
+               <View style={[styles.tableHeaderPanel, isMobile && { padding: 16, paddingBottom: 12 }, { backgroundColor: T.card, borderColor: T.border }]}>
                     <Text style={[styles.tableTitle, { color: T.text }]}>User Registry</Text>
 
                     {!isMobile && (
@@ -220,75 +242,89 @@ export default function AdminVisitorsDetailView({ isDark, searchQuery = '' }: { 
                               ))}
                          </View>
                     )}
+               </View>
+          </View>
+     );
 
-                    {filteredUsers.length === 0 ? (
-                         <Text style={{ color: T.subtext, textAlign: 'center', padding: 40 }}>No users found.</Text>
-                    ) : (
-                         filteredUsers.map((u, i) => {
-                              const isIncomplete = !u.name || !u.role;
-                              const displayName = u.name ? u.name : '(Incomplete Profile)';
-                              const displayRole = u.role ? u.role : 'Pending Setup';
-                              const roleColor = u.role ? (ROLE_COLORS[u.role] ?? '#6C757D') : '#E53E3E';
+     return (
+          <FlatList
+               style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: T.bg }]}
+               contentContainerStyle={{ paddingBottom: 100 }}
+               showsVerticalScrollIndicator={false}
+               data={filteredUsers}
+               keyExtractor={(u, i) => u.id || String(i)}
+               initialNumToRender={15}
+               maxToRenderPerBatch={15}
+               windowSize={7}
+               ListHeaderComponent={listHeader}
+               renderItem={({ item: u }) => {
+                    const isIncomplete = !u.name || !u.role;
+                    const displayName = u.name ? u.name : '(Incomplete Profile)';
+                    const displayRole = u.role ? u.role : 'Pending Setup';
+                    const roleColor = u.role ? (ROLE_COLORS[u.role] ?? '#6C757D') : '#E53E3E';
 
-                              if (isMobile) {
-                                   return (
-                                        <View key={u.id || i} style={[styles.mobileUserCard, { borderBottomColor: T.border }]}>
-                                             <View style={styles.mobileUserTop}>
-                                                  <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0, gap: 10 }}>
-                                                       <View style={[styles.avatar, { backgroundColor: roleColor + '22', flexShrink: 0 }]}>
-                                                            <Text style={{ color: roleColor, fontWeight: 'bold' }}>{(u.name || 'U')[0].toUpperCase()}</Text>
-                                                       </View>
-                                                       <Text
-                                                            style={{ color: isIncomplete ? '#E53E3E' : T.text, fontWeight: '600', fontSize: 14, flex: 1, minWidth: 0, fontStyle: isIncomplete ? 'italic' : 'normal' }}
-                                                            numberOfLines={1}
-                                                            ellipsizeMode="tail"
-                                                       >
-                                                            {displayName}
-                                                       </Text>
-                                                  </View>
-                                                  <View style={[styles.roleBadge, { backgroundColor: roleColor + '22', flexShrink: 0 }]}>
-                                                       <Text style={{ color: roleColor, fontSize: 11, fontWeight: 'bold', textTransform: 'capitalize' }}>
-                                                            {displayRole}
-                                                       </Text>
-                                                  </View>
-                                             </View>
-                                             <View style={styles.mobileUserMeta}>
-                                                  <Text style={{ color: T.subtext, fontSize: 13 }} numberOfLines={1}>📞 {u.phone || '—'}</Text>
-                                                  <Text style={{ color: T.text, fontSize: 13, fontWeight: '600' }}>Rides: {u.totalRides}</Text>
-                                             </View>
-                                        </View>
-                                   );
-                              }
-
-                              return (
-                                   <View key={u.id || i} style={[styles.tableRow, { borderBottomColor: T.border }]}>
-                                        <View style={[styles.cell, { flexDirection: 'row', alignItems: 'center', minWidth: 0, paddingRight: 8 }]}>
+                    if (isMobile) {
+                         return (
+                              <View style={[styles.mobileUserCard, { paddingHorizontal: 16, borderColor: T.border, borderLeftWidth: 1, borderRightWidth: 1, backgroundColor: T.card }]}>
+                                   <View style={styles.mobileUserTop}>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0, gap: 10 }}>
                                              <View style={[styles.avatar, { backgroundColor: roleColor + '22', flexShrink: 0 }]}>
                                                   <Text style={{ color: roleColor, fontWeight: 'bold' }}>{(u.name || 'U')[0].toUpperCase()}</Text>
                                              </View>
                                              <Text
-                                                  style={{ color: isIncomplete ? '#E53E3E' : T.text, fontWeight: '500', marginLeft: 10, flex: 1, minWidth: 0, fontStyle: isIncomplete ? 'italic' : 'normal' }}
+                                                  style={{ color: isIncomplete ? '#E53E3E' : T.text, fontWeight: '600', fontSize: 14, flex: 1, minWidth: 0, fontStyle: isIncomplete ? 'italic' : 'normal' }}
                                                   numberOfLines={1}
                                                   ellipsizeMode="tail"
                                              >
                                                   {displayName}
                                              </Text>
                                         </View>
-                                        <Text style={[styles.cell, { color: T.subtext, minWidth: 0, paddingRight: 8 }]} numberOfLines={1} ellipsizeMode="tail">{u.phone}</Text>
-                                        <View style={[styles.cell, { minWidth: 0 }]}>
-                                             <View style={[styles.roleBadge, { backgroundColor: roleColor + '22' }]}>
-                                                  <Text style={{ color: roleColor, fontSize: 11, fontWeight: 'bold', textTransform: 'capitalize' }}>
-                                                       {displayRole}
-                                                  </Text>
-                                             </View>
+                                        <View style={[styles.roleBadge, { backgroundColor: roleColor + '22', flexShrink: 0 }]}>
+                                             <Text style={{ color: roleColor, fontSize: 11, fontWeight: 'bold', textTransform: 'capitalize' }}>
+                                                  {displayRole}
+                                             </Text>
                                         </View>
-                                        <Text style={[styles.cell, { color: T.text, fontWeight: 'bold', minWidth: 0 }]}>{u.totalRides}</Text>
                                    </View>
-                              );
-                         })
-                    )}
-               </View>
-          </ScrollView>
+                                   <View style={styles.mobileUserMeta}>
+                                        <Text style={{ color: T.subtext, fontSize: 13 }} numberOfLines={1}>📞 {u.phone || '—'}</Text>
+                                        <Text style={{ color: T.text, fontSize: 13, fontWeight: '600' }}>Rides: {u.totalRides}</Text>
+                                   </View>
+                              </View>
+                         );
+                    }
+
+                    return (
+                         <View style={[styles.tableRow, { paddingHorizontal: 24, borderColor: T.border, borderLeftWidth: 1, borderRightWidth: 1, backgroundColor: T.card }]}>
+                              <View style={[styles.cell, { flexDirection: 'row', alignItems: 'center', minWidth: 0, paddingRight: 8 }]}>
+                                   <View style={[styles.avatar, { backgroundColor: roleColor + '22', flexShrink: 0 }]}>
+                                        <Text style={{ color: roleColor, fontWeight: 'bold' }}>{(u.name || 'U')[0].toUpperCase()}</Text>
+                                   </View>
+                                   <Text
+                                        style={{ color: isIncomplete ? '#E53E3E' : T.text, fontWeight: '500', marginLeft: 10, flex: 1, minWidth: 0, fontStyle: isIncomplete ? 'italic' : 'normal' }}
+                                        numberOfLines={1}
+                                        ellipsizeMode="tail"
+                                   >
+                                        {displayName}
+                                   </Text>
+                              </View>
+                              <Text style={[styles.cell, { color: T.subtext, minWidth: 0, paddingRight: 8 }]} numberOfLines={1} ellipsizeMode="tail">{u.phone}</Text>
+                              <View style={[styles.cell, { minWidth: 0 }]}>
+                                   <View style={[styles.roleBadge, { backgroundColor: roleColor + '22' }]}>
+                                        <Text style={{ color: roleColor, fontSize: 11, fontWeight: 'bold', textTransform: 'capitalize' }}>
+                                             {displayRole}
+                                        </Text>
+                                   </View>
+                              </View>
+                              <Text style={[styles.cell, { color: T.text, fontWeight: 'bold', minWidth: 0 }]}>{u.totalRides}</Text>
+                         </View>
+                    );
+               }}
+               ListEmptyComponent={
+                    <View style={{ backgroundColor: T.card, borderColor: T.border, borderWidth: 1, borderTopWidth: 0 }}>
+                         <Text style={{ color: T.subtext, textAlign: 'center', padding: 40 }}>No users found.</Text>
+                    </View>
+               }
+          />
      );
 }
 
@@ -306,6 +342,7 @@ const styles = StyleSheet.create({
           flex: 1, minWidth: 160, borderRadius: 12, padding: 24, borderWidth: 1,
           alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
      },
+     tableHeaderPanel: { borderTopLeftRadius: 12, borderTopRightRadius: 12, padding: 24, paddingBottom: 0, borderWidth: 1, borderBottomWidth: 0 },
      tablePanel: { borderRadius: 12, padding: 24, borderWidth: 1, marginBottom: 100 },
      tableTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 20 },
      tableHeader: { flexDirection: 'row', paddingBottom: 12, borderBottomWidth: 1 },

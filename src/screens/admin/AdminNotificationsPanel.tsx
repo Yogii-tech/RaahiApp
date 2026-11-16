@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  FlatList,
   Modal,
   Platform,
   ScrollView,
@@ -410,8 +411,10 @@ export const AdminNotificationsView: React.FC<AdminNotificationsViewProps> = ({
     }).length;
   }, [notifications, selectedFilter, unreadCount]);
 
-  return (
-    <View style={[styles.pageContainer, isMobile && { padding: 16 }]}>
+  const listData = loading && notifications.length === 0 ? [] : filteredNotifications;
+
+  const listHeader = (
+    <View>
       {/* Page Header */}
       <View style={[styles.pageHeader, isMobile && styles.pageHeaderMobile]}>
         <View style={{ flex: 1, minWidth: 0 }}>
@@ -591,117 +594,128 @@ export const AdminNotificationsView: React.FC<AdminNotificationsViewProps> = ({
           );
         })}
       </ScrollView>
-
-      {/* Notification Cards */}
-      {loading && notifications.length === 0 ? (
-        <View style={styles.centerState}>
-          <ActivityIndicator color={T.accent} size="large" />
-          <Text style={{ color: T.sub, marginTop: 12, fontSize: 14 }}>Loading notifications...</Text>
-        </View>
-      ) : filteredNotifications.length === 0 ? (
-        <View style={[styles.emptyCard, { backgroundColor: T.card, borderColor: T.border }]}>
-          <Text style={{ fontSize: 40, marginBottom: 12 }}>🔔</Text>
-          <Text style={{ color: T.text, fontSize: 16, fontWeight: '700', marginBottom: 4 }}>
-            {selectedFilter === 'unread' ? 'No unread notifications' : 'No notifications found'}
-          </Text>
-          <Text style={{ color: T.sub, fontSize: 13, textAlign: 'center' }}>
-            {searchQuery
-              ? `No alerts match "${searchQuery}".`
-              : 'Platform activity alerts will appear here in real time.'}
-          </Text>
-        </View>
-      ) : (
-        <View style={{ gap: 10 }}>
-          {filteredNotifications.map((n) => {
-            const appearance = getNotificationAppearance(n.type, n.category);
-            const targetView = resolveAdminTargetView({
-              targetView: n.targetView,
-              type: n.type,
-              metadata: n.metadata,
-            });
-            const targetTitle = ADMIN_PAGE_TITLES[targetView] || 'Dashboard';
-            const contextTags = getContextTagsFromNotification(n);
-
-            return (
-              <TouchableOpacity
-                key={n.id}
-                testID={`admin-notif-card-${n.id}`}
-                onPress={() => onNavigateNotification(n)}
-                activeOpacity={0.82}
-                style={[
-                  styles.notifCard,
-                  {
-                    backgroundColor: n.read ? T.card : T.cardUnread,
-                    borderColor: n.read ? T.border : `${appearance.color}55`,
-                    borderLeftColor: appearance.color,
-                    opacity: n.read ? 0.85 : 1,
-                  },
-                ]}
-              >
-                <View style={[styles.notifIconBox, { backgroundColor: `${appearance.color}20` }]}>
-                  <Text style={{ fontSize: 20 }}>{appearance.icon}</Text>
-                </View>
-
-                <View style={styles.notifContent}>
-                  <View style={styles.notifMetaRow}>
-                    <View style={[styles.categoryPill, { backgroundColor: `${appearance.color}20` }]}>
-                      <Text style={[styles.categoryPillText, { color: appearance.color }]}>
-                        {appearance.label}
-                      </Text>
-                    </View>
-                    <Text style={[styles.timeText, { color: T.sub }]}>
-                      {formatRelativeTime(n.createdAt)}
-                    </Text>
-                    {!isMobile && (
-                      <Text style={[styles.timeText, { color: T.sub, opacity: 0.7 }]}>
-                        · {formatAbsoluteTime(n.createdAt)}
-                      </Text>
-                    )}
-                    {!n.read && <View style={[styles.unreadDot, { backgroundColor: T.accent }]} />}
-                  </View>
-
-                  <Text style={[styles.notifTitle, { color: T.text }]}>{n.title}</Text>
-                  <Text style={[styles.notifMessage, { color: T.sub }]}>{n.message}</Text>
-
-                  {contextTags.length > 0 && (
-                    <View style={styles.tagsRow}>
-                      {contextTags.map((tag, idx) => (
-                        <View
-                          key={`${n.id}-tag-${idx}`}
-                          style={[styles.contextTag, { backgroundColor: T.chipBg, borderColor: T.border }]}
-                        >
-                          <Text style={[styles.contextTagText, { color: T.text }]}>{tag}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-
-                  <View style={styles.notifFooterRow}>
-                    <Text style={[styles.openTargetLabel, { color: T.accent }]}>
-                      Open {targetTitle} →
-                    </Text>
-                    {!n.read && (
-                      <TouchableOpacity
-                        testID={`admin-notif-mark-read-${n.id}`}
-                        onPress={(e: any) => {
-                          e?.stopPropagation?.();
-                          onMarkRead(n.id);
-                        }}
-                        style={[styles.markSingleReadBtn, { borderColor: T.border }]}
-                      >
-                        <Text style={[styles.markSingleReadText, { color: T.sub }]}>
-                          Mark read
-                        </Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      )}
     </View>
+  );
+
+  return (
+    <FlatList
+      style={{ flex: 1 }}
+      contentContainerStyle={[styles.pageContainer, isMobile && { padding: 16 }]}
+      showsVerticalScrollIndicator={false}
+      data={listData}
+      keyExtractor={(n) => n.id}
+      initialNumToRender={12}
+      maxToRenderPerBatch={12}
+      windowSize={7}
+      ListHeaderComponent={listHeader}
+      ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+      renderItem={({ item: n }) => {
+        const appearance = getNotificationAppearance(n.type, n.category);
+        const targetView = resolveAdminTargetView({
+          targetView: n.targetView,
+          type: n.type,
+          metadata: n.metadata,
+        });
+        const targetTitle = ADMIN_PAGE_TITLES[targetView] || 'Dashboard';
+        const contextTags = getContextTagsFromNotification(n);
+
+        return (
+          <TouchableOpacity
+            testID={`admin-notif-card-${n.id}`}
+            onPress={() => onNavigateNotification(n)}
+            activeOpacity={0.82}
+            style={[
+              styles.notifCard,
+              {
+                backgroundColor: n.read ? T.card : T.cardUnread,
+                borderColor: n.read ? T.border : `${appearance.color}55`,
+                borderLeftColor: appearance.color,
+                opacity: n.read ? 0.85 : 1,
+              },
+            ]}
+          >
+            <View style={[styles.notifIconBox, { backgroundColor: `${appearance.color}20` }]}>
+              <Text style={{ fontSize: 20 }}>{appearance.icon}</Text>
+            </View>
+
+            <View style={styles.notifContent}>
+              <View style={styles.notifMetaRow}>
+                <View style={[styles.categoryPill, { backgroundColor: `${appearance.color}20` }]}>
+                  <Text style={[styles.categoryPillText, { color: appearance.color }]}>
+                    {appearance.label}
+                  </Text>
+                </View>
+                <Text style={[styles.timeText, { color: T.sub }]}>
+                  {formatRelativeTime(n.createdAt)}
+                </Text>
+                {!isMobile && (
+                  <Text style={[styles.timeText, { color: T.sub, opacity: 0.7 }]}>
+                    · {formatAbsoluteTime(n.createdAt)}
+                  </Text>
+                )}
+                {!n.read && <View style={[styles.unreadDot, { backgroundColor: T.accent }]} />}
+              </View>
+
+              <Text style={[styles.notifTitle, { color: T.text }]}>{n.title}</Text>
+              <Text style={[styles.notifMessage, { color: T.sub }]}>{n.message}</Text>
+
+              {contextTags.length > 0 && (
+                <View style={styles.tagsRow}>
+                  {contextTags.map((tag, idx) => (
+                    <View
+                      key={`${n.id}-tag-${idx}`}
+                      style={[styles.contextTag, { backgroundColor: T.chipBg, borderColor: T.border }]}
+                    >
+                      <Text style={[styles.contextTagText, { color: T.text }]}>{tag}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              <View style={styles.notifFooterRow}>
+                <Text style={[styles.openTargetLabel, { color: T.accent }]}>
+                  Open {targetTitle} →
+                </Text>
+                {!n.read && (
+                  <TouchableOpacity
+                    testID={`admin-notif-mark-read-${n.id}`}
+                    onPress={(e: any) => {
+                      e?.stopPropagation?.();
+                      onMarkRead(n.id);
+                    }}
+                    style={[styles.markSingleReadBtn, { borderColor: T.border }]}
+                  >
+                    <Text style={[styles.markSingleReadText, { color: T.sub }]}>
+                      Mark read
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          </TouchableOpacity>
+        );
+      }}
+      ListEmptyComponent={
+        loading && notifications.length === 0 ? (
+          <View style={styles.centerState}>
+            <ActivityIndicator color={T.accent} size="large" />
+            <Text style={{ color: T.sub, marginTop: 12, fontSize: 14 }}>Loading notifications...</Text>
+          </View>
+        ) : (
+          <View style={[styles.emptyCard, { backgroundColor: T.card, borderColor: T.border }]}>
+            <Text style={{ fontSize: 40, marginBottom: 12 }}>🔔</Text>
+            <Text style={{ color: T.text, fontSize: 16, fontWeight: '700', marginBottom: 4 }}>
+              {selectedFilter === 'unread' ? 'No unread notifications' : 'No notifications found'}
+            </Text>
+            <Text style={{ color: T.sub, fontSize: 13, textAlign: 'center' }}>
+              {searchQuery
+                ? `No alerts match "${searchQuery}".`
+                : 'Platform activity alerts will appear here in real time.'}
+            </Text>
+          </View>
+        )
+      }
+    />
   );
 };
 

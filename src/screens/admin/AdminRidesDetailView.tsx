@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ScrollView, ActivityIndicator, TouchableOpacity, useWindowDimensions } from 'react-native';
 import AdminChart from '../../components/AdminChart';
 import { downloadCSV } from '../../utils/exportUtils';
 import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
-import { parseJsonSafe, createRequestAbort } from '../../utils/json';
+import { parseJsonSafe } from '../../utils/json';
+import { useAdminCache } from '../../utils/adminCache';
 
 interface RideRow {
      id: string;
@@ -41,10 +42,15 @@ export default function AdminRidesDetailView({ isDark, searchQuery = '', initial
      const [refreshing, setRefreshing] = useState(false);
      const [error, setError] = useState<string | null>(null);
      const [selectedTab, setSelectedTab] = useState<RideTab>(initialTab);
+     useEffect(() => {
+          setSelectedTab(initialTab);
+     }, [initialTab]);
      const { fetchWithAuth } = useAuth();
      const fetchWithAuthRef = useRef(fetchWithAuth);
      fetchWithAuthRef.current = fetchWithAuth;
-     const abortRef = useRef<AbortController | null>(null);
+     const { fetchCached } = useAdminCache();
+     const fetchCachedRef = useRef(fetchCached);
+     fetchCachedRef.current = fetchCached;
      const reqIdRef = useRef(0);
      const isMountedRef = useRef(true);
      const { width } = useWindowDimensions();
@@ -60,9 +66,6 @@ export default function AdminRidesDetailView({ isDark, searchQuery = '', initial
      };
 
      const fetchData = useCallback(async (background = false) => {
-          abortRef.current?.abort();
-          const { controller, cleanup, didTimeout } = createRequestAbort(12000);
-          abortRef.current = controller;
           const reqId = ++reqIdRef.current;
 
           if (background) {
@@ -73,29 +76,49 @@ export default function AdminRidesDetailView({ isDark, searchQuery = '', initial
           setError(null);
 
           try {
-               const [ridesRes, statsRes] = await Promise.all([
-                    fetchWithAuthRef.current(`${API_BASE}/api/admin/rides`, { signal: controller.signal }),
-                    fetchWithAuthRef.current(`${API_BASE}/api/admin/stats`, { signal: controller.signal }),
-               ]);
-               if (!ridesRes.ok) throw new Error(`Rides error: ${ridesRes.status}`);
-               if (!statsRes.ok) throw new Error(`Stats error: ${statsRes.status}`);
                const [ridesData, stats] = await Promise.all([
-                    parseJsonSafe<RideRow[]>(ridesRes),
-                    parseJsonSafe<StatsData>(statsRes),
+                    fetchCachedRef.current<RideRow[]>(
+                         'admin:rides',
+                         async (signal) => {
+                              const res = await fetchWithAuthRef.current(`${API_BASE}/api/admin/rides`, {
+                                   signal,
+                              });
+                              if (!res.ok) throw new Error(`Rides error: ${res.status}`);
+                              const parsed = await parseJsonSafe<RideRow[]>(res);
+                              return Array.isArray(parsed) ? parsed : [];
+                         },
+                         {
+                              force: background,
+                              timeoutMessage: 'Request timed out while loading ride data',
+                         }
+                    ),
+                    fetchCachedRef.current<StatsData | null>(
+                         'admin:stats',
+                         async (signal) => {
+                              const res = await fetchWithAuthRef.current(`${API_BASE}/api/admin/stats`, {
+                                   signal,
+                              });
+                              if (!res.ok) throw new Error(`Stats error: ${res.status}`);
+                              return parseJsonSafe<StatsData>(res);
+                         },
+                         {
+                              force: background,
+                              timeoutMessage: 'Request timed out while loading ride data',
+                         }
+                    ),
                ]);
                if (!isMountedRef.current || reqId !== reqIdRef.current) return;
                setRides(Array.isArray(ridesData) ? ridesData : []);
                setStatsData(stats);
           } catch (err: any) {
                if (!isMountedRef.current || reqId !== reqIdRef.current) return;
-               if (err?.name === 'AbortError' && !didTimeout()) return;
-               setError(didTimeout() ? 'Request timed out while loading ride data' : (err?.message || 'Could not load ride data'));
+               if (err?.name === 'AbortError') return;
+               setError(err?.message || 'Could not load ride data');
                if (!background) {
                     setRides([]);
                     setStatsData(null);
                }
           } finally {
-               cleanup();
                if (isMountedRef.current && reqId === reqIdRef.current) {
                     setLoading(false);
                     setRefreshing(false);
@@ -109,7 +132,6 @@ export default function AdminRidesDetailView({ isDark, searchQuery = '', initial
           return () => {
                isMountedRef.current = false;
                reqIdRef.current += 1;
-               abortRef.current?.abort();
           };
      }, [fetchData]);
 
@@ -151,8 +173,8 @@ export default function AdminRidesDetailView({ isDark, searchQuery = '', initial
           );
      }
 
-     return (
-          <ScrollView style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: T.bg }]} showsVerticalScrollIndicator={false}>
+     const listHeader = (
+          <View>
                <View style={[styles.header, isMobile && { flexDirection: 'column', alignItems: 'flex-start', gap: 12 }]}>
                     <Text style={[styles.headerTitle, { color: T.text }]}>Rides Overview</Text>
                     <View style={[styles.headerButtons, { flexWrap: 'wrap', gap: 10 }]}>
@@ -216,8 +238,8 @@ export default function AdminRidesDetailView({ isDark, searchQuery = '', initial
                     </View>
                )}
 
-               {/* Rides Table */}
-               <View style={[styles.tablePanel, isMobile && { padding: 16 }, { backgroundColor: T.card, borderColor: T.border }]}>
+               {/* Rides Table Header */}
+               <View style={[styles.tableHeaderPanel, isMobile && { padding: 16, paddingBottom: 12 }, { backgroundColor: T.card, borderColor: T.border }]}>
                     <Text style={[styles.tableTitle, { color: T.text }]}>
                          Ride Records {selectedTab !== 'all' ? `— ${selectedTab}` : ''} ({filteredRides.length})
                     </Text>
@@ -228,59 +250,72 @@ export default function AdminRidesDetailView({ isDark, searchQuery = '', initial
                               ))}
                          </View>
                     )}
-                    {filteredRides.length === 0 ? (
-                         <Text style={{ color: T.subtext, textAlign: 'center', padding: 40 }}>No rides found</Text>
-                    ) : isMobile ? (
-                         filteredRides.map(r => {
-                              const statusColor = STATUS_COLORS[r.status] ?? '#6C757D';
-                              return (
-                                   <View key={r.id} style={[styles.mobileCard, { borderBottomColor: T.border }]}>
-                                        <View style={styles.mobileCardTop}>
-                                             <Text style={{ color: T.text, fontWeight: 'bold', fontSize: 14, flex: 1, minWidth: 0 }} numberOfLines={2}>
-                                                  {r.route}
-                                             </Text>
-                                             <View style={[styles.statusBadge, { backgroundColor: statusColor + '20' }]}>
-                                                  <Text style={{ color: statusColor, fontSize: 11, fontWeight: 'bold' }}>{r.status}</Text>
-                                             </View>
-                                        </View>
-                                        <View style={styles.mobileCardRow}>
-                                             <Text style={{ color: T.text, fontSize: 13, flex: 1, minWidth: 0 }} numberOfLines={1}>
-                                                  Driver: {r.driver || '—'}
-                                             </Text>
-                                             <Text style={{ color: T.subtext, fontSize: 12 }}>
-                                                  {r.date} • {r.departureTime}
-                                             </Text>
-                                        </View>
-                                        <View style={styles.mobileCardRow}>
-                                             <Text style={{ color: T.subtext, fontSize: 12 }}>
-                                                  Seats: <Text style={{ color: T.text, fontWeight: '600' }}>{r.seatsBooked}/{r.seatsTotal}</Text>
-                                             </Text>
-                                             <Text style={{ color: T.text, fontWeight: 'bold', fontSize: 14 }}>₹{r.pricePerSeat}</Text>
-                                        </View>
-                                   </View>
-                              );
-                         })
-                    ) : (
-                         filteredRides.map(r => {
-                              const statusColor = STATUS_COLORS[r.status] ?? '#6C757D';
-                              return (
-                                   <View key={r.id} style={[styles.tableRow, { borderBottomColor: T.border }]}>
-                                        <Text style={[styles.cell, { color: T.text, fontWeight: 'bold', minWidth: 0, paddingRight: 8 }]} numberOfLines={1} ellipsizeMode="tail">{r.route}</Text>
-                                        <Text style={[styles.cell, { color: T.text, minWidth: 0, paddingRight: 8 }]} numberOfLines={1} ellipsizeMode="tail">{r.driver || '—'}</Text>
-                                        <Text style={[styles.cell, { color: T.subtext, fontSize: 12, minWidth: 0 }]}>{r.date}{'\n'}{r.departureTime}</Text>
-                                        <Text style={[styles.cell, { color: T.text, minWidth: 0 }]}>{r.seatsBooked}/{r.seatsTotal}</Text>
-                                        <Text style={[styles.cell, { color: T.text, fontWeight: 'bold', minWidth: 0 }]}>₹{r.pricePerSeat}</Text>
-                                        <View style={[styles.cellStatus, { minWidth: 0 }]}>
-                                             <View style={[styles.statusBadge, { backgroundColor: statusColor + '20' }]}>
-                                                  <Text style={{ color: statusColor, fontSize: 11, fontWeight: 'bold' }}>{r.status}</Text>
-                                             </View>
-                                        </View>
-                                   </View>
-                              );
-                         })
-                    )}
                </View>
-          </ScrollView>
+          </View>
+     );
+
+     return (
+          <FlatList
+               style={[styles.container, isMobile && { padding: 16 }, { backgroundColor: T.bg }]}
+               contentContainerStyle={{ paddingBottom: 100 }}
+               showsVerticalScrollIndicator={false}
+               data={filteredRides}
+               keyExtractor={r => r.id}
+               initialNumToRender={15}
+               maxToRenderPerBatch={15}
+               windowSize={7}
+               ListHeaderComponent={listHeader}
+               renderItem={({ item: r }) => {
+                    const statusColor = STATUS_COLORS[r.status] ?? '#6C757D';
+                    if (isMobile) {
+                         return (
+                              <View style={[styles.mobileCard, { paddingHorizontal: 16, borderColor: T.border, borderLeftWidth: 1, borderRightWidth: 1, backgroundColor: T.card }]}>
+                                   <View style={styles.mobileCardTop}>
+                                        <Text style={{ color: T.text, fontWeight: 'bold', fontSize: 14, flex: 1, minWidth: 0 }} numberOfLines={2}>
+                                             {r.route}
+                                        </Text>
+                                        <View style={[styles.statusBadge, { backgroundColor: statusColor + '20' }]}>
+                                             <Text style={{ color: statusColor, fontSize: 11, fontWeight: 'bold' }}>{r.status}</Text>
+                                        </View>
+                                   </View>
+                                   <View style={styles.mobileCardRow}>
+                                        <Text style={{ color: T.text, fontSize: 13, flex: 1, minWidth: 0 }} numberOfLines={1}>
+                                             Driver: {r.driver || '—'}
+                                        </Text>
+                                        <Text style={{ color: T.subtext, fontSize: 12 }}>
+                                             {r.date} • {r.departureTime}
+                                        </Text>
+                                   </View>
+                                   <View style={styles.mobileCardRow}>
+                                        <Text style={{ color: T.subtext, fontSize: 12 }}>
+                                             Seats: <Text style={{ color: T.text, fontWeight: '600' }}>{r.seatsBooked}/{r.seatsTotal}</Text>
+                                        </Text>
+                                        <Text style={{ color: T.text, fontWeight: 'bold', fontSize: 14 }}>₹{r.pricePerSeat}</Text>
+                                   </View>
+                              </View>
+                         );
+                    }
+                    return (
+                         <View style={[styles.tableRow, { paddingHorizontal: 24, borderColor: T.border, borderLeftWidth: 1, borderRightWidth: 1, backgroundColor: T.card }]}>
+                              <Text style={[styles.cell, { color: T.text, fontWeight: 'bold', minWidth: 0, paddingRight: 8 }]} numberOfLines={1} ellipsizeMode="tail">{r.route}</Text>
+                              <Text style={[styles.cell, { color: T.text, minWidth: 0, paddingRight: 8 }]} numberOfLines={1} ellipsizeMode="tail">{r.driver || '—'}</Text>
+                              <Text style={[styles.cell, { color: T.subtext, fontSize: 12, minWidth: 0 }]}>{r.date}{'\n'}{r.departureTime}</Text>
+                              <Text style={[styles.cell, { color: T.text, minWidth: 0 }]}>{r.seatsBooked}/{r.seatsTotal}</Text>
+                              <Text style={[styles.cell, { color: T.text, fontWeight: 'bold', minWidth: 0 }]}>₹{r.pricePerSeat}</Text>
+                              <View style={[styles.cellStatus, { minWidth: 0 }]}>
+                                   <View style={[styles.statusBadge, { backgroundColor: statusColor + '20' }]}>
+                                        <Text style={{ color: statusColor, fontSize: 11, fontWeight: 'bold' }}>{r.status}</Text>
+                                   </View>
+                              </View>
+                         </View>
+                    );
+               }}
+               ListEmptyComponent={
+                    <View style={{ backgroundColor: T.card, borderColor: T.border, borderWidth: 1, borderTopWidth: 0 }}>
+                         <Text style={{ color: T.subtext, textAlign: 'center', padding: 40 }}>No rides found</Text>
+                    </View>
+               }
+          />
      );
 }
 
@@ -306,6 +341,7 @@ const styles = StyleSheet.create({
      graphTitle: { fontSize: 16, fontWeight: 'bold' },
      graphSubtitle: { fontSize: 12, marginTop: 4 },
      chartArea: { height: 220, paddingBottom: 20 },
+     tableHeaderPanel: { borderTopLeftRadius: 12, borderTopRightRadius: 12, padding: 24, paddingBottom: 0, marginTop: 24, borderWidth: 1, borderBottomWidth: 0 },
      tablePanel: { borderRadius: 12, padding: 24, marginTop: 24, borderWidth: 1, marginBottom: 100 },
      tableTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 20 },
      tableHeader: { flexDirection: 'row', paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.05)' },

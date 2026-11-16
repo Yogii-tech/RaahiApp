@@ -43,6 +43,8 @@ import {
 interface HomeScreenProps {
     onSosPressed?: () => void;
     setParcelMode?: (mode: boolean) => void;
+    onBookRideActiveChange?: (active: boolean) => void;
+    onRideActivity?: () => void;
 }
 
 interface Ride {
@@ -62,7 +64,12 @@ interface Ride {
 
 type HomeView = 'home' | 'available' | 'book' | 'parcel' | 'resubmit_kyc';
 
-const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) => {
+const HomeScreen: React.FC<HomeScreenProps> = ({
+    onSosPressed,
+    setParcelMode,
+    onBookRideActiveChange,
+    onRideActivity,
+}) => {
     const { isDark, colors } = useTheme();
     const { token, refreshToken, user, logout, setAuth } = useAuth();
     const { t } = useLanguage();
@@ -139,6 +146,17 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
     useEffect(() => { saveFormDraft('home_departureTime', departureTime, draftScope); }, [departureTime, draftScope]);
     useEffect(() => { saveFormDraft('home_timePeriod', timePeriod, draftScope); }, [timePeriod, draftScope]);
     useEffect(() => { saveFormDraft('home_pricePerSeat', pricePerSeat, draftScope); }, [pricePerSeat, draftScope]);
+
+    useEffect(() => {
+        const isBookingActive = view === 'book' && Boolean(selectedRide);
+        onBookRideActiveChange?.(isBookingActive);
+    }, [view, selectedRide, onBookRideActiveChange]);
+
+    useEffect(() => {
+        return () => {
+            onBookRideActiveChange?.(false);
+        };
+    }, [onBookRideActiveChange]);
 
     const navigateToView = (newView: HomeView) => {
         if (newView === 'book' && !selectedRide) return;
@@ -473,6 +491,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                 setDepartureTime('');
                 setShowPostSuccess(true);
                 fetchRecentRides(); // Refresh recent list
+                onRideActivity?.();
             } else {
                 const data = await parseJsonSafe(response);
                 notify(
@@ -543,6 +562,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSosPressed, setParcelMode }) 
                     setSelectedRide(null);
                     setView('home');
                     popSubViewHistory();
+                    onRideActivity?.();
                 }}
             />
         );

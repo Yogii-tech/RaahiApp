@@ -4,7 +4,8 @@ import AdminChart from '../../components/AdminChart';
 import { downloadCSV } from '../../utils/exportUtils';
 import { API_BASE } from '../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
-import { parseJsonSafe, createRequestAbort } from '../../utils/json';
+import { parseJsonSafe } from '../../utils/json';
+import { useAdminCache } from '../../utils/adminCache';
 
 interface AdminStatsData {
     rides?: { total?: number; available?: number; ongoing?: number; completed?: number; cancelled?: number };
@@ -40,7 +41,9 @@ export default function AdminDashboardView({
     const { fetchWithAuth } = useAuth();
     const fetchWithAuthRef = useRef(fetchWithAuth);
     fetchWithAuthRef.current = fetchWithAuth;
-    const abortRef = useRef<AbortController | null>(null);
+    const { fetchCached } = useAdminCache();
+    const fetchCachedRef = useRef(fetchCached);
+    fetchCachedRef.current = fetchCached;
     const requestIdRef = useRef(0);
     const refreshingRef = useRef(false);
     const statsRef = useRef<AdminStatsData | null>(null);
@@ -58,9 +61,6 @@ export default function AdminDashboardView({
 
     const loadStats = useCallback(async (isRefresh = false) => {
         if (isRefresh && refreshingRef.current) return;
-        abortRef.current?.abort();
-        const { controller, cleanup, didTimeout } = createRequestAbort(10000);
-        abortRef.current = controller;
         const reqId = ++requestIdRef.current;
 
         if (isRefresh && statsRef.current) {
@@ -72,23 +72,35 @@ export default function AdminDashboardView({
         setError(null);
 
         try {
-            const res = await fetchWithAuthRef.current(`${API_BASE}/api/admin/stats`, { signal: controller.signal });
-            if (!res.ok) throw new Error(`Server error: ${res.status}`);
-            const parsed = await parseJsonSafe<AdminStatsData>(res);
-            if (!parsed) throw new Error('Invalid dashboard response');
+            const parsed = await fetchCachedRef.current<AdminStatsData>(
+                'admin:stats',
+                async (signal) => {
+                    const res = await fetchWithAuthRef.current(`${API_BASE}/api/admin/stats`, {
+                        signal,
+                    });
+                    if (!res.ok) throw new Error(`Server error: ${res.status}`);
+                    const body = await parseJsonSafe<AdminStatsData>(res);
+                    if (!body) throw new Error('Invalid dashboard response');
+                    return body;
+                },
+                {
+                    force: isRefresh,
+                    timeoutMs: 10000,
+                    timeoutMessage: 'Backend not responding. Is the server running?',
+                }
+            );
             if (!isMountedRef.current || reqId !== requestIdRef.current) return;
             statsRef.current = parsed;
             setStats(parsed);
         } catch (err: any) {
             if (!isMountedRef.current || reqId !== requestIdRef.current) return;
-            if (err?.name === 'AbortError' && !didTimeout()) return;
-            if (err?.name === 'AbortError' || didTimeout()) {
-                setError('Backend not responding. Is the server running?');
+            if (err?.name === 'AbortError') return;
+            if (err?.name === 'TimeoutError') {
+                setError(err?.message || 'Backend not responding. Is the server running?');
             } else {
                 setError(`Could not load stats (${err?.message ?? 'network error'})`);
             }
         } finally {
-            cleanup();
             if (isMountedRef.current && reqId === requestIdRef.current) {
                 refreshingRef.current = false;
                 setLoading(false);
@@ -103,7 +115,6 @@ export default function AdminDashboardView({
         return () => {
             isMountedRef.current = false;
             requestIdRef.current += 1;
-            abortRef.current?.abort();
         };
     }, [loadStats]);
 

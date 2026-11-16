@@ -10,9 +10,9 @@ import {
     Platform,
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
-import { API_BASE } from '../apiConfig';
 import { apiRequest } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
+import { createTtlCache } from '../utils/ttlCache';
 import {
     FORM_LABEL_TYPOGRAPHY,
     FORM_INPUT_TEXT_TYPOGRAPHY,
@@ -64,6 +64,36 @@ const COMMON_UTTARAKHAND_TOWNS: GeoResult[] = [
     { place_id: 't24', display_name: 'Yamunotri, Uttarakhand', lat: '31.0140', lon: '78.4600', type: 'town' },
 ];
 
+const DEFAULT_POPULAR_LOCATIONS: GeoResult[] = [
+    { place_id: 'p1', display_name: 'Rishikesh, Uttarakhand', lat: '30.0869', lon: '78.2676', type: 'popular' },
+    { place_id: 'p2', display_name: 'Dehradun, Uttarakhand', lat: '30.3165', lon: '78.0322', type: 'popular' },
+    { place_id: 'p3', display_name: 'Bageshwar, Uttarakhand', lat: '29.8404', lon: '79.7694', type: 'popular' },
+    { place_id: 'p4', display_name: 'Haldwani, Uttarakhand', lat: '29.2183', lon: '79.5130', type: 'popular' },
+];
+
+const LOCATION_SEARCH_DEBOUNCE_MS = 380;
+const MIN_REMOTE_SEARCH_LENGTH = 2;
+const LOCATION_SEARCH_CACHE_TTL_MS = 5 * 60 * 1000;
+const LOCATION_SEARCH_CACHE_MAX_ENTRIES = 60;
+
+const locationSearchCache = createTtlCache<GeoResult[]>({
+    maxEntries: LOCATION_SEARCH_CACHE_MAX_ENTRIES,
+    ttlMs: LOCATION_SEARCH_CACHE_TTL_MS,
+});
+
+/** Clears shared autocomplete cache (intended for unit tests). */
+export function _resetLocationSearchCacheForTests(): void {
+    locationSearchCache.clear();
+}
+
+const buildCustomResult = (query: string): GeoResult => ({
+    place_id: 'custom',
+    display_name: `${query}, Uttarakhand (Custom)`,
+    lat: '30.0869',
+    lon: '78.2676',
+    type: 'custom',
+});
+
 const LocationInput: React.FC<LocationInputProps> = ({
     label,
     value,
@@ -76,14 +106,12 @@ const LocationInput: React.FC<LocationInputProps> = ({
     const { colors, isDark } = useTheme();
     const { logout } = useAuth();
     const [suggestions, setSuggestions] = useState<GeoResult[]>([]);
-    const [popular, setPopular] = useState<GeoResult[]>([]);
     const [loading, setLoading] = useState(false);
     const [showDropdown, setShowDropdown] = useState(false);
     const [isFocused, setIsFocused] = useState(false);
     const timerRef = useRef<NodeJS.Timeout | null>(null);
     const blurTimerRef = useRef<NodeJS.Timeout | null>(null);
     const suggestAbortRef = useRef<AbortController | null>(null);
-    const popularAbortRef = useRef<AbortController | null>(null);
     const suggestSeqRef = useRef(0);
     const inputFocusedRef = useRef(false);
     // On web, a click on a dropdown item fires: mousedown → input blur → mouseup → click.
@@ -96,88 +124,46 @@ const LocationInput: React.FC<LocationInputProps> = ({
             if (timerRef.current) clearTimeout(timerRef.current);
             if (blurTimerRef.current) clearTimeout(blurTimerRef.current);
             suggestAbortRef.current?.abort();
-            popularAbortRef.current?.abort();
         };
     }, []);
-
-    // Fetch popular locations on focus when input is short
-    useEffect(() => {
-        if (isFocused && value.length < 3) {
-            if (popular.length === 0) {
-                fetchPopular();
-            }
-        } else {
-            popularAbortRef.current?.abort();
-            setPopular([]);
-        }
-    }, [isFocused, value]);
-
-    const fetchPopular = async () => {
-        popularAbortRef.current?.abort();
-        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-        popularAbortRef.current = controller;
-
-        try {
-            const res = await fetch(
-                `${API_BASE}/api/locations/suggestions`,
-                controller ? { signal: controller.signal } : undefined
-            );
-            if (controller?.signal.aborted) return;
-            if (res.ok) {
-                const data = await res.json();
-                if (controller?.signal.aborted) return;
-                if (Array.isArray(data)) {
-                    setPopular(data.map((item: any) => ({
-                        place_id: item.id,
-                        display_name: item.displayName,
-                        lat: item.lat,
-                        lon: item.lon,
-                        type: item.type,
-                    })));
-                }
-            }
-        } catch (err: any) {
-            if (err?.name === 'AbortError' || controller?.signal.aborted) return;
-            console.error('Failed to fetch popular locations:', err);
-            setPopular([
-                { place_id: 'p1', display_name: 'Rishikesh, Uttarakhand', lat: '30.0869', lon: '78.2676', type: 'popular' },
-                { place_id: 'p2', display_name: 'Dehradun, Uttarakhand', lat: '30.3165', lon: '78.0322', type: 'popular' },
-                { place_id: 'p3', display_name: 'Bageshwar, Uttarakhand', lat: '29.8404', lon: '79.7694', type: 'popular' },
-                { place_id: 'p4', display_name: 'Haldwani, Uttarakhand', lat: '29.2183', lon: '79.5130', type: 'popular' },
-            ]);
-        }
-    };
 
     const fetchSuggestions = async (query: string) => {
         suggestAbortRef.current?.abort();
         const seq = ++suggestSeqRef.current;
 
-        if (query.length < 1) {
+        const trimmed = query.trim();
+        if (trimmed.length < MIN_REMOTE_SEARCH_LENGTH) {
             setSuggestions([]);
             setLoading(false);
             return;
         }
 
-        const lowerQuery = query.toLowerCase();
-        
-        // 1. First, check local matches for instant autocomplete
-        const localMatches = COMMON_UTTARAKHAND_TOWNS.filter(town => 
+        const lowerQuery = trimmed.toLowerCase();
+
+        // 1. Check local Uttarakhand towns first for instant zero-network autocomplete.
+        const localMatches = COMMON_UTTARAKHAND_TOWNS.filter(town =>
             town.display_name.toLowerCase().includes(lowerQuery)
         );
-
         if (localMatches.length > 0) {
             setSuggestions(localMatches);
             setLoading(false);
-            return; // Return immediately with local results for instant feedback
+            return;
+        }
+
+        // 2. Check bounded client TTL cache before hitting backend / Nominatim proxy.
+        const cached = locationSearchCache.get(lowerQuery);
+        if (cached) {
+            setSuggestions(cached);
+            setLoading(false);
+            return;
         }
 
         const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
         suggestAbortRef.current = controller;
         setLoading(true);
         try {
-            // Use our new backend proxy to bypass CORS and User-Agent issues
             const res = await apiRequest(
-                `/api/location/search?q=${encodeURIComponent(query + ', Uttarakhand, India')}`,
+                `/api/location/search?q=${encodeURIComponent(trimmed + ', Uttarakhand, India')}`,
                 controller ? { signal: controller.signal } : {},
                 logout
             );
@@ -186,44 +172,25 @@ const LocationInput: React.FC<LocationInputProps> = ({
             if (res.ok) {
                 const data = await res.json();
                 if (seq !== suggestSeqRef.current || controller?.signal.aborted) return;
-                if (data && data.length > 0) {
-                    setSuggestions(data.map((d: any) => ({
+                const mapped: GeoResult[] = Array.isArray(data) && data.length > 0
+                    ? data.map((d: any) => ({
                         place_id: d.place_id,
                         display_name: d.display_name,
                         lat: d.lat,
                         lon: d.lon,
-                        type: d.type
-                    })));
-                } else {
-                    setSuggestions([{
-                        place_id: "custom",
-                        display_name: `${query}, Uttarakhand (Custom)`,
-                        lat: "30.0869",
-                        lon: "78.2676",
-                        type: "custom"
-                    }]);
-                }
+                        type: d.type,
+                    }))
+                    : [buildCustomResult(trimmed)];
+                locationSearchCache.set(lowerQuery, mapped);
+                setSuggestions(mapped);
             } else {
-                // If backend search fails, we show at least the custom entry
-                setSuggestions([{
-                    place_id: "custom",
-                    display_name: `${query}, Uttarakhand (Custom)`,
-                    lat: "30.0869",
-                    lon: "78.2676",
-                    type: "custom"
-                }]);
+                setSuggestions([buildCustomResult(trimmed)]);
             }
         } catch (err: any) {
             if (err?.name === 'AbortError' || controller?.signal.aborted) return;
             console.error('Geocoding search error:', err);
             if (seq === suggestSeqRef.current) {
-                setSuggestions([{
-                    place_id: "custom",
-                    display_name: `${query}, Uttarakhand (Custom)`,
-                    lat: "30.0869",
-                    lon: "78.2676",
-                    type: "custom"
-                }]);
+                setSuggestions([buildCustomResult(trimmed)]);
             }
         } finally {
             if (seq === suggestSeqRef.current && !controller?.signal.aborted) {
@@ -247,10 +214,10 @@ const LocationInput: React.FC<LocationInputProps> = ({
         setShowDropdown(true);
         if (timerRef.current) clearTimeout(timerRef.current);
 
-        if (text.length >= 1) {
+        if (text.trim().length >= MIN_REMOTE_SEARCH_LENGTH) {
             timerRef.current = setTimeout(() => {
                 fetchSuggestions(text);
-            }, 300);
+            }, LOCATION_SEARCH_DEBOUNCE_MS);
         } else {
             suggestSeqRef.current++;
             suggestAbortRef.current?.abort();
@@ -259,7 +226,7 @@ const LocationInput: React.FC<LocationInputProps> = ({
         }
     };
 
-    const handleSelect = async (item: GeoResult) => {
+    const handleSelect = (item: GeoResult) => {
         if (timerRef.current) clearTimeout(timerRef.current);
         if (blurTimerRef.current) clearTimeout(blurTimerRef.current);
         suggestSeqRef.current++;
@@ -279,25 +246,10 @@ const LocationInput: React.FC<LocationInputProps> = ({
         setIsFocused(false);
         inputFocusedRef.current = false;
         mouseDownOnDropdown.current = false;
-
-        // Record the selection (best-effort)
-        try {
-            await fetch(`${API_BASE}/api/locations/record`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    displayName: item.display_name,
-                    lat: item.lat,
-                    lon: item.lon,
-                    type: item.type,
-                }),
-            });
-        } catch (err) {
-            console.error('Failed to record location:', err);
-        }
     };
 
-    const displayList = suggestions.length > 0 ? suggestions : popular;
+    const showPopular = isFocused && value.trim().length < MIN_REMOTE_SEARCH_LENGTH && suggestions.length === 0;
+    const displayList = suggestions.length > 0 ? suggestions : (showPopular ? DEFAULT_POPULAR_LOCATIONS : []);
     const shouldShow = showDropdown && (displayList.length > 0 || loading);
 
     return (
@@ -377,7 +329,7 @@ const LocationInput: React.FC<LocationInputProps> = ({
                         },
                     } as any : {})}
                 >
-                    {popular.length > 0 && suggestions.length === 0 && (
+                    {showPopular && (
                         <View style={styles.sectionHeader}>
                             <Text style={styles.sectionHeaderText}>🔥 POPULAR RECOMMENDATIONS</Text>
                         </View>

@@ -8,6 +8,7 @@ import { useAuth } from '../../context/AuthContext';
 import { downloadCSV } from '../../utils/exportUtils';
 import { notify } from '../../utils/notify';
 import { parseJsonSafe, getApiErrorMessage, createRequestAbort } from '../../utils/json';
+import { useAdminCache } from '../../utils/adminCache';
 
 interface Booking {
     id: string;
@@ -54,7 +55,9 @@ export default function AdminBookingsView({ token, searchQuery = '' }: { token: 
     const { fetchWithAuth } = useAuth();
     const fetchWithAuthRef = useRef(fetchWithAuth);
     fetchWithAuthRef.current = fetchWithAuth;
-    const listAbortRef = useRef<AbortController | null>(null);
+    const { fetchCached } = useAdminCache();
+    const fetchCachedRef = useRef(fetchCached);
+    fetchCachedRef.current = fetchCached;
     const listReqIdRef = useRef(0);
     const detailAbortRef = useRef<AbortController | null>(null);
     const detailReqIdRef = useRef(0);
@@ -63,9 +66,6 @@ export default function AdminBookingsView({ token, searchQuery = '' }: { token: 
     const isMobile = width < 768;
 
     const loadBookings = useCallback(async (background = false) => {
-        listAbortRef.current?.abort();
-        const { controller, cleanup, didTimeout } = createRequestAbort(12000);
-        listAbortRef.current = controller;
         const reqId = ++listReqIdRef.current;
 
         if (background) {
@@ -75,21 +75,32 @@ export default function AdminBookingsView({ token, searchQuery = '' }: { token: 
         }
         setError(null);
         try {
-            const res = await fetchWithAuthRef.current(`${API_BASE}/api/admin/bookings`, { signal: controller.signal });
-            if (!res.ok) {
-                const errData = await parseJsonSafe<any>(res);
-                throw new Error(getApiErrorMessage(errData, `Server error: ${res.status}`));
-            }
-            const d = await parseJsonSafe<Booking[]>(res);
+            const d = await fetchCachedRef.current<Booking[]>(
+                'admin:bookings',
+                async (signal) => {
+                    const res = await fetchWithAuthRef.current(`${API_BASE}/api/admin/bookings`, {
+                        signal,
+                    });
+                    if (!res.ok) {
+                        const errData = await parseJsonSafe<any>(res);
+                        throw new Error(getApiErrorMessage(errData, `Server error: ${res.status}`));
+                    }
+                    const parsed = await parseJsonSafe<Booking[]>(res);
+                    return Array.isArray(parsed) ? parsed : [];
+                },
+                {
+                    force: background,
+                    timeoutMessage: 'Request timed out while loading bookings',
+                }
+            );
             if (!isMountedRef.current || reqId !== listReqIdRef.current) return;
             setBookings(Array.isArray(d) ? d : []);
         } catch (err: any) {
             if (!isMountedRef.current || reqId !== listReqIdRef.current) return;
-            if (err?.name === 'AbortError' && !didTimeout()) return;
-            setError(didTimeout() ? 'Request timed out while loading bookings' : (err?.message || 'Failed to load bookings'));
+            if (err?.name === 'AbortError') return;
+            setError(err?.message || 'Failed to load bookings');
             if (!background) setBookings([]);
         } finally {
-            cleanup();
             if (isMountedRef.current && reqId === listReqIdRef.current) {
                 setLoading(false);
                 setRefreshing(false);
@@ -104,7 +115,6 @@ export default function AdminBookingsView({ token, searchQuery = '' }: { token: 
             isMountedRef.current = false;
             listReqIdRef.current += 1;
             detailReqIdRef.current += 1;
-            listAbortRef.current?.abort();
             detailAbortRef.current?.abort();
         };
     }, [loadBookings]);
@@ -307,8 +317,12 @@ export default function AdminBookingsView({ token, searchQuery = '' }: { token: 
             <View style={styles.tableCard}>
                 {isMobile ? (
                     <FlatList
+                        style={{ flex: 1 }}
                         data={filteredBookings}
                         keyExtractor={item => item.id}
+                        initialNumToRender={15}
+                        maxToRenderPerBatch={15}
+                        windowSize={7}
                         contentContainerStyle={{ paddingBottom: 20 }}
                         renderItem={({ item }) => {
                             const statusUpper = (item.status || 'PENDING').toUpperCase();
@@ -348,13 +362,17 @@ export default function AdminBookingsView({ token, searchQuery = '' }: { token: 
                         }
                     />
                 ) : (
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ minWidth: '100%' }}>
+                    <ScrollView horizontal style={{ flex: 1 }} showsHorizontalScrollIndicator={false} contentContainerStyle={{ minWidth: '100%', flexGrow: 1 }}>
                         <View style={{ minWidth: 900, flex: 1 }}>
                             {renderHeader()}
                             <FlatList
+                                style={{ flex: 1 }}
                                 data={filteredBookings}
                                 keyExtractor={item => item.id}
                                 renderItem={renderRow}
+                                initialNumToRender={15}
+                                maxToRenderPerBatch={15}
+                                windowSize={7}
                                 ListEmptyComponent={
                                     <Text style={{ color: '#6B7280', textAlign: 'center', padding: 40 }}>No confirmed or pending bookings found.</Text>
                                 }

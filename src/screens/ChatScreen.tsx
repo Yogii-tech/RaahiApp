@@ -12,7 +12,6 @@ import {
     ActivityIndicator,
     Linking,
     BackHandler,
-    AppState,
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
@@ -20,8 +19,26 @@ import { useLanguage } from '../context/LanguageContext';
 import { apiRequest } from '../utils/api';
 import { parseJsonSafe, getApiErrorMessage, createRequestAbort } from '../utils/json';
 import { notify, confirmAction } from '../utils/notify';
+import { useVisibilityPolling } from '../utils/polling';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import BackButton from '../components/BackButton';
+
+export const CHAT_POLL_ACTIVE_MS = 4000;
+export const CHAT_POLL_WARM_MS = 8000;
+export const CHAT_POLL_IDLE_MS = 15000;
+
+export function getNextChatPollIntervalMs(unchangedPolls: number): number {
+    if (unchangedPolls >= 3) return CHAT_POLL_IDLE_MS;
+    if (unchangedPolls >= 1) return CHAT_POLL_WARM_MS;
+    return CHAT_POLL_ACTIVE_MS;
+}
+
+export function getChatMessagesSignature(list: { id?: string; _id?: string; createdAt?: string; text?: string }[]): string {
+    if (!Array.isArray(list) || list.length === 0) return '0';
+    const last = list[list.length - 1];
+    const lastId = last?.id || last?._id || '';
+    return `${list.length}:${lastId}:${last?.createdAt || ''}:${last?.text || ''}`;
+}
 
 interface Message {
     id: string;
@@ -76,42 +93,29 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
     const fetchSeqRef = useRef(0);
     const abortRef = useRef<AbortController | null>(null);
     const isMountedRef = useRef(true);
+    const lastSignatureRef = useRef<string>('');
+    const unchangedPollsRef = useRef(0);
+    const pollIntervalRef = useRef<number>(CHAT_POLL_ACTIVE_MS);
+    const prevMessageCountRef = useRef(0);
 
     useEffect(() => {
         isMountedRef.current = true;
         return () => {
             isMountedRef.current = false;
+            abortRef.current?.abort();
         };
     }, []);
-    const [isAppActive, setIsAppActive] = useState<boolean>(() => {
-        if (Platform.OS === 'web') {
-            return typeof document === 'undefined' || document.visibilityState === 'visible';
-        }
-        return AppState.currentState === 'active';
-    });
 
     useEffect(() => {
-        if (Platform.OS === 'web') {
-            if (typeof document === 'undefined') return;
-            const handleVisibility = () => {
-                setIsAppActive(document.visibilityState === 'visible');
-            };
-            document.addEventListener('visibilitychange', handleVisibility);
-            return () => document.removeEventListener('visibilitychange', handleVisibility);
+        const prevCount = prevMessageCountRef.current;
+        prevMessageCountRef.current = messages.length;
+        if (messages.length > prevCount && messages.length > 0) {
+            const timer = setTimeout(() => {
+                flatListRef.current?.scrollToEnd({ animated: prevCount > 0 });
+            }, 50);
+            return () => clearTimeout(timer);
         }
-        const sub = AppState.addEventListener('change', (nextState) => {
-            setIsAppActive(nextState === 'active');
-        });
-        return () => sub?.remove?.();
-    }, []);
-
-    useEffect(() => {
-        abortRef.current?.abort();
-        lastMarkedReadRef.current = '';
-        setMessages([]);
-        setError(null);
-        setIsLoading(true);
-    }, [bookingId]);
+    }, [messages.length]);
 
     const myUserId = user?.id || (user as any)?._id;
 
@@ -137,7 +141,17 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
                 const data = await parseJsonSafe(response);
                 if (!isMountedRef.current || seq !== fetchSeqRef.current || abort.signal.aborted) return;
                 const safeMessages: Message[] = Array.isArray(data) ? data : [];
-                setMessages(safeMessages);
+                const nextSignature = getChatMessagesSignature(safeMessages);
+
+                if (nextSignature !== lastSignatureRef.current) {
+                    lastSignatureRef.current = nextSignature;
+                    unchangedPollsRef.current = 0;
+                    pollIntervalRef.current = CHAT_POLL_ACTIVE_MS;
+                    setMessages(safeMessages);
+                } else {
+                    unchangedPollsRef.current += 1;
+                    pollIntervalRef.current = getNextChatPollIntervalMs(unchangedPollsRef.current);
+                }
                 setError(null);
                 // Mark as read only when new incoming messages arrive
                 const incoming = safeMessages.filter(m => !myUserId || m.senderId !== myUserId);
@@ -188,22 +202,32 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
     const fetchMessagesRef = useRef(fetchMessages);
     fetchMessagesRef.current = fetchMessages;
 
+    const { triggerSync } = useVisibilityPolling({
+        enabled: Boolean(bookingId),
+        intervalMs: () => pollIntervalRef.current,
+        onPoll: () => fetchMessagesRef.current(),
+        onPause: () => abortRef.current?.abort(),
+    });
+
+    const prevChatKeyRef = useRef(`${bookingId}:${myUserId || ''}`);
     useEffect(() => {
-        if (!isAppActive) {
+        const nextKey = `${bookingId}:${myUserId || ''}`;
+        if (prevChatKeyRef.current !== nextKey) {
+            prevChatKeyRef.current = nextKey;
             abortRef.current?.abort();
-            return;
+            lastMarkedReadRef.current = '';
+            lastSignatureRef.current = '';
+            unchangedPollsRef.current = 0;
+            pollIntervalRef.current = CHAT_POLL_ACTIVE_MS;
+            prevMessageCountRef.current = 0;
+            setMessages([]);
+            setError(null);
+            setIsLoading(true);
+            if (bookingId) {
+                void triggerSync();
+            }
         }
-        fetchMessagesRef.current();
-        const interval = setInterval(() => {
-            if (Platform.OS === 'web' && typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
-            if (Platform.OS !== 'web' && AppState.currentState !== 'active') return;
-            fetchMessagesRef.current();
-        }, 3000); // Poll every 3s while active
-        return () => {
-            clearInterval(interval);
-            abortRef.current?.abort();
-        };
-    }, [bookingId, isAppActive, myUserId]);
+    }, [bookingId, myUserId, triggerSync]);
 
     useEffect(() => {
         const handleHardwareBack = () => {
@@ -231,9 +255,9 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
                 if (isMountedRef.current && !customText) {
                     setInputText('');
                 }
-                fetchMessagesRef.current();
-                // Wait a bit then scroll to bottom
-                setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+                unchangedPollsRef.current = 0;
+                pollIntervalRef.current = CHAT_POLL_ACTIVE_MS;
+                void triggerSync();
             } else {
                 const errData = await parseJsonSafe(response);
                 notify('Error', getApiErrorMessage(errData, 'Failed to send message', response));
@@ -378,7 +402,6 @@ const ChatScreen: React.FC<ChatScreenProps> = ({
                         renderItem={renderMessage}
                         keyExtractor={(item) => item.id}
                         contentContainerStyle={styles.listContent}
-                        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
                     />
                 </View>
             )}

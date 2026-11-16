@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, AppState, Platform } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
@@ -11,6 +11,7 @@ import SlideToComplete from '../components/SlideToComplete';
 import { apiRequest } from '../utils/api';
 import { parseJsonSafe, getApiErrorMessage, createRequestAbort } from '../utils/json';
 import { notify } from '../utils/notify';
+import { useVisibilityPolling } from '../utils/polling';
 import Icon from 'react-native-vector-icons/Ionicons';
 import TrackPackageView from '../components/TrackPackageView';
 import { startDriverTracking } from '../modern_map/services/socket';
@@ -118,27 +119,6 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
             abortRef.current?.abort();
         };
     }, []);
-    const [isAppActive, setIsAppActive] = useState<boolean>(() => {
-        if (Platform.OS === 'web') {
-            return typeof document === 'undefined' || document.visibilityState === 'visible';
-        }
-        return AppState.currentState === 'active';
-    });
-
-    useEffect(() => {
-        if (Platform.OS === 'web') {
-            if (typeof document === 'undefined') return;
-            const handleVisibility = () => {
-                setIsAppActive(document.visibilityState === 'visible');
-            };
-            document.addEventListener('visibilitychange', handleVisibility);
-            return () => document.removeEventListener('visibilitychange', handleVisibility);
-        }
-        const sub = AppState.addEventListener('change', (nextState) => {
-            setIsAppActive(nextState === 'active');
-        });
-        return () => sub?.remove?.();
-    }, []);
 
     const isDriver = user?.role === 'driver';
 
@@ -217,22 +197,25 @@ const TripsScreen: React.FC<TripsScreenProps> = ({ isParcelMode, isParcelHistory
         }
     }, [isDriver, isParcelHistory, isRideHistory, logout]);
 
+    const fetchDataRef = useRef(fetchData);
+    fetchDataRef.current = fetchData;
+
+    const { triggerSync } = useVisibilityPolling({
+        enabled: !isParcelMode && isFocused,
+        intervalMs: 10000, // Poll every 10s only when tab is focused and app is foregrounded
+        onPoll: () => fetchDataRef.current(),
+        onPause: () => abortRef.current?.abort(),
+    });
+
+    const prevFetchDataRef = useRef(fetchData);
     useEffect(() => {
-        if (isParcelMode || !isFocused || !isAppActive) {
-            abortRef.current?.abort();
-            return;
+        if (prevFetchDataRef.current !== fetchData) {
+            prevFetchDataRef.current = fetchData;
+            if (!isParcelMode && isFocused) {
+                void triggerSync();
+            }
         }
-        fetchData();
-        const interval = setInterval(() => {
-            if (Platform.OS === 'web' && typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
-            if (Platform.OS !== 'web' && AppState.currentState !== 'active') return;
-            fetchData();
-        }, 5000); // Poll only when tab is focused and app is foregrounded
-        return () => {
-            clearInterval(interval);
-            abortRef.current?.abort();
-        };
-    }, [fetchData, isFocused, isAppActive, isParcelMode]);
+    }, [fetchData, isParcelMode, isFocused, triggerSync]);
 
     // For driver, auto-expand if there's only one active ride and in detailed mode
     useEffect(() => {

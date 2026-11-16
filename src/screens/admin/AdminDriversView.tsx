@@ -8,6 +8,7 @@ import { useAuth } from '../../context/AuthContext';
 import { downloadCSV } from '../../utils/exportUtils';
 import { notify } from '../../utils/notify';
 import { parseJsonSafe, getApiErrorMessage, createRequestAbort } from '../../utils/json';
+import { useAdminCache } from '../../utils/adminCache';
 import {
     MIN_REQUIRED_DRIVER_DOCS,
     TOTAL_DRIVER_DOC_SLOTS,
@@ -64,10 +65,18 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
     const [rekycLoading, setRekycLoading] = useState(false);
     const [activeFilter, setActiveFilter] = useState<'all' | 'pending' | 'verified' | 'rejected'>(initialFilter);
 
+    useEffect(() => {
+        setActiveFilter(initialFilter);
+    }, [initialFilter]);
+
     const { fetchWithAuth } = useAuth();
     const fetchWithAuthRef = useRef(fetchWithAuth);
     fetchWithAuthRef.current = fetchWithAuth;
-    const driversAbortRef = useRef<AbortController | null>(null);
+    const { fetchCached, invalidate } = useAdminCache();
+    const fetchCachedRef = useRef(fetchCached);
+    fetchCachedRef.current = fetchCached;
+    const invalidateRef = useRef(invalidate);
+    invalidateRef.current = invalidate;
     const driversReqIdRef = useRef(0);
     const reviewsAbortRef = useRef<AbortController | null>(null);
     const reviewsReqIdRef = useRef(0);
@@ -90,9 +99,6 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
     const deleteConfirmDriver = modalState.type === 'delete' ? modalState.driver : null;
 
     const loadDrivers = useCallback(async (background = false) => {
-        driversAbortRef.current?.abort();
-        const { controller, cleanup, didTimeout } = createRequestAbort(12000);
-        driversAbortRef.current = controller;
         const reqId = ++driversReqIdRef.current;
 
         if (background) {
@@ -102,22 +108,33 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
         }
         setError(null);
         try {
-            const res = await fetchWithAuthRef.current(`${API_BASE}/api/admin/drivers`, { signal: controller.signal });
-            if (!res.ok) {
-                const errData = await parseJsonSafe<any>(res);
-                throw new Error(getApiErrorMessage(errData, `Server error: ${res.status}`));
-            }
-            const d = await parseJsonSafe<Driver[]>(res);
+            const d = await fetchCachedRef.current<Driver[]>(
+                'admin:drivers',
+                async (signal) => {
+                    const res = await fetchWithAuthRef.current(`${API_BASE}/api/admin/drivers`, {
+                        signal,
+                    });
+                    if (!res.ok) {
+                        const errData = await parseJsonSafe<any>(res);
+                        throw new Error(getApiErrorMessage(errData, `Server error: ${res.status}`));
+                    }
+                    const parsed = await parseJsonSafe<Driver[]>(res);
+                    return Array.isArray(parsed) ? parsed : [];
+                },
+                {
+                    force: background,
+                    timeoutMessage: 'Request timed out while loading drivers',
+                }
+            );
             if (!isMountedRef.current || reqId !== driversReqIdRef.current) return;
             setDrivers(Array.isArray(d) ? d : []);
         } catch (err: any) {
             if (!isMountedRef.current || reqId !== driversReqIdRef.current) return;
-            if (err?.name === 'AbortError' && !didTimeout()) return;
+            if (err?.name === 'AbortError') return;
             console.error('Failed to load drivers:', err);
-            setError(didTimeout() ? 'Request timed out while loading drivers' : (err?.message || 'Failed to load drivers'));
+            setError(err?.message || 'Failed to load drivers');
             if (!background) setDrivers([]);
         } finally {
-            cleanup();
             if (isMountedRef.current && reqId === driversReqIdRef.current) {
                 setLoading(false);
                 setRefreshing(false);
@@ -132,7 +149,6 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
             isMountedRef.current = false;
             driversReqIdRef.current += 1;
             reviewsReqIdRef.current += 1;
-            driversAbortRef.current?.abort();
             reviewsAbortRef.current?.abort();
         };
     }, [loadDrivers]);
@@ -229,6 +245,7 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                 setDriverReviews(null);
                 setReviewsError(null);
                 setModalState({ type: 'none' });
+                invalidateRef.current(['admin:drivers', 'admin:stats']);
                 loadDrivers(true);
             } else {
                 notify('Error', getApiErrorMessage(data, `Failed to update verification status (${res.status})`));
@@ -283,6 +300,7 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                 setDriverReviews(null);
                 setReviewsError(null);
                 setModalState({ type: 'none' });
+                invalidateRef.current(['admin:drivers', 'admin:stats']);
                 loadDrivers(true);
             } else {
                 notify('Error', getApiErrorMessage(data, `Failed to delete driver (${res.status})`));
@@ -336,6 +354,7 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                 setDriverReviews(null);
                 setReviewsError(null);
                 setModalState({ type: 'none' });
+                invalidateRef.current(['admin:drivers', 'admin:stats']);
                 loadDrivers(true);
             } else {
                 notify('Error', getApiErrorMessage(data, `Failed to request Re-KYC (${res.status})`));
@@ -477,8 +496,12 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
 
                 {isMobile ? (
                     <FlatList
+                        style={{ flex: 1 }}
                         data={filteredDrivers}
                         keyExtractor={item => item.id}
+                        initialNumToRender={15}
+                        maxToRenderPerBatch={15}
+                        windowSize={7}
                         contentContainerStyle={{ paddingBottom: 20 }}
                         renderItem={({ item, index }) => {
                             const status = item.verificationStatus || 'pending';
@@ -553,7 +576,7 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
                         }
                     />
                 ) : (
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ minWidth: '100%' }}>
+                    <ScrollView horizontal style={{ flex: 1 }} showsHorizontalScrollIndicator={false} contentContainerStyle={{ minWidth: '100%', flexGrow: 1 }}>
                         <View style={{ minWidth: 1250, flex: 1 }}>
                         {/* Table Header */}
                         <View style={styles.tableHeader}>
@@ -568,8 +591,12 @@ export default function AdminDriversView({ token, searchQuery = '', initialFilte
 
                         {/* Table Body */}
                         <FlatList
+                            style={{ flex: 1 }}
                             data={filteredDrivers}
                             keyExtractor={item => item.id}
+                            initialNumToRender={15}
+                            maxToRenderPerBatch={15}
+                            windowSize={7}
                             renderItem={({ item, index }) => {
                                 const status = item.verificationStatus || 'pending';
 
